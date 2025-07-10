@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -8,6 +9,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
+  const { profile, signOut } = useAuth();
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
@@ -53,9 +55,16 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               
               <div className="flex items-center space-x-3 border-l border-slate-200 pl-4">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-slate-900">Usuario</p>
-                  <p className="text-xs text-slate-600">Sistema</p>
+                  <p className="text-sm font-medium text-slate-900">{profile?.name || 'Usuario'}</p>
+                  <p className="text-xs text-slate-600">{profile?.role?.name || 'Sin rol'}</p>
                 </div>
+                <button
+                  onClick={signOut}
+                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors duration-200"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </div>

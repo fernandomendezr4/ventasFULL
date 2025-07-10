@@ -22,15 +22,22 @@ export default function CustomerManager() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
+      console.log('Cargando clientes...');
       const { data, error } = await supabase
         .from('customers')
         .select('*')
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error al cargar clientes:', error);
+        throw error;
+      }
+      
+      console.log('Clientes cargados:', data);
       setCustomers(data);
     } catch (error) {
       console.error('Error loading customers:', error);
+      alert('Error al cargar clientes: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -39,6 +46,8 @@ export default function CustomerManager() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      console.log('Guardando cliente:', formData);
+      
       if (editingCustomer) {
         const { error } = await supabase
           .from('customers')
@@ -47,6 +56,7 @@ export default function CustomerManager() {
 
         if (error) throw error;
       } else {
+        // Crear nuevo cliente
         const { error } = await supabase
           .from('customers')
           .insert([formData]);
@@ -60,6 +70,7 @@ export default function CustomerManager() {
       loadCustomers();
     } catch (error) {
       console.error('Error saving customer:', error);
+      alert('Error al guardar cliente: ' + (error as Error).message);
     }
   };
 

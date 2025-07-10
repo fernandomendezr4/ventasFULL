@@ -1,75 +1,114 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, User, Mail, Shield, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { User as UserType } from '../lib/types';
+import { Profile, Role } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function UserManager() {
-  const [users, setUsers] = useState<UserType[]>([]);
+  const { profile: currentProfile } = useAuth();
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    role: 'employee',
+    password: '',
+    role_id: '',
     is_active: true,
   });
 
   useEffect(() => {
-    loadUsers();
+    loadProfiles();
+    loadRoles();
   }, []);
 
-  const loadUsers = async () => {
+  const loadProfiles = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
+        .select(`
+          *,
+          role:roles (*)
+        `)
+        .order('name');
+
+      if (error) throw error;
+      setProfiles(data as Profile[]);
+    } catch (error) {
+      console.error('Error loading profiles:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadRoles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('roles')
         .select('*')
         .order('name');
 
       if (error) throw error;
-      setUsers(data);
+      setRoles(data);
     } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading roles:', error);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingUser) {
+      if (editingProfile) {
+        // Actualizar perfil existente
         const { error } = await supabase
-          .from('users')
-          .update(formData)
-          .eq('id', editingUser.id);
+          .from('profiles')
+          .update({
+            name: formData.name,
+            role_id: formData.role_id || null,
+            is_active: formData.is_active,
+          })
+          .eq('id', editingProfile.id);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('users')
-          .insert([formData]);
+        // Crear nuevo usuario con autenticación
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              name: formData.name,
+              role: roles.find(r => r.id === formData.role_id)?.name || 'employee',
+            },
+          },
+        });
 
-        if (error) throw error;
+        if (authError) throw authError;
+
+        // El perfil se crea automáticamente por el trigger
       }
 
       setShowForm(false);
-      setEditingUser(null);
-      setFormData({ name: '', email: '', role: 'employee', is_active: true });
-      loadUsers();
+      setEditingProfile(null);
+      setFormData({ name: '', email: '', password: '', role_id: '', is_active: true });
+      loadProfiles();
     } catch (error) {
       console.error('Error saving user:', error);
+      alert('Error al guardar usuario: ' + (error as Error).message);
     }
   };
 
-  const handleEdit = (user: UserType) => {
-    setEditingUser(user);
+  const handleEdit = (profile: Profile) => {
+    setEditingProfile(profile);
     setFormData({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      is_active: user.is_active,
+      name: profile.name,
+      email: profile.email,
+      password: '',
+      role_id: profile.role_id || '',
+      is_active: profile.is_active,
     });
     setShowForm(true);
   };
@@ -77,28 +116,28 @@ export default function UserManager() {
   const handleDelete = async (id: string) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) {
       try {
+        // Eliminar el usuario de auth (esto también eliminará el perfil por CASCADE)
         const { error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', id);
+          .rpc('delete_user', { user_id: id });
 
         if (error) throw error;
-        loadUsers();
+        loadProfiles();
       } catch (error) {
         console.error('Error deleting user:', error);
+        alert('Error al eliminar usuario');
       }
     }
   };
 
-  const toggleUserStatus = async (user: UserType) => {
+  const toggleUserStatus = async (profile: Profile) => {
     try {
       const { error } = await supabase
-        .from('users')
-        .update({ is_active: !user.is_active })
-        .eq('id', user.id);
+        .from('profiles')
+        .update({ is_active: !profile.is_active })
+        .eq('id', profile.id);
 
       if (error) throw error;
-      loadUsers();
+      loadProfiles();
     } catch (error) {
       console.error('Error updating user status:', error);
     }
@@ -130,6 +169,19 @@ export default function UserManager() {
     }
   };
 
+  // Solo admins pueden gestionar usuarios
+  if (currentProfile?.role?.name !== 'admin') {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Acceso Restringido</h3>
+          <p className="text-gray-600">Solo los administradores pueden gestionar usuarios.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -137,8 +189,8 @@ export default function UserManager() {
         <button
           onClick={() => {
             setShowForm(true);
-            setEditingUser(null);
-            setFormData({ name: '', email: '', role: 'employee', is_active: true });
+            setEditingProfile(null);
+            setFormData({ name: '', email: '', password: '', role_id: '', is_active: true });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
@@ -151,7 +203,7 @@ export default function UserManager() {
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            {editingUser ? 'Editar Usuario' : 'Agregar Usuario'}
+            {editingProfile ? 'Editar Usuario' : 'Agregar Usuario'}
           </h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -174,23 +226,42 @@ export default function UserManager() {
                 <input
                   type="email"
                   required
+                  disabled={!!editingProfile}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed"
                 />
               </div>
+              {!editingProfile && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    minLength={6}
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Rol
                 </label>
                 <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  value={formData.role_id}
+                  onChange={(e) => setFormData({ ...formData, role_id: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="employee">Empleado</option>
-                  <option value="manager">Gerente</option>
-                  <option value="admin">Administrador</option>
+                  <option value="">Seleccionar rol</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {getRoleLabel(role.name)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -212,7 +283,7 @@ export default function UserManager() {
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
               >
-                {editingUser ? 'Actualizar' : 'Agregar'}
+                {editingProfile ? 'Actualizar' : 'Agregar'}
               </button>
               <button
                 type="button"
@@ -233,37 +304,38 @@ export default function UserManager() {
             <div key={i} className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
               <div className="h-4 bg-slate-200 rounded w-3/4 mb-4"></div>
               <div className="h-3 bg-slate-200 rounded w-1/2 mb-2"></div>
-              <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+              <div className="h-3 bg-slate-200 rounded w-2/3 mb-2"></div>
+              <div className="h-3 bg-slate-200 rounded w-1/2"></div>
             </div>
           ))
-        ) : users.length === 0 ? (
+        ) : profiles.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
             <p className="text-slate-500">No hay usuarios registrados</p>
           </div>
         ) : (
-          users.map((user) => (
-            <div key={user.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
+          profiles.map((profile) => (
+            <div key={profile.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h3 className="font-semibold text-slate-900 flex items-center">
                     <User className="h-4 w-4 mr-2 text-purple-600" />
-                    {user.name}
+                    {profile.name}
                   </h3>
                   <div className="flex items-center gap-2 mt-2">
-                    <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(user.role)}`}>
+                    <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(profile.role?.name || '')}`}>
                       <Shield className="h-3 w-3 inline mr-1" />
-                      {getRoleLabel(user.role)}
+                      {getRoleLabel(profile.role?.name || '')}
                     </span>
                     <button
-                      onClick={() => toggleUserStatus(user)}
+                      onClick={() => toggleUserStatus(profile)}
                       className={`inline-flex items-center text-xs px-2 py-1 rounded-full transition-colors duration-200 ${
-                        user.is_active
+                        profile.is_active
                           ? 'bg-green-100 text-green-800 hover:bg-green-200'
                           : 'bg-red-100 text-red-800 hover:bg-red-200'
                       }`}
                     >
-                      {user.is_active ? (
+                      {profile.is_active ? (
                         <>
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Activo
@@ -279,13 +351,13 @@ export default function UserManager() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleEdit(user)}
+                    onClick={() => handleEdit(profile)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(user.id)}
+                    onClick={() => handleDelete(profile.id)}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -296,13 +368,13 @@ export default function UserManager() {
               <div className="space-y-2 text-sm text-slate-600">
                 <div className="flex items-center">
                   <Mail className="h-4 w-4 mr-2" />
-                  {user.email}
+                  {profile.email}
                 </div>
               </div>
               
               <div className="mt-4 pt-4 border-t border-slate-200">
                 <p className="text-xs text-slate-500">
-                  Registrado: {new Date(user.created_at).toLocaleDateString('es-ES')}
+                  Registrado: {new Date(profile.created_at).toLocaleDateString('es-ES')}
                 </p>
               </div>
             </div>

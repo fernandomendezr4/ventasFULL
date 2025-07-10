@@ -154,33 +154,16 @@ export default function Login() {
           </div>
 
           {!isRegistering && (
-            <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-700 mb-4">Credenciales de Demostración:</h3>
-            <div className="space-y-3">
-              {demoCredentials.map((cred, index) => (
-                <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{cred.role}</p>
-                      <p className="text-xs text-gray-600">{cred.email}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmail(cred.email);
-                        setPassword(cred.password);
-                      }}
-                      className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
-                    >
-                      Usar
-                    </button>
-                  </div>
-                </div>
-              ))}
+        {!isRegistering && (
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-blue-700 mb-2">Primera vez usando el sistema:</h3>
+              <p className="text-xs text-blue-600">
+                Haz clic en "¿Necesitas crear un administrador? Registrarse" para crear tu primera cuenta de administrador.
+              </p>
             </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

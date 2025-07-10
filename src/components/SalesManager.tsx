@@ -48,6 +48,7 @@ export default function SalesManager() {
         loadSales();
       } catch (error) {
         console.error('Error deleting sale:', error);
+        alert('Error al eliminar venta: ' + (error as Error).message);
       }
     }
   };

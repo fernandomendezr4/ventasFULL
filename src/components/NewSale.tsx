@@ -19,14 +19,18 @@ export default function NewSale() {
       setLoading(true);
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(`
+          *,
+          category:categories (*)
+        `)
         .gt('stock', 0)
         .order('name');
 
       if (error) throw error;
-      setProducts(data);
+      setProducts(data || []);
     } catch (error) {
       console.error('Error loading products:', error);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -83,7 +87,11 @@ export default function NewSale() {
       // Create sale
       const { data: sale, error: saleError } = await supabase
         .from('sales')
-        .insert([{ total_amount: total }])
+        .insert([{ 
+          total_amount: total,
+          customer_id: null,
+          user_id: null
+        }])
         .select()
         .single();
 
@@ -120,7 +128,7 @@ export default function NewSale() {
       alert('Venta realizada con éxito');
     } catch (error) {
       console.error('Error creating sale:', error);
-      alert('Error al realizar la venta');
+      alert('Error al realizar la venta: ' + (error as Error).message);
     } finally {
       setSaving(false);
     }

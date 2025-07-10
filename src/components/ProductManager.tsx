@@ -106,10 +106,10 @@ export default function ProductManager() {
       setShowForm(false);
       setEditingProduct(null);
       setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
-      setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
       loadProducts();
     } catch (error) {
       console.error('Error saving product:', error);
+      alert('Error al guardar producto: ' + (error as Error).message);
     }
   };
 

@@ -58,6 +58,7 @@ export default function CategoryManager() {
       loadCategories();
     } catch (error) {
       console.error('Error saving category:', error);
+      alert('Error al guardar categoría: ' + (error as Error).message);
     }
   };
 
@@ -82,6 +83,7 @@ export default function CategoryManager() {
         loadCategories();
       } catch (error) {
         console.error('Error deleting category:', error);
+        alert('Error al eliminar categoría: ' + (error as Error).message);
       }
     }
   };

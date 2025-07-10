@@ -21,54 +21,48 @@ export default function Dashboard() {
     try {
       setLoading(true);
       
-      // Get total sales count
-      const { count: salesCount } = await supabase
-        .from('sales')
-        .select('*', { count: 'exact', head: true });
-
-      // Get total products count
-      const { count: productsCount } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true });
-
-      // Get today's sales
-      const today = new Date().toISOString().split('T')[0];
-      const { data: todaySalesData } = await supabase
-        .from('sales')
-        .select('total_amount')
-        .gte('created_at', today);
-
-      // Get total revenue
-      const { data: allSales } = await supabase
-        .from('sales')
-        .select('total_amount');
-
-      // Get recent sales with items
-      const { data: recentSalesData } = await supabase
-        .from('sales')
-        .select(`
+      // Cargar datos en paralelo
+      const [
+        salesCountResult,
+        productsCountResult,
+        todaySalesResult,
+        allSalesResult,
+        recentSalesResult
+      ] = await Promise.all([
+        supabase.from('sales').select('*', { count: 'exact', head: true }),
+        supabase.from('products').select('*', { count: 'exact', head: true }),
+        supabase.from('sales').select('total_amount').gte('created_at', new Date().toISOString().split('T')[0]),
+        supabase.from('sales').select('total_amount'),
+        supabase.from('sales').select(`
           *,
           sale_items (
             *,
             product:products (*)
           )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5);
+        `).order('created_at', { ascending: false }).limit(5)
+      ]);
 
-      const todaySalesSum = todaySalesData?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
-      const totalRevenue = allSales?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
+      const todaySalesSum = todaySalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
+      const totalRevenue = allSalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
 
       setStats({
-        totalSales: salesCount || 0,
-        totalProducts: productsCount || 0,
+        totalSales: salesCountResult.count || 0,
+        totalProducts: productsCountResult.count || 0,
         todaySales: todaySalesSum,
         totalRevenue,
       });
 
-      setRecentSales(recentSalesData as SaleWithItems[] || []);
+      setRecentSales((recentSalesResult.data as SaleWithItems[]) || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      // Establecer valores por defecto en caso de error
+      setStats({
+        totalSales: 0,
+        totalProducts: 0,
+        todaySales: 0,
+        totalRevenue: 0,
+      });
+      setRecentSales([]);
     } finally {
       setLoading(false);
     }

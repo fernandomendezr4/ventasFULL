@@ -61,6 +61,7 @@ export default function SupplierManager() {
       loadSuppliers();
     } catch (error) {
       console.error('Error saving supplier:', error);
+      alert('Error al guardar proveedor: ' + (error as Error).message);
     }
   };
 
@@ -88,6 +89,7 @@ export default function SupplierManager() {
         loadSuppliers();
       } catch (error) {
         console.error('Error deleting supplier:', error);
+        alert('Error al eliminar proveedor: ' + (error as Error).message);
       }
     }
   };

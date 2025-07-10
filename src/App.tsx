@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import ProductManager from './components/ProductManager';
@@ -12,24 +10,8 @@ import CustomerManager from './components/CustomerManager';
 import UserManager from './components/UserManager';
 import CashRegister from './components/CashRegister';
 
-function AppContent() {
-  const { user, loading } = useAuth();
+function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Cargando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login />;
-  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -60,14 +42,6 @@ function AppContent() {
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
       {renderContent()}
     </Layout>
-  );
-}
-
-function App() {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
   );
 }
 

@@ -117,15 +117,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           name,
+          role: 'admin', // Por defecto crear como administrador
         },
       },
     });
+    
+    // Si el registro fue exitoso, crear el perfil del usuario
+    if (data.user && !error) {
+      try {
+        // Buscar el rol de administrador
+        const { data: adminRole } = await supabase
+          .from('roles')
+          .select('id')
+          .eq('name', 'admin')
+          .single();
+
+        // Crear el perfil del usuario
+        await supabase
+          .from('profiles')
+          .insert([{
+            id: data.user.id,
+            email: data.user.email!,
+            name: name,
+            role_id: adminRole?.id || null,
+            is_active: true,
+          }]);
+      } catch (profileError) {
+        console.error('Error creating user profile:', profileError);
+      }
+    }
+    
     return { error };
   };
 

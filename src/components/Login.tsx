@@ -1,24 +1,31 @@
 import React, { useState } from 'react';
-import { LogIn, User, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { LogIn, User, Lock, Eye, EyeOff, AlertCircle, UserPlus, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signIn } = useAuth();
+  const [isRegistering, setIsRegistering] = useState(false);
+  const { signIn, signUp } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const { error } = await signIn(email, password);
+    let result;
+    if (isRegistering) {
+      result = await signUp(email, password, name);
+    } else {
+      result = await signIn(email, password);
+    }
     
-    if (error) {
-      setError(error.message);
+    if (result.error) {
+      setError(result.error.message);
     }
     
     setLoading(false);
@@ -35,9 +42,15 @@ export default function Login() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <div className="mx-auto h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
-              <LogIn className="h-8 w-8 text-white" />
+              {isRegistering ? (
+                <UserPlus className="h-8 w-8 text-white" />
+              ) : (
+                <LogIn className="h-8 w-8 text-white" />
+              )}
             </div>
-            <h2 className="text-3xl font-bold text-gray-900">Iniciar Sesión</h2>
+            <h2 className="text-3xl font-bold text-gray-900">
+              {isRegistering ? 'Crear Administrador' : 'Iniciar Sesión'}
+            </h2>
             <p className="text-gray-600 mt-2">Sistema de Ventas VentasOK</p>
           </div>
 
@@ -49,12 +62,31 @@ export default function Login() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {isRegistering && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre Completo
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                    placeholder="Tu nombre completo"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Correo Electrónico
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
                   type="email"
                   required
@@ -95,11 +127,34 @@ export default function Login() {
               disabled={loading}
               className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
             >
-              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+              {loading 
+                ? (isRegistering ? 'Creando cuenta...' : 'Iniciando sesión...') 
+                : (isRegistering ? 'Crear Administrador' : 'Iniciar Sesión')
+              }
             </button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-gray-200">
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError('');
+                setEmail('');
+                setPassword('');
+                setName('');
+              }}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
+              {isRegistering 
+                ? '¿Ya tienes cuenta? Iniciar sesión' 
+                : '¿Necesitas crear un administrador? Registrarse'
+              }
+            </button>
+          </div>
+
+          {!isRegistering && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
             <h3 className="text-sm font-medium text-gray-700 mb-4">Credenciales de Demostración:</h3>
             <div className="space-y-3">
               {demoCredentials.map((cred, index) => (
@@ -123,7 +178,8 @@ export default function Login() {
                 </div>
               ))}
             </div>
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

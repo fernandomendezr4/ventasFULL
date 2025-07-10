@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Package, Search, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { ProductWithCategory, Category } from '../lib/types';
+import { ProductWithCategory, Category, Supplier } from '../lib/types';
 
 export default function ProductManager() {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductWithCategory | null>(null);
@@ -17,11 +18,13 @@ export default function ProductManager() {
     price: '',
     stock: '',
     category_id: '',
+    supplier_id: '',
   });
 
   useEffect(() => {
     loadProducts();
     loadCategories();
+    loadSuppliers();
   }, []);
 
   const loadProducts = async () => {
@@ -31,7 +34,8 @@ export default function ProductManager() {
         .from('products')
         .select(`
           *,
-          category:categories (*)
+          category:categories (*),
+          supplier:suppliers (*)
         `)
         .order('created_at', { ascending: false });
 
@@ -58,6 +62,20 @@ export default function ProductManager() {
     }
   };
 
+  const loadSuppliers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setSuppliers(data);
+    } catch (error) {
+      console.error('Error loading suppliers:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -67,6 +85,7 @@ export default function ProductManager() {
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
         category_id: formData.category_id || null,
+        supplier_id: formData.supplier_id || null,
       };
 
       if (editingProduct) {
@@ -86,7 +105,8 @@ export default function ProductManager() {
 
       setShowForm(false);
       setEditingProduct(null);
-      setFormData({ name: '', description: '', price: '', stock: '', category_id: '' });
+      setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
+      setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
       loadProducts();
     } catch (error) {
       console.error('Error saving product:', error);
@@ -101,6 +121,7 @@ export default function ProductManager() {
       price: product.price.toString(),
       stock: product.stock.toString(),
       category_id: product.category_id || '',
+      supplier_id: product.supplier_id || '',
     });
     setShowForm(true);
   };
@@ -136,7 +157,7 @@ export default function ProductManager() {
           onClick={() => {
             setShowForm(true);
             setEditingProduct(null);
-            setFormData({ name: '', description: '', price: '', stock: '', category_id: '' });
+            setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
@@ -209,6 +230,23 @@ export default function ProductManager() {
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Proveedor
+                </label>
+                <select
+                  value={formData.supplier_id}
+                  onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Sin proveedor</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
                     </option>
                   ))}
                 </select>

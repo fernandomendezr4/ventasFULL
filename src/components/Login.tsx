@@ -154,16 +154,16 @@ export default function Login() {
           </div>
 
           {!isRegistering && (
-        {!isRegistering && (
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="text-sm font-medium text-blue-700 mb-2">Primera vez usando el sistema:</h3>
-              <p className="text-xs text-blue-600">
-                Haz clic en "¿Necesitas crear un administrador? Registrarse" para crear tu primera cuenta de administrador.
-              </p>
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h3 className="text-sm font-medium text-blue-700 mb-2">Primera vez usando el sistema:</h3>
+                <p className="text-xs text-blue-600">
+                  Haz clic en "¿Necesitas crear un administrador? Registrarse" para crear tu primera cuenta de administrador.
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

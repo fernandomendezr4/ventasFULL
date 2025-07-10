@@ -130,6 +130,38 @@ export interface User {
   created_at: string;
 }
 
+export interface Profile {
+  id: string;
+  email: string;
+  name: string;
+  role_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  role?: {
+    id: string;
+    name: string;
+    description: string;
+  };
+  permissions?: string[];
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+}
+
+export interface Permission {
+  id: string;
+  name: string;
+  description: string;
+  resource: string;
+  action: string;
+  created_at: string;
+}
+
 export interface CashRegister {
   id: string;
   user_id: string | null;

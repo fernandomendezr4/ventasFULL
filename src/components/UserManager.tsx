@@ -58,14 +58,9 @@ export default function UserManager() {
           .from('users')
           .insert([{
             name: formData.name,
-            email: formData.email,
+            role: formData.role,
             role: formData.role,
             is_active: formData.is_active,
-          }]);
-
-        if (error) throw error;
-      }
-
       setShowForm(false);
       setEditingUser(null);
       setFormData({ name: '', email: '', role: 'employee', is_active: true });

@@ -50,9 +50,9 @@ export default function CashRegister() {
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
       setCurrentRegister(data as CashRegisterWithUser || null);
     } catch (error) {
       console.error('Error loading current register:', error);

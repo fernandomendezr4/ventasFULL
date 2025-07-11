@@ -28,10 +28,14 @@ export default function LoginForm() {
       }
 
       if (result.error) {
-        setError(result.error.message || 'Error en la autenticación');
+        if (result.error.message?.includes('email_not_confirmed') || result.error.message?.includes('Email not confirmed')) {
+          setError('Tu email no ha sido confirmado. Por favor revisa tu bandeja de entrada y haz clic en el enlace de confirmación.');
+        } else {
+          setError(result.error.message || 'Error en la autenticación');
+        }
       } else if (!isLogin) {
         setError('');
-        alert('Usuario creado exitosamente. Revisa tu email para confirmar la cuenta.');
+        alert('Usuario creado exitosamente. Ya puedes iniciar sesión.');
         setIsLogin(true);
       }
     } catch (error) {

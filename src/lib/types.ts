@@ -112,6 +112,7 @@ export interface Database {
           description: string;
           price: number;
           stock: number;
+          barcode: string;
           category_id: string | null;
           supplier_id: string | null;
           created_at: string;
@@ -122,6 +123,7 @@ export interface Database {
           description?: string;
           price: number;
           stock?: number;
+          barcode?: string;
           category_id?: string | null;
           supplier_id?: string | null;
           created_at?: string;
@@ -132,6 +134,7 @@ export interface Database {
           description?: string;
           price?: number;
           stock?: number;
+          barcode?: string;
           category_id?: string | null;
           supplier_id?: string | null;
           created_at?: string;
@@ -141,23 +144,38 @@ export interface Database {
         Row: {
           id: string;
           total_amount: number;
+          subtotal: number;
+          discount_amount: number;
           customer_id: string | null;
           user_id: string | null;
           created_at: string;
+          payment_type: string;
+          total_paid: number;
+          payment_status: string;
         };
         Insert: {
           id?: string;
           total_amount: number;
+          subtotal?: number;
+          discount_amount?: number;
           customer_id?: string | null;
           user_id?: string | null;
           created_at?: string;
+          payment_type?: string;
+          total_paid?: number;
+          payment_status?: string;
         };
         Update: {
           id?: string;
           total_amount?: number;
+          subtotal?: number;
+          discount_amount?: number;
           customer_id?: string | null;
           user_id?: string | null;
           created_at?: string;
+          payment_type?: string;
+          total_paid?: number;
+          payment_status?: string;
         };
       };
       sale_items: {
@@ -224,6 +242,35 @@ export interface Database {
           created_at?: string;
         };
       };
+      payment_installments: {
+        Row: {
+          id: string;
+          sale_id: string;
+          amount_paid: number;
+          payment_date: string;
+          payment_method: string;
+          notes: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sale_id: string;
+          amount_paid: number;
+          payment_date?: string;
+          payment_method?: string;
+          notes?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          sale_id?: string;
+          amount_paid?: number;
+          payment_date?: string;
+          payment_method?: string;
+          notes?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 }
@@ -237,6 +284,7 @@ export type Product = Database['public']['Tables']['products']['Row'];
 export type Sale = Database['public']['Tables']['sales']['Row'];
 export type SaleItem = Database['public']['Tables']['sale_items']['Row'];
 export type CashRegister = Database['public']['Tables']['cash_registers']['Row'];
+export type PaymentInstallment = Database['public']['Tables']['payment_installments']['Row'];
 
 // Tipos extendidos con relaciones
 export interface ProductWithCategory extends Product {
@@ -268,6 +316,7 @@ export interface ProductFormData {
   stock: string;
   category_id: string;
   supplier_id: string;
+  barcode: string;
 }
 
 export interface CategoryFormData {

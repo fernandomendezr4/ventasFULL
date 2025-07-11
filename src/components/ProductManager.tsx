@@ -17,6 +17,7 @@ export default function ProductManager() {
     description: '',
     price: '',
     stock: '',
+    barcode: '',
     category_id: '',
     supplier_id: '',
   });
@@ -84,6 +85,7 @@ export default function ProductManager() {
         description: formData.description,
         price: parseFloat(formData.price),
         stock: parseInt(formData.stock),
+        barcode: formData.barcode,
         category_id: formData.category_id || null,
         supplier_id: formData.supplier_id || null,
       };
@@ -105,7 +107,7 @@ export default function ProductManager() {
 
       setShowForm(false);
       setEditingProduct(null);
-      setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
+      setFormData({ name: '', description: '', price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
       loadProducts();
     } catch (error) {
       console.error('Error saving product:', error);
@@ -120,6 +122,7 @@ export default function ProductManager() {
       description: product.description,
       price: product.price.toString(),
       stock: product.stock.toString(),
+      barcode: product.barcode,
       category_id: product.category_id || '',
       supplier_id: product.supplier_id || '',
     });
@@ -144,10 +147,18 @@ export default function ProductManager() {
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description.toLowerCase().includes(searchTerm.toLowerCase());
+                         product.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         product.barcode.includes(searchTerm);
     const matchesCategory = !selectedCategory || product.category_id === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const generateBarcode = () => {
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const barcode = `${timestamp.slice(-8)}${random}`;
+    setFormData({ ...formData, barcode });
+  };
 
   return (
     <div className="space-y-6">
@@ -157,7 +168,7 @@ export default function ProductManager() {
           onClick={() => {
             setShowForm(true);
             setEditingProduct(null);
-            setFormData({ name: '', description: '', price: '', stock: '', category_id: '', supplier_id: '' });
+            setFormData({ name: '', description: '', price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
@@ -216,6 +227,27 @@ export default function ProductManager() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Código de Barras
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                    placeholder="Código de barras"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={generateBarcode}
+                    className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm"
+                  >
+                    Auto
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -329,6 +361,9 @@ export default function ProductManager() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-slate-900">{product.name}</h3>
                   <p className="text-sm text-slate-600 mt-1">{product.description}</p>
+                  {product.barcode && (
+                    <p className="text-xs text-slate-500 mt-1 font-mono">Código: {product.barcode}</p>
+                  )}
                   {product.category && (
                     <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-2">
                       {product.category.name}

@@ -1,50 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, User, CheckCircle, Clock, AlertTriangle, CreditCard, Eye, X } from 'lucide-react';
+import { DollarSign, User, Calendar, Plus, Eye, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-interface InstallmentSale {
+interface SaleWithInstallments {
+  id: string;
+  total_amount: number;
+  subtotal: number;
+  discount_amount: number;
+  total_paid: number;
+  payment_status: string;
+  created_at: string;
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    email: string;
+  } | null;
+  payment_installments: PaymentInstallment[];
+}
+
+interface PaymentInstallment {
   id: string;
   sale_id: string;
-  total_installments: number;
-  installment_amount: number;
-  down_payment: number;
-  remaining_balance: number;
-  status: string;
-  created_at: string;
-  sale: {
-    id: string;
-    total_amount: number;
-    created_at: string;
-    customer: {
-      id: string;
-      name: string;
-      phone: string;
-      email: string;
-    } | null;
-  };
-}
-
-interface InstallmentPayment {
-  id: string;
-  installment_sale_id: string;
-  installment_number: number;
   amount_paid: number;
-  due_date: string;
-  payment_date: string | null;
-  status: string;
+  payment_date: string;
+  payment_method: string;
   notes: string;
-}
-
-interface InstallmentSaleWithPayments extends InstallmentSale {
-  installment_payments: InstallmentPayment[];
+  created_at: string;
 }
 
 export default function InstallmentManager() {
-  const [installmentSales, setInstallmentSales] = useState<InstallmentSale[]>([]);
-  const [selectedSale, setSelectedSale] = useState<InstallmentSaleWithPayments | null>(null);
+  const [installmentSales, setInstallmentSales] = useState<SaleWithInstallments[]>([]);
+  const [selectedSale, setSelectedSale] = useState<SaleWithInstallments | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<InstallmentPayment | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -57,25 +46,22 @@ export default function InstallmentManager() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('installment_sales')
+        .from('sales')
         .select(`
           *,
-          sale:sales (
+          customer:customers (
             id,
-            total_amount,
-            created_at,
-            customer:customers (
-              id,
-              name,
-              phone,
-              email
-            )
-          )
+            name,
+            phone,
+            email
+          ),
+          payment_installments (*)
         `)
+        .eq('payment_type', 'installment')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setInstallmentSales(data as InstallmentSale[]);
+      setInstallmentSales(data as SaleWithInstallments[]);
     } catch (error) {
       console.error('Error loading installment sales:', error);
     } finally {
@@ -83,127 +69,64 @@ export default function InstallmentManager() {
     }
   };
 
-  const loadSaleDetails = async (saleId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('installment_sales')
-        .select(`
-          *,
-          sale:sales (
-            id,
-            total_amount,
-            created_at,
-            customer:customers (
-              id,
-              name,
-              phone,
-              email
-            )
-          ),
-          installment_payments (*)
-        `)
-        .eq('id', saleId)
-        .single();
-
-      if (error) throw error;
-      setSelectedSale(data as InstallmentSaleWithPayments);
-    } catch (error) {
-      console.error('Error loading sale details:', error);
-    }
-  };
-
   const handlePayment = async () => {
-    if (!selectedPayment || !paymentAmount) return;
+    if (!selectedSale || !paymentAmount) return;
 
     try {
       const amount = parseFloat(paymentAmount);
-      const installmentAmount = selectedSale?.installment_amount || 0;
       
       if (amount <= 0) {
         alert('El monto debe ser mayor a 0');
         return;
       }
 
-      if (amount > installmentAmount) {
-        alert(`El monto no puede ser mayor a $${installmentAmount.toFixed(2)}`);
+      const remainingBalance = selectedSale.total_amount - selectedSale.total_paid;
+      if (amount > remainingBalance) {
+        alert(`El monto no puede ser mayor al saldo pendiente: $${remainingBalance.toFixed(2)}`);
         return;
       }
 
-      // Update installment payment
-      const { error: paymentError } = await supabase
-        .from('installment_payments')
-        .update({
+      // Record payment installment
+      const { error: installmentError } = await supabase
+        .from('payment_installments')
+        .insert([{
+          sale_id: selectedSale.id,
           amount_paid: amount,
-          payment_date: new Date().toISOString(),
-          status: amount >= installmentAmount ? 'paid' : 'partial',
+          payment_method: 'cash',
           notes: paymentNotes
-        })
-        .eq('id', selectedPayment.id);
+        }]);
+
+      if (installmentError) throw installmentError;
+
+      // Record payment in payments table
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert([{
+          sale_id: selectedSale.id,
+          amount: amount,
+          payment_method: 'cash',
+          notes: `Abono - ${paymentNotes}`
+        }]);
 
       if (paymentError) throw paymentError;
 
-      // Record payment in payments table
-      const { error: recordError } = await supabase
-        .from('payments')
-        .insert([{
-          sale_id: selectedSale?.sale_id,
-          amount: amount,
-          payment_method: 'cash',
-          notes: `Abono #${selectedPayment.installment_number} - ${paymentNotes}`
-        }]);
-
-      if (recordError) throw recordError;
-
       // Update sale total paid
-      const { data: saleData, error: saleSelectError } = await supabase
-        .from('sales')
-        .select('total_paid')
-        .eq('id', selectedSale?.sale_id)
-        .single();
-
-      if (saleSelectError) throw saleSelectError;
-
-      const newTotalPaid = (saleData.total_paid || 0) + amount;
-      const saleTotal = selectedSale?.sale.total_amount || 0;
-
+      const newTotalPaid = selectedSale.total_paid + amount;
       const { error: saleUpdateError } = await supabase
         .from('sales')
         .update({
           total_paid: newTotalPaid,
-          payment_status: newTotalPaid >= saleTotal ? 'paid' : 'partial'
+          payment_status: newTotalPaid >= selectedSale.total_amount ? 'paid' : 'partial'
         })
-        .eq('id', selectedSale?.sale_id);
+        .eq('id', selectedSale.id);
 
       if (saleUpdateError) throw saleUpdateError;
 
-      // Check if all installments are paid to update installment sale status
-      if (selectedSale) {
-        const { data: paymentsData, error: paymentsError } = await supabase
-          .from('installment_payments')
-          .select('status')
-          .eq('installment_sale_id', selectedSale.id);
-
-        if (!paymentsError) {
-          const allPaid = paymentsData.every(p => p.status === 'paid');
-          if (allPaid) {
-            await supabase
-              .from('installment_sales')
-              .update({ status: 'completed' })
-              .eq('id', selectedSale.id);
-          }
-        }
-      }
-
       setShowPaymentModal(false);
-      setSelectedPayment(null);
       setPaymentAmount('');
       setPaymentNotes('');
       
-      if (selectedSale) {
-        loadSaleDetails(selectedSale.id);
-      }
       loadInstallmentSales();
-      
       alert('Pago registrado exitosamente');
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -213,33 +136,18 @@ export default function InstallmentManager() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'bg-blue-100 text-blue-800';
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'overdue':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getPaymentStatusColor = (status: string) => {
-    switch (status) {
       case 'paid':
         return 'bg-green-100 text-green-800';
       case 'partial':
         return 'bg-yellow-100 text-yellow-800';
-      case 'overdue':
-        return 'bg-red-100 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-red-100 text-red-800';
     }
   };
 
   const filteredSales = installmentSales.filter(sale => {
     if (statusFilter === 'all') return true;
-    return sale.status === statusFilter;
+    return sale.payment_status === statusFilter;
   });
 
   return (
@@ -253,9 +161,9 @@ export default function InstallmentManager() {
             className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">Todos los estados</option>
-            <option value="active">Activos</option>
-            <option value="completed">Completados</option>
-            <option value="overdue">Vencidos</option>
+            <option value="pending">Pendientes</option>
+            <option value="partial">Parciales</option>
+            <option value="paid">Pagadas</option>
           </select>
         </div>
       </div>
@@ -275,7 +183,7 @@ export default function InstallmentManager() {
           </div>
         ) : filteredSales.length === 0 ? (
           <div className="p-12 text-center">
-            <CreditCard className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+            <DollarSign className="h-12 w-12 text-slate-400 mx-auto mb-4" />
             <p className="text-slate-500">No hay ventas por abonos registradas</p>
           </div>
         ) : (
@@ -287,34 +195,48 @@ export default function InstallmentManager() {
                     <div className="flex items-center gap-4">
                       <div>
                         <h3 className="font-semibold text-slate-900">
-                          {sale.sale.customer?.name || 'Cliente no especificado'}
+                          {sale.customer?.name || 'Cliente no especificado'}
                         </h3>
                         <p className="text-sm text-slate-600">
-                          Venta #{sale.sale_id.slice(-8)} • {new Date(sale.created_at).toLocaleDateString('es-ES')}
+                          Venta #{sale.id.slice(-8)} • {new Date(sale.created_at).toLocaleDateString('es-ES')}
                         </p>
                         <div className="flex items-center gap-4 mt-2 text-sm text-slate-600">
                           <span className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
-                            Total: ${sale.sale.total_amount.toFixed(2)}
+                            Total: ${sale.total_amount.toFixed(2)}
                           </span>
                           <span className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            {sale.total_installments} cuotas de ${sale.installment_amount.toFixed(2)}
+                            <DollarSign className="h-4 w-4 mr-1" />
+                            Pagado: ${sale.total_paid.toFixed(2)}
                           </span>
                           <span className="flex items-center">
-                            <CreditCard className="h-4 w-4 mr-1" />
-                            Saldo: ${sale.remaining_balance.toFixed(2)}
+                            <DollarSign className="h-4 w-4 mr-1" />
+                            Saldo: ${(sale.total_amount - sale.total_paid).toFixed(2)}
                           </span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(sale.status)}`}>
-                      {sale.status === 'active' ? 'Activo' : sale.status === 'completed' ? 'Completado' : 'Vencido'}
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(sale.payment_status)}`}>
+                      {sale.payment_status === 'paid' ? 'Pagada' : 
+                       sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
                     </span>
+                    {sale.payment_status !== 'paid' && (
+                      <button
+                        onClick={() => {
+                          setSelectedSale(sale);
+                          setPaymentAmount((sale.total_amount - sale.total_paid).toFixed(2));
+                          setShowPaymentModal(true);
+                        }}
+                        className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Abonar
+                      </button>
+                    )}
                     <button
-                      onClick={() => loadSaleDetails(sale.id)}
+                      onClick={() => setSelectedSale(sale)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
                     >
                       <Eye className="h-4 w-4" />
@@ -328,17 +250,17 @@ export default function InstallmentManager() {
       </div>
 
       {/* Sale Detail Modal */}
-      {selectedSale && (
+      {selectedSale && !showPaymentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-semibold text-slate-900">
-                    Plan de Pagos - {selectedSale.sale.customer?.name || 'Cliente no especificado'}
+                    Historial de Abonos - {selectedSale.customer?.name || 'Cliente no especificado'}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Venta #{selectedSale.sale_id.slice(-8)} • {new Date(selectedSale.created_at).toLocaleDateString('es-ES')}
+                    Venta #{selectedSale.id.slice(-8)} • {new Date(selectedSale.created_at).toLocaleDateString('es-ES')}
                   </p>
                 </div>
                 <button
@@ -355,91 +277,54 @@ export default function InstallmentManager() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <p className="text-sm font-medium text-blue-600">Total de la Venta</p>
-                  <p className="text-2xl font-bold text-blue-900">${selectedSale.sale.total_amount.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-blue-900">${selectedSale.total_amount.toFixed(2)}</p>
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <p className="text-sm font-medium text-green-600">Pago Inicial</p>
-                  <p className="text-2xl font-bold text-green-900">${selectedSale.down_payment.toFixed(2)}</p>
+                  <p className="text-sm font-medium text-green-600">Total Pagado</p>
+                  <p className="text-2xl font-bold text-green-900">${selectedSale.total_paid.toFixed(2)}</p>
                 </div>
                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
                   <p className="text-sm font-medium text-orange-600">Saldo Pendiente</p>
-                  <p className="text-2xl font-bold text-orange-900">${selectedSale.remaining_balance.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-orange-900">${(selectedSale.total_amount - selectedSale.total_paid).toFixed(2)}</p>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                  <p className="text-sm font-medium text-purple-600">Cuotas</p>
-                  <p className="text-2xl font-bold text-purple-900">
-                    {selectedSale.total_installments} x ${selectedSale.installment_amount.toFixed(2)}
+                  <p className="text-sm font-medium text-purple-600">Estado</p>
+                  <p className="text-lg font-bold text-purple-900">
+                    {selectedSale.payment_status === 'paid' ? 'Pagada' : 
+                     selectedSale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
                   </p>
                 </div>
               </div>
 
-              {/* Payment Schedule */}
-              <h4 className="font-medium text-slate-900 mb-4">Cronograma de Pagos</h4>
+              {/* Payment History */}
+              <h4 className="font-medium text-slate-900 mb-4">Historial de Abonos</h4>
               <div className="space-y-3">
-                {selectedSale.installment_payments.map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${
-                          payment.status === 'paid' 
-                            ? 'bg-green-100' 
-                            : payment.status === 'partial'
-                              ? 'bg-yellow-100'
-                              : new Date(payment.due_date) < new Date()
-                                ? 'bg-red-100'
-                                : 'bg-gray-100'
-                        }`}>
-                          {payment.status === 'paid' ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : payment.status === 'partial' ? (
-                            <Clock className="h-4 w-4 text-yellow-600" />
-                          ) : new Date(payment.due_date) < new Date() ? (
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          ) : (
-                            <Calendar className="h-4 w-4 text-gray-600" />
-                          )}
-                        </div>
-                        <div>
-                          <h5 className="font-medium text-slate-900">
-                            Cuota #{payment.installment_number}
-                          </h5>
-                          <p className="text-sm text-slate-600">
-                            Vence: {new Date(payment.due_date).toLocaleDateString('es-ES')}
-                          </p>
-                          {payment.payment_date && (
-                            <p className="text-sm text-green-600">
-                              Pagado: {new Date(payment.payment_date).toLocaleDateString('es-ES')}
+                {selectedSale.payment_installments.length === 0 ? (
+                  <p className="text-slate-500 text-center py-8">No hay abonos registrados</p>
+                ) : (
+                  selectedSale.payment_installments.map((payment) => (
+                    <div key={payment.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 rounded-lg">
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <h5 className="font-medium text-slate-900">
+                              Abono de ${payment.amount_paid.toFixed(2)}
+                            </h5>
+                            <p className="text-sm text-slate-600">
+                              {new Date(payment.payment_date).toLocaleDateString('es-ES')} • {payment.payment_method}
                             </p>
-                          )}
+                            {payment.notes && (
+                              <p className="text-sm text-slate-500 mt-1">{payment.notes}</p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-semibold text-slate-900">
-                          ${payment.amount_paid.toFixed(2)} / ${selectedSale.installment_amount.toFixed(2)}
-                        </p>
-                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(payment.status)}`}>
-                          {payment.status === 'paid' ? 'Pagado' : 
-                           payment.status === 'partial' ? 'Parcial' : 
-                           new Date(payment.due_date) < new Date() ? 'Vencido' : 'Pendiente'}
-                        </span>
-                      </div>
-                      {payment.status !== 'paid' && (
-                        <button
-                          onClick={() => {
-                            setSelectedPayment(payment);
-                            setPaymentAmount((selectedSale.installment_amount - payment.amount_paid).toFixed(2));
-                            setShowPaymentModal(true);
-                          }}
-                          className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm"
-                        >
-                          Pagar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -447,33 +332,50 @@ export default function InstallmentManager() {
       )}
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedPayment && (
+      {showPaymentModal && selectedSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">
-                Registrar Pago - Cuota #{selectedPayment.installment_number}
+                Registrar Abono
               </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                {selectedSale.customer?.name || 'Cliente no especificado'}
+              </p>
             </div>
             
             <div className="p-6">
               <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-600">Total venta:</span>
+                      <p className="font-bold">${selectedSale.total_amount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Ya pagado:</span>
+                      <p className="font-bold text-green-600">${selectedSale.total_paid.toFixed(2)}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-600">Saldo pendiente:</span>
+                      <p className="font-bold text-orange-600">${(selectedSale.total_amount - selectedSale.total_paid).toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Monto del Pago
+                    Monto del Abono
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    max={selectedSale?.installment_amount}
+                    max={selectedSale.total_amount - selectedSale.total_paid}
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  <p className="text-sm text-slate-500 mt-1">
-                    Pendiente: ${((selectedSale?.installment_amount || 0) - selectedPayment.amount_paid).toFixed(2)}
-                  </p>
                 </div>
                 
                 <div>
@@ -497,12 +399,11 @@ export default function InstallmentManager() {
                 disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
                 className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
-                Registrar Pago
+                Registrar Abono
               </button>
               <button
                 onClick={() => {
                   setShowPaymentModal(false);
-                  setSelectedPayment(null);
                   setPaymentAmount('');
                   setPaymentNotes('');
                 }}

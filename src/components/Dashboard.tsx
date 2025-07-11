@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, Package, ShoppingCart, DollarSign, Calendar, Users, AlertTriangle, CheckCircle, Plus, Calculator } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Sale, Product, SaleWithItems } from '../lib/types';
+import { formatCurrency } from '../lib/currency';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -84,7 +85,7 @@ export default function Dashboard() {
   const statCards = [
     {
       title: 'Ventas Hoy',
-      value: `$${stats.todaySales.toFixed(2)}`,
+      value: formatCurrency(stats.todaySales),
       icon: Calendar,
       color: 'text-green-600',
       bg: 'bg-green-50',
@@ -143,7 +144,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-bold">${stats.totalRevenue.toFixed(2)}</p>
+            <p className="text-3xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
             <p className="text-blue-100">Ingresos Totales</p>
           </div>
         </div>
@@ -207,7 +208,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-slate-900">${sale.total_amount.toFixed(2)}</p>
+                     <p className="font-bold text-slate-900">{formatCurrency(sale.total_amount)}</p>
                       <div className="flex items-center text-xs text-green-600">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Completada
@@ -245,7 +246,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <p className="font-medium text-slate-900">{product.name}</p>
-                          <p className="text-sm text-slate-600">${product.price.toFixed(2)}</p>
+                          <p className="text-sm text-slate-600">{formatCurrency(product.sale_price)}</p>
                         </div>
                       </div>
                     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, User as UserType } from '../lib/types';
+import { formatCurrency } from '../lib/currency';
 
 interface CashRegisterWithUser extends CashRegisterType {
   user: UserType | null;
@@ -251,7 +252,7 @@ export default function CashRegister() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-blue-600">Monto Inicial</p>
-                  <p className="text-lg font-bold text-blue-900">${(currentRegister.opening_amount || 0).toFixed(2)}</p>
+                  <p className="text-lg font-bold text-blue-900">{formatCurrency(currentRegister.opening_amount || 0)}</p>
                 </div>
                 <div className="p-2 bg-blue-100 rounded-full">
                   <TrendingUp className="h-6 w-6 text-blue-600" />
@@ -404,7 +405,7 @@ export default function CashRegister() {
                         ? 'text-blue-600' 
                         : 'text-red-600'
                   }`}>
-                    Diferencia: ${calculateDifference().toFixed(2)}
+                    Diferencia: {formatCurrency(calculateDifference())}
                     {calculateDifference() > 0 && ' (sobrante)'}
                     {calculateDifference() < 0 && ' (faltante)'}
                   </div>
@@ -466,18 +467,18 @@ export default function CashRegister() {
                         </p>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
-                        <span className="text-slate-600">
+                            Inicial: {formatCurrency(register.opening_amount || 0)}
                           Inicial: ${(register.opening_amount || 0).toFixed(2)}
                         </span>
-                        {register.status === 'closed' && (
+                          <span>{formatCurrency(currentRegister.opening_amount || 0)}</span>
                           <>
-                            <span className="text-slate-600">
+                                Final: {formatCurrency(register.closing_amount || 0)}
                               Final: ${(register.closing_amount || 0).toFixed(2)}
-                            </span>
-                            <span className="text-slate-600">
+                          <span>{formatCurrency(currentRegister.total_sales || 0)}</span>
+                                Ventas: {formatCurrency(register.total_sales || 0)}
                               Ventas: ${(register.total_sales || 0).toFixed(2)}
                             </span>
-                          </>
+                          <span>{formatCurrency((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0))}</span>
                         )}
                       </div>
                     </div>

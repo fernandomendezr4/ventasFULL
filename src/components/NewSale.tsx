@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Minus, ShoppingCart, X, Search, Package, User, UserPlus, Scan } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Product, CartItem, Customer } from '../lib/types';
+import { formatCurrency } from '../lib/currency';
 
 export default function NewSale() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -130,7 +131,7 @@ export default function NewSale() {
   };
 
   const calculateSubtotal = () => {
-    return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    return cart.reduce((sum, item) => sum + (item.product.sale_price * item.quantity), 0);
   };
 
   const calculateTotal = () => {
@@ -213,8 +214,8 @@ export default function NewSale() {
         sale_id: sale.id,
         product_id: item.product.id,
         quantity: item.quantity,
-        unit_price: item.product.price,
-        total_price: item.product.price * item.quantity
+        unit_price: item.product.sale_price,
+        total_price: item.product.sale_price * item.quantity
       }));
 
       const { error: itemsError } = await supabase
@@ -383,7 +384,7 @@ export default function NewSale() {
                   <div className="flex-1">
                     <h4 className="font-medium text-slate-900">{product.name}</h4>
                     <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="font-semibold text-green-600">${product.price.toFixed(2)}</span>
+                      <span className="font-semibold text-green-600">{formatCurrency(product.sale_price)}</span>
                       <span>•</span>
                       <span className={`${product.stock <= 5 ? 'text-orange-600 font-medium' : ''}`}>
                         Stock: {product.stock}
@@ -472,7 +473,7 @@ export default function NewSale() {
                 <div key={item.product.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
                   <div className="flex-1">
                     <h4 className="font-medium text-slate-900">{item.product.name}</h4>
-                    <p className="text-sm text-slate-600">${item.product.price.toFixed(2)} c/u</p>
+                    <p className="text-sm text-slate-600">{formatCurrency(item.product.sale_price)} c/u</p>
                     {item.product.barcode && (
                       <p className="text-xs text-slate-500 font-mono">{item.product.barcode}</p>
                     )}
@@ -499,7 +500,7 @@ export default function NewSale() {
                     </button>
                   </div>
                   <div className="ml-4 font-semibold text-slate-900 min-w-[80px] text-right">
-                    ${(item.product.price * item.quantity).toFixed(2)}
+                    {formatCurrency(item.product.sale_price * item.quantity)}
                   </div>
                 </div>
               ))
@@ -531,17 +532,17 @@ export default function NewSale() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>${calculateSubtotal().toFixed(2)}</span>
+                  <span>{formatCurrency(calculateSubtotal())}</span>
                 </div>
                 {parseFloat(discountAmount) > 0 && (
                   <div className="flex justify-between text-red-600">
                     <span>Descuento:</span>
-                    <span>-${parseFloat(discountAmount).toFixed(2)}</span>
+                    <span>-{formatCurrency(parseFloat(discountAmount))}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-lg font-bold border-t pt-2">
                   <span>Total:</span>
-                  <span className="text-green-600">${calculateTotal().toFixed(2)}</span>
+                  <span className="text-green-600">{formatCurrency(calculateTotal())}</span>
                 </div>
               </div>
               

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Package, Search, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Search, Filter, TrendingUp, DollarSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ProductWithCategory, Category, Supplier } from '../lib/types';
+import { formatCurrency, calculateProfit, calculateProfitMargin } from '../lib/currency';
 
 export default function ProductManager() {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
@@ -15,7 +16,8 @@ export default function ProductManager() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    price: '',
+    sale_price: '',
+    purchase_price: '',
     stock: '',
     barcode: '',
     category_id: '',
@@ -83,7 +85,8 @@ export default function ProductManager() {
       const productData = {
         name: formData.name,
         description: formData.description,
-        price: parseFloat(formData.price),
+        sale_price: parseFloat(formData.sale_price),
+        purchase_price: parseFloat(formData.purchase_price) || 0,
         stock: parseInt(formData.stock),
         barcode: formData.barcode,
         category_id: formData.category_id || null,
@@ -107,7 +110,7 @@ export default function ProductManager() {
 
       setShowForm(false);
       setEditingProduct(null);
-      setFormData({ name: '', description: '', price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
+      setFormData({ name: '', description: '', sale_price: '', purchase_price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
       loadProducts();
     } catch (error) {
       console.error('Error saving product:', error);
@@ -120,7 +123,8 @@ export default function ProductManager() {
     setFormData({
       name: product.name,
       description: product.description,
-      price: product.price.toString(),
+      sale_price: product.sale_price.toString(),
+      purchase_price: product.purchase_price.toString(),
       stock: product.stock.toString(),
       barcode: product.barcode,
       category_id: product.category_id || '',
@@ -168,7 +172,7 @@ export default function ProductManager() {
           onClick={() => {
             setShowForm(true);
             setEditingProduct(null);
-            setFormData({ name: '', description: '', price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
+            setFormData({ name: '', description: '', sale_price: '', purchase_price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
@@ -285,14 +289,29 @@ export default function ProductManager() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Precio
+                  Precio de Compra
                 </label>
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
+                  value={formData.purchase_price}
+                  onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Precio de Venta
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
                   required
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  value={formData.sale_price}
+                  onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -309,6 +328,37 @@ export default function ProductManager() {
                 />
               </div>
             </div>
+            
+            {/* Profit Calculator */}
+            {formData.sale_price && formData.purchase_price && (
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <h4 className="font-medium text-green-900 mb-2 flex items-center">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Análisis de Ganancia
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-green-700">Ganancia por unidad:</span>
+                    <p className="font-bold text-green-900">
+                      {formatCurrency(calculateProfit(parseFloat(formData.sale_price) || 0, parseFloat(formData.purchase_price) || 0))}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-green-700">Margen de ganancia:</span>
+                    <p className="font-bold text-green-900">
+                      {calculateProfitMargin(parseFloat(formData.sale_price) || 0, parseFloat(formData.purchase_price) || 0).toFixed(1)}%
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-green-700">Ganancia total (stock):</span>
+                    <p className="font-bold text-green-900">
+                      {formatCurrency(calculateProfit(parseFloat(formData.sale_price) || 0, parseFloat(formData.purchase_price) || 0) * (parseInt(formData.stock) || 0))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Descripción
@@ -385,8 +435,41 @@ export default function ProductManager() {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="text-2xl font-bold text-slate-900">${product.price.toFixed(2)}</div>
+              
+              {/* Pricing Information */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-600">Precio de compra:</span>
+                    <p className="font-semibold text-slate-900">{formatCurrency(product.purchase_price)}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Precio de venta:</span>
+                    <p className="font-semibold text-green-600">{formatCurrency(product.sale_price)}</p>
+                  </div>
+                </div>
+                
+                {product.purchase_price > 0 && (
+                  <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center">
+                        <TrendingUp className="h-4 w-4 mr-1 text-green-600" />
+                        <span className="text-green-700">Ganancia:</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-green-900">
+                          {formatCurrency(calculateProfit(product.sale_price, product.purchase_price))}
+                        </p>
+                        <p className="text-xs text-green-700">
+                          {calculateProfitMargin(product.sale_price, product.purchase_price).toFixed(1)}% margen
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
                 <div className={`text-sm px-2 py-1 rounded-full ${
                   product.stock > 10 
                     ? 'bg-green-100 text-green-800' 
@@ -395,6 +478,12 @@ export default function ProductManager() {
                       : 'bg-red-100 text-red-800'
                 }`}>
                   Stock: {product.stock}
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Valor total stock:</p>
+                  <p className="font-bold text-slate-900">
+                    {formatCurrency(product.sale_price * product.stock)}
+                  </p>
                 </div>
               </div>
             </div>

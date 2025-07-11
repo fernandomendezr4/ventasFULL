@@ -110,7 +110,8 @@ export interface Database {
           id: string;
           name: string;
           description: string;
-          price: number;
+          sale_price: number;
+          purchase_price: number;
           stock: number;
           barcode: string;
           category_id: string | null;
@@ -121,7 +122,8 @@ export interface Database {
           id?: string;
           name: string;
           description?: string;
-          price: number;
+          sale_price: number;
+          purchase_price?: number;
           stock?: number;
           barcode?: string;
           category_id?: string | null;
@@ -132,7 +134,8 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string;
-          price?: number;
+          sale_price?: number;
+          purchase_price?: number;
           stock?: number;
           barcode?: string;
           category_id?: string | null;
@@ -312,7 +315,8 @@ export interface CartItem {
 export interface ProductFormData {
   name: string;
   description: string;
-  price: string;
+  sale_price: string;
+  purchase_price: string;
   stock: string;
   category_id: string;
   supplier_id: string;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, User, Calendar, Plus, Eye, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { formatCurrency } from '../lib/currency';
 
 interface SaleWithInstallments {
   id: string;
@@ -277,15 +278,15 @@ export default function InstallmentManager() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <p className="text-sm font-medium text-blue-600">Total de la Venta</p>
-                  <p className="text-2xl font-bold text-blue-900">${selectedSale.total_amount.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-blue-900">{formatCurrency(selectedSale.total_amount)}</p>
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <p className="text-sm font-medium text-green-600">Total Pagado</p>
-                  <p className="text-2xl font-bold text-green-900">${selectedSale.total_paid.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-green-900">{formatCurrency(selectedSale.total_paid)}</p>
                 </div>
                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
                   <p className="text-sm font-medium text-orange-600">Saldo Pendiente</p>
-                  <p className="text-2xl font-bold text-orange-900">${(selectedSale.total_amount - selectedSale.total_paid).toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-orange-900">{formatCurrency(selectedSale.total_amount - selectedSale.total_paid)}</p>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                   <p className="text-sm font-medium text-purple-600">Estado</p>
@@ -309,15 +310,15 @@ export default function InstallmentManager() {
                           <div className="p-2 bg-green-100 rounded-lg">
                             <DollarSign className="h-4 w-4 text-green-600" />
                           </div>
-                          <div>
+                              Total: {formatCurrency(sale.total_amount)}
                             <h5 className="font-medium text-slate-900">
-                              Abono de ${payment.amount_paid.toFixed(2)}
+                              Abono de {formatCurrency(payment.amount_paid)}
                             </h5>
-                            <p className="text-sm text-slate-600">
+                              Pagado: {formatCurrency(sale.total_paid)}
                               {new Date(payment.payment_date).toLocaleDateString('es-ES')} • {payment.payment_method}
                             </p>
                             {payment.notes && (
-                              <p className="text-sm text-slate-500 mt-1">{payment.notes}</p>
+                              Saldo: {formatCurrency(sale.total_amount - sale.total_paid)}
                             )}
                           </div>
                         </div>
@@ -332,7 +333,7 @@ export default function InstallmentManager() {
       )}
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedSale && (
+                            setPaymentAmount((sale.total_amount - sale.total_paid).toString());
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
             <div className="p-6 border-b border-slate-200">
@@ -350,15 +351,15 @@ export default function InstallmentManager() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-slate-600">Total venta:</span>
-                      <p className="font-bold">${selectedSale.total_amount.toFixed(2)}</p>
+                      <p className="font-bold">{formatCurrency(selectedSale.total_amount)}</p>
                     </div>
                     <div>
                       <span className="text-slate-600">Ya pagado:</span>
-                      <p className="font-bold text-green-600">${selectedSale.total_paid.toFixed(2)}</p>
+                      <p className="font-bold text-green-600">{formatCurrency(selectedSale.total_paid)}</p>
                     </div>
                     <div className="col-span-2">
                       <span className="text-slate-600">Saldo pendiente:</span>
-                      <p className="font-bold text-orange-600">${(selectedSale.total_amount - selectedSale.total_paid).toFixed(2)}</p>
+                      <p className="font-bold text-orange-600">{formatCurrency(selectedSale.total_amount - selectedSale.total_paid)}</p>
                     </div>
                   </div>
                 </div>

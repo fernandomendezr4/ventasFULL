@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, DollarSign, Package, Eye, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
+import { formatCurrency } from '../lib/currency';
 
 export default function SalesManager() {
   const [sales, setSales] = useState<SaleWithItems[]>([]);
@@ -121,7 +122,7 @@ export default function SalesManager() {
                         </span>
                         <span className="flex items-center">
                           <DollarSign className="h-4 w-4 mr-1" />
-                          ${sale.total_amount.toFixed(2)}
+                          {formatCurrency(sale.total_amount)}
                         </span>
                       </div>
                     </div>
@@ -174,11 +175,11 @@ export default function SalesManager() {
                     <div className="flex-1">
                       <h5 className="font-medium text-slate-900">{item.product.name}</h5>
                       <p className="text-sm text-slate-600">
-                        ${item.unit_price.toFixed(2)} × {item.quantity}
+                        {formatCurrency(item.unit_price)} × {item.quantity}
                       </p>
                     </div>
                     <div className="font-semibold text-slate-900">
-                      ${item.total_price.toFixed(2)}
+                      {formatCurrency(item.total_price)}
                     </div>
                   </div>
                 ))}
@@ -188,7 +189,7 @@ export default function SalesManager() {
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-semibold text-slate-900">Total</span>
                   <span className="text-2xl font-bold text-slate-900">
-                    ${selectedSale.total_amount.toFixed(2)}
+                    {formatCurrency(selectedSale.total_amount)}
                   </span>
                 </div>
               </div>

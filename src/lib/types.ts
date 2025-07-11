@@ -289,6 +289,19 @@ export type SaleItem = Database['public']['Tables']['sale_items']['Row'];
 export type CashRegister = Database['public']['Tables']['cash_registers']['Row'];
 export type PaymentInstallment = Database['public']['Tables']['payment_installments']['Row'];
 
+// Nuevo tipo para movimientos de caja
+export interface CashMovement {
+  id: string;
+  cash_register_id: string;
+  type: 'income' | 'expense' | 'sale' | 'opening' | 'closing';
+  category: string;
+  amount: number;
+  description: string;
+  reference_id: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
 // Tipos extendidos con relaciones
 export interface ProductWithCategory extends Product {
   category: Category | null;
@@ -303,6 +316,13 @@ export interface SaleWithItems extends Sale {
 
 export interface CashRegisterWithUser extends CashRegister {
   user: User | null;
+  current_balance?: number;
+  total_income?: number;
+  total_expenses?: number;
+}
+
+export interface CashRegisterWithMovements extends CashRegisterWithUser {
+  cash_movements: CashMovement[];
 }
 
 // Tipos para el carrito de compras

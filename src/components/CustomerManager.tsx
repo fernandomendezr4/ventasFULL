@@ -13,6 +13,7 @@ export default function CustomerManager() {
     email: '',
     phone: '',
     address: '',
+    cedula: '',
   });
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function CustomerManager() {
 
       setShowForm(false);
       setEditingCustomer(null);
-      setFormData({ name: '', email: '', phone: '', address: '' });
+      setFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
       loadCustomers();
     } catch (error) {
       console.error('Error saving customer:', error);
@@ -81,6 +82,7 @@ export default function CustomerManager() {
       email: customer.email,
       phone: customer.phone,
       address: customer.address,
+      cedula: customer.cedula,
     });
     setShowForm(true);
   };
@@ -109,7 +111,7 @@ export default function CustomerManager() {
           onClick={() => {
             setShowForm(true);
             setEditingCustomer(null);
-            setFormData({ name: '', email: '', phone: '', address: '' });
+            setFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
@@ -135,6 +137,17 @@ export default function CustomerManager() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Cédula
+                </label>
+                <input
+                  type="text"
+                  value={formData.cedula}
+                  onChange={(e) => setFormData({ ...formData, cedula: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -215,6 +228,9 @@ export default function CustomerManager() {
                     <Users className="h-4 w-4 mr-2 text-green-600" />
                     {customer.name}
                   </h3>
+                  {customer.cedula && (
+                    <p className="text-sm text-slate-600 mt-1">CC: {customer.cedula}</p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button

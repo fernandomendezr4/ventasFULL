@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, User, Calendar, Plus, Eye, X } from 'lucide-react';
+import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
@@ -36,6 +36,8 @@ export default function InstallmentManager() {
   const [selectedSale, setSelectedSale] = useState<SaleWithInstallments | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<PaymentInstallment | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -63,7 +65,16 @@ export default function InstallmentManager() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setInstallmentSales(data as SaleWithInstallments[]);
+      
+      // Sort payment installments by date
+      const salesWithSortedPayments = data.map(sale => ({
+        ...sale,
+        payment_installments: sale.payment_installments.sort((a: PaymentInstallment, b: PaymentInstallment) => 
+          new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
+        )
+      }));
+      
+      setInstallmentSales(salesWithSortedPayments as SaleWithInstallments[]);
     } catch (error) {
       console.error('Error loading installment sales:', error);
     } finally {
@@ -84,7 +95,7 @@ export default function InstallmentManager() {
 
       const remainingBalance = selectedSale.total_amount - selectedSale.total_paid;
       if (amount > remainingBalance) {
-        alert(`El monto no puede ser mayor al saldo pendiente: $${remainingBalance.toFixed(2)}`);
+        alert(`El monto no puede ser mayor al saldo pendiente: ${formatCurrency(remainingBalance)}`);
         return;
       }
 
@@ -134,6 +145,125 @@ export default function InstallmentManager() {
       console.error('Error processing payment:', error);
       alert('Error al procesar el pago: ' + (error as Error).message);
     }
+  };
+
+  const handleEditPayment = async () => {
+    if (!editingPayment || !paymentAmount || !selectedSale) return;
+
+    try {
+      const newAmount = parseFloat(paymentAmount);
+      
+      if (newAmount <= 0) {
+        alert('El monto debe ser mayor a 0');
+        return;
+      }
+
+      const oldAmount = editingPayment.amount_paid;
+      const currentTotalPaid = selectedSale.total_paid - oldAmount;
+      const newTotalPaid = currentTotalPaid + newAmount;
+
+      if (newTotalPaid > selectedSale.total_amount) {
+        alert(`El monto total no puede exceder el valor de la venta: ${formatCurrency(selectedSale.total_amount)}`);
+        return;
+      }
+
+      // Update payment installment
+      const { error: installmentError } = await supabase
+        .from('payment_installments')
+        .update({
+          amount_paid: newAmount,
+          notes: paymentNotes
+        })
+        .eq('id', editingPayment.id);
+
+      if (installmentError) throw installmentError;
+
+      // Update corresponding payment record
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .update({
+          amount: newAmount,
+          notes: `Abono - ${paymentNotes}`
+        })
+        .eq('sale_id', selectedSale.id)
+        .eq('amount', oldAmount);
+
+      if (paymentError) console.error('Error updating payment record:', paymentError);
+
+      // Update sale total paid
+      const { error: saleUpdateError } = await supabase
+        .from('sales')
+        .update({
+          total_paid: newTotalPaid,
+          payment_status: newTotalPaid >= selectedSale.total_amount ? 'paid' : newTotalPaid > 0 ? 'partial' : 'pending'
+        })
+        .eq('id', selectedSale.id);
+
+      if (saleUpdateError) throw saleUpdateError;
+
+      setShowEditModal(false);
+      setEditingPayment(null);
+      setPaymentAmount('');
+      setPaymentNotes('');
+      
+      loadInstallmentSales();
+      alert('Abono actualizado exitosamente');
+    } catch (error) {
+      console.error('Error updating payment:', error);
+      alert('Error al actualizar el abono: ' + (error as Error).message);
+    }
+  };
+
+  const handleDeletePayment = async (payment: PaymentInstallment) => {
+    if (!selectedSale) return;
+
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este abono?')) {
+      return;
+    }
+
+    try {
+      // Delete payment installment
+      const { error: installmentError } = await supabase
+        .from('payment_installments')
+        .delete()
+        .eq('id', payment.id);
+
+      if (installmentError) throw installmentError;
+
+      // Delete corresponding payment record
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('sale_id', selectedSale.id)
+        .eq('amount', payment.amount_paid);
+
+      if (paymentError) console.error('Error deleting payment record:', paymentError);
+
+      // Update sale total paid
+      const newTotalPaid = selectedSale.total_paid - payment.amount_paid;
+      const { error: saleUpdateError } = await supabase
+        .from('sales')
+        .update({
+          total_paid: newTotalPaid,
+          payment_status: newTotalPaid >= selectedSale.total_amount ? 'paid' : newTotalPaid > 0 ? 'partial' : 'pending'
+        })
+        .eq('id', selectedSale.id);
+
+      if (saleUpdateError) throw saleUpdateError;
+
+      loadInstallmentSales();
+      alert('Abono eliminado exitosamente');
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      alert('Error al eliminar el abono: ' + (error as Error).message);
+    }
+  };
+
+  const openEditModal = (payment: PaymentInstallment) => {
+    setEditingPayment(payment);
+    setPaymentAmount(payment.amount_paid.toString());
+    setPaymentNotes(payment.notes);
+    setShowEditModal(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -205,15 +335,15 @@ export default function InstallmentManager() {
                         <div className="flex items-center gap-4 mt-2 text-sm text-slate-600">
                           <span className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
-                            Total: ${sale.total_amount.toFixed(2)}
+                            Total: {formatCurrency(sale.total_amount)}
                           </span>
                           <span className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
-                            Pagado: ${sale.total_paid.toFixed(2)}
+                            Pagado: {formatCurrency(sale.total_paid)}
                           </span>
                           <span className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
-                            Saldo: ${(sale.total_amount - sale.total_paid).toFixed(2)}
+                            Saldo: {formatCurrency(sale.total_amount - sale.total_paid)}
                           </span>
                         </div>
                       </div>
@@ -252,7 +382,7 @@ export default function InstallmentManager() {
       </div>
 
       {/* Sale Detail Modal */}
-      {selectedSale && !showPaymentModal && (
+      {selectedSale && !showPaymentModal && !showEditModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
@@ -315,14 +445,41 @@ export default function InstallmentManager() {
                             <h5 className="font-medium text-slate-900">
                               Abono de {formatCurrency(payment.amount_paid)}
                             </h5>
-                            <p className="text-sm text-slate-600">
-                              {new Date(payment.payment_date).toLocaleDateString('es-ES')} • {payment.payment_method}
-                            </p>
+                            <div className="flex items-center gap-4 text-sm text-slate-600">
+                              <div className="flex items-center">
+                                <Calendar className="h-4 w-4 mr-1" />
+                                {new Date(payment.payment_date).toLocaleDateString('es-ES')}
+                              </div>
+                              <div className="flex items-center">
+                                <Clock className="h-4 w-4 mr-1" />
+                                {new Date(payment.payment_date).toLocaleTimeString('es-ES', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })}
+                              </div>
+                              <span>• {payment.payment_method}</span>
+                            </div>
                             {payment.notes && (
                               <p className="text-sm text-slate-500 mt-1">{payment.notes}</p>
                             )}
                           </div>
                         </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openEditModal(payment)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                          title="Editar abono"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePayment(payment)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                          title="Eliminar abono"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -404,6 +561,84 @@ export default function InstallmentManager() {
               <button
                 onClick={() => {
                   setShowPaymentModal(false);
+                  setPaymentAmount('');
+                  setPaymentNotes('');
+                }}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Modal */}
+      {showEditModal && editingPayment && selectedSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Editar Abono
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                {selectedSale.customer?.name || 'Cliente no especificado'}
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="font-medium text-blue-900 mb-2">Información del Abono</h4>
+                  <div className="text-sm text-blue-800">
+                    <p>Fecha: {new Date(editingPayment.payment_date).toLocaleDateString('es-ES')}</p>
+                    <p>Hora: {new Date(editingPayment.payment_date).toLocaleTimeString('es-ES', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}</p>
+                    <p>Monto original: {formatCurrency(editingPayment.amount_paid)}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Nuevo Monto del Abono
+                  </label>
+                  <FormattedNumberInput
+                    value={paymentAmount}
+                    onChange={(value) => setPaymentAmount(value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="0"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Notas
+                  </label>
+                  <textarea
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Observaciones del pago..."
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleEditPayment}
+                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              >
+                Actualizar Abono
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingPayment(null);
                   setPaymentAmount('');
                   setPaymentNotes('');
                 }}

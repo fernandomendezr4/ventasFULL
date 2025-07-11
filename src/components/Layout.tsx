@@ -1,5 +1,7 @@
 import React from 'react';
 import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import UserProfile from './UserProfile';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -8,6 +10,9 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
+  const { profile } = useAuth();
+  const [showProfile, setShowProfile] = React.useState(false);
+
   const mainTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, category: 'main' },
     { id: 'new-sale', label: 'Nueva Venta', icon: Plus, category: 'sales' },
@@ -88,9 +93,21 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-200">
-          <div className="text-center">
-            <p className="text-xs text-slate-500">Modo Libre</p>
-            <p className="text-xs text-slate-400 mt-1">Sin autenticación</p>
+          <div className="text-center space-y-2">
+            <button
+              onClick={() => setShowProfile(true)}
+              className="w-full p-2 text-left hover:bg-slate-50 rounded-lg transition-colors duration-200"
+            >
+              <div className="flex items-center">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                  <User className="h-4 w-4 text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">{profile?.name}</p>
+                  <p className="text-xs text-slate-500 truncate">{profile?.role_name}</p>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
       </div>
@@ -120,9 +137,15 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             </div>
             <div className="flex items-center space-x-3">
               <div className="text-right">
-                <p className="text-sm font-medium text-slate-900">Sistema Activo</p>
-                <p className="text-xs text-green-600">● En línea</p>
+                <p className="text-sm font-medium text-slate-900">{profile?.name}</p>
+                <p className="text-xs text-slate-600">{profile?.role_name}</p>
               </div>
+              <button
+                onClick={() => setShowProfile(true)}
+                className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center hover:bg-blue-200 transition-colors duration-200"
+              >
+                <User className="h-4 w-4 text-blue-600" />
+              </button>
             </div>
           </div>
         </div>
@@ -132,6 +155,11 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
           {children}
         </main>
       </div>
+
+      {/* User Profile Modal */}
+      {showProfile && (
+        <UserProfile onClose={() => setShowProfile(false)} />
+      )}
     </div>
   );
 }

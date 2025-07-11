@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import ProductManager from './components/ProductManager';
@@ -42,9 +44,13 @@ function App() {
   };
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-      {renderContent()}
-    </Layout>
+    <AuthProvider>
+      <ProtectedRoute>
+        <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+          {renderContent()}
+        </Layout>
+      </ProtectedRoute>
+    </AuthProvider>
   );
 }
 

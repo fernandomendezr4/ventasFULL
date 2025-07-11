@@ -325,7 +325,7 @@ export default function CashRegister() {
                 </label>
                 <FormattedNumberInput
                   value={openFormData.opening_amount}
-                  onChange={(e) => setOpenFormData({ ...openFormData, opening_amount: e.target.value })}
+                  onChange={(value) => setOpenFormData({ ...openFormData, opening_amount: value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"
@@ -391,7 +391,7 @@ export default function CashRegister() {
                 </label>
                 <FormattedNumberInput
                   value={closeFormData.closing_amount}
-                  onChange={(e) => setCloseFormData({ ...closeFormData, closing_amount: e.target.value })}
+                  onChange={(value) => setCloseFormData({ ...closeFormData, closing_amount: value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"

@@ -87,8 +87,7 @@ export default function CashRegister() {
         .from('cash_registers')
         .select(`
           *,
-          user:users(*),
-          cash_movements(*)
+          user:users(*)
         `)
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
@@ -98,12 +97,17 @@ export default function CashRegister() {
       if (error) throw error;
       
       if (data) {
-        // Ordenar movimientos por fecha
-        const sortedMovements = (data.cash_movements || []).sort((a: CashMovement, b: CashMovement) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        setCurrentRegister({ ...data, cash_movements: sortedMovements } as CashRegisterWithMovements);
-        setMovements(sortedMovements);
+        // Calculate current balance based on register data
+        const currentBalance = (data.opening_amount || 0) + (data.total_sales || 0);
+        const registerWithBalance = {
+          ...data,
+          current_balance: currentBalance,
+          total_income: data.total_sales || 0,
+          total_expenses: 0,
+          cash_movements: []
+        };
+        setCurrentRegister(registerWithBalance as CashRegisterWithMovements);
+        setMovements([]);
       } else {
         setCurrentRegister(null);
         setMovements([]);
@@ -160,9 +164,6 @@ export default function CashRegister() {
         status: 'open' as const,
         total_sales: 0,
         closing_amount: 0,
-        current_balance: parseFloat(openFormData.opening_amount),
-        total_income: 0,
-        total_expenses: 0,
       };
 
       const { data: newRegister, error } = await supabase
@@ -172,18 +173,6 @@ export default function CashRegister() {
         .single();
 
       if (error) throw error;
-
-      // Registrar movimiento de apertura
-      await supabase
-        .from('cash_movements')
-        .insert([{
-          cash_register_id: newRegister.id,
-          type: 'opening',
-          category: 'apertura',
-          amount: parseFloat(openFormData.opening_amount),
-          description: `Apertura de caja - ${openFormData.notes || 'Sin observaciones'}`,
-          created_by: openFormData.user_id || null,
-        }]);
 
       setShowOpenForm(false);
       setOpenFormData({ user_id: '', opening_amount: '', notes: '' });
@@ -202,18 +191,6 @@ export default function CashRegister() {
     try {
       const closingAmount = parseFloat(closeFormData.closing_amount);
       
-      // Registrar movimiento de cierre
-      await supabase
-        .from('cash_movements')
-        .insert([{
-          cash_register_id: currentRegister.id,
-          type: 'closing',
-          category: 'cierre',
-          amount: Math.abs((currentRegister.current_balance || 0) - closingAmount),
-          description: `Cierre de caja - Diferencia: ${formatCurrency((currentRegister.current_balance || 0) - closingAmount)} - ${closeFormData.notes || 'Sin observaciones'}`,
-          created_by: currentRegister.user_id,
-        }]);
-
       const { error } = await supabase
         .from('cash_registers')
         .update({
@@ -238,51 +215,14 @@ export default function CashRegister() {
 
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentRegister) return;
-
-    try {
-      const { error } = await supabase
-        .from('cash_movements')
-        .insert([{
-          cash_register_id: currentRegister.id,
-          type: movementFormData.type,
-          category: movementFormData.category,
-          amount: parseFloat(movementFormData.amount),
-          description: movementFormData.description,
-          created_by: currentRegister.user_id,
-        }]);
-
-      if (error) throw error;
-
-      setShowMovementForm(false);
-      setMovementFormData({ type: 'income', category: '', amount: '', description: '' });
-      loadCurrentRegister();
-      alert(`${movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'} registrado exitosamente`);
-    } catch (error) {
-      console.error('Error adding movement:', error);
-      alert('Error al registrar el movimiento: ' + (error as Error).message);
-    }
+    // Temporarily disabled until cash_movements table is created
+    alert('Funcionalidad de movimientos temporalmente deshabilitada');
+    setShowMovementForm(false);
   };
 
   const handleDeleteMovement = async (movementId: string) => {
-    if (!window.confirm('¿Estás seguro de que quieres eliminar este movimiento?')) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('cash_movements')
-        .delete()
-        .eq('id', movementId);
-
-      if (error) throw error;
-
-      loadCurrentRegister();
-      alert('Movimiento eliminado exitosamente');
-    } catch (error) {
-      console.error('Error deleting movement:', error);
-      alert('Error al eliminar el movimiento: ' + (error as Error).message);
-    }
+    // Temporarily disabled until cash_movements table is created
+    alert('Funcionalidad de movimientos temporalmente deshabilitada');
   };
 
   const calculateDifference = () => {

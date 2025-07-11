@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, User, Calendar, Plus, Eye, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
+import FormattedNumberInput from './FormattedNumberInput';
 
 interface SaleWithInstallments {
   id: string;
@@ -368,14 +369,12 @@ export default function InstallmentManager() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Monto del Abono
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={selectedSale.total_amount - selectedSale.total_paid}
+                  <FormattedNumberInput
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="0"
+                    max={(selectedSale.total_amount - selectedSale.total_paid).toString()}
                   />
                 </div>
                 

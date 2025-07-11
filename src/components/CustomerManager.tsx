@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Users, Mail, Phone, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Customer } from '../lib/types';
+import FormattedNumberInput from './FormattedNumberInput';
 
 export default function CustomerManager() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -144,11 +145,11 @@ export default function CustomerManager() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Cédula
                 </label>
-                <input
-                  type="text"
+                <FormattedNumberInput
                   value={formData.cedula}
                   onChange={(e) => setFormData({ ...formData, cedula: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min="0"
                 />
               </div>
               <div>

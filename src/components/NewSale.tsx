@@ -3,6 +3,7 @@ import { Plus, Minus, ShoppingCart, X, Search, Package, User, UserPlus, Scan } f
 import { supabase } from '../lib/supabase';
 import { Product, CartItem, Customer } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
+import FormattedNumberInput from './FormattedNumberInput';
 
 export default function NewSale() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -513,15 +514,13 @@ export default function NewSale() {
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Descuento (en pesos)
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max={calculateSubtotal()}
+              <FormattedNumberInput
                 value={discountAmount}
                 onChange={(e) => setDiscountAmount(e.target.value)}
-                placeholder="0.00"
+                placeholder="0"
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                min="0"
+                max={calculateSubtotal().toString()}
               />
             </div>
           )}

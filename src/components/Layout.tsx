@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, Settings, LogOut } from 'lucide-react';
+import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -16,6 +16,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
   const salesTabs = [
     { id: 'sales', label: 'Historial', icon: BarChart3, category: 'sales' },
+    { id: 'installments', label: 'Abonos', icon: CreditCard, category: 'sales' },
   ];
 
   const inventoryTabs = [

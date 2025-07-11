@@ -14,6 +14,12 @@ export default function NewSale() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showCustomerList, setShowCustomerList] = useState(false);
+  const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
+  const [installmentData, setInstallmentData] = useState({
+    totalInstallments: 3,
+    downPayment: '',
+    installmentAmount: '',
+  });
   const [customerFormData, setCustomerFormData] = useState({
     name: '',
     email: '',
@@ -127,20 +133,53 @@ export default function NewSale() {
     return cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
   };
 
+  const calculateInstallmentAmount = () => {
+    const total = calculateTotal();
+    const downPayment = parseFloat(installmentData.downPayment) || 0;
+    const remaining = total - downPayment;
+    return remaining / installmentData.totalInstallments;
+  };
+
+  const updateInstallmentAmount = () => {
+    const amount = calculateInstallmentAmount();
+    setInstallmentData(prev => ({
+      ...prev,
+      installmentAmount: amount.toFixed(2)
+    }));
+  };
+
+  useEffect(() => {
+    if (paymentType === 'installment') {
+      updateInstallmentAmount();
+    }
+  }, [cart, installmentData.downPayment, installmentData.totalInstallments, paymentType]);
+
   const handleSale = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      alert('El carrito está vacío');
+      return;
+    }
+
+    if (paymentType === 'installment' && !selectedCustomer) {
+      alert('Debe seleccionar un cliente para ventas por abonos');
+      return;
+    }
 
     try {
       setSaving(true);
       const total = calculateTotal();
+      const downPayment = paymentType === 'installment' ? (parseFloat(installmentData.downPayment) || 0) : total;
 
       // Create sale
       const { data: sale, error: saleError } = await supabase
         .from('sales')
-        .insert([{ 
+        .insert([{
           total_amount: total,
           customer_id: selectedCustomer?.id || null,
-          user_id: null
+          user_id: null,
+          payment_type: paymentType,
+          total_paid: downPayment,
+          payment_status: paymentType === 'cash' ? 'paid' : (downPayment >= total ? 'paid' : 'partial')
         }])
         .select()
         .single();
@@ -172,11 +211,88 @@ export default function NewSale() {
         if (stockError) throw stockError;
       }
 
+      // If installment sale, create installment record and payment schedule
+      if (paymentType === 'installment') {
+        const remainingBalance = total - downPayment;
+        
+        // Create installment sale record
+        const { data: installmentSale, error: installmentError } = await supabase
+          .from('installment_sales')
+          .insert([{
+            sale_id: sale.id,
+            total_installments: installmentData.totalInstallments,
+            installment_amount: parseFloat(installmentData.installmentAmount),
+            down_payment: downPayment,
+            remaining_balance: remainingBalance,
+            status: remainingBalance <= 0 ? 'completed' : 'active'
+          }])
+          .select()
+          .single();
+
+        if (installmentError) throw installmentError;
+
+        // Create payment schedule
+        const installmentPayments = [];
+        const today = new Date();
+        
+        for (let i = 1; i <= installmentData.totalInstallments; i++) {
+          const dueDate = new Date(today);
+          dueDate.setMonth(dueDate.getMonth() + i);
+          
+          installmentPayments.push({
+            installment_sale_id: installmentSale.id,
+            installment_number: i,
+            amount_paid: 0,
+            due_date: dueDate.toISOString().split('T')[0],
+            status: 'pending'
+          });
+        }
+
+        const { error: paymentsError } = await supabase
+          .from('installment_payments')
+          .insert(installmentPayments);
+
+        if (paymentsError) throw paymentsError;
+
+        // Record down payment if any
+        if (downPayment > 0) {
+          const { error: paymentError } = await supabase
+            .from('payments')
+            .insert([{
+              sale_id: sale.id,
+              amount: downPayment,
+              payment_method: 'cash',
+              notes: 'Pago inicial - Venta por abonos'
+            }]);
+
+          if (paymentError) throw paymentError;
+        }
+      } else {
+        // Record cash payment
+        const { error: paymentError } = await supabase
+          .from('payments')
+          .insert([{
+            sale_id: sale.id,
+            amount: total,
+            payment_method: 'cash',
+            notes: 'Pago completo - Venta de contado'
+          }]);
+
+        if (paymentError) throw paymentError;
+      }
+
       // Clear cart and refresh products
       setCart([]);
       setSelectedCustomer(null);
+      setPaymentType('cash');
+      setInstallmentData({ totalInstallments: 3, downPayment: '', installmentAmount: '' });
       loadProducts();
-      alert('Venta realizada con éxito');
+      
+      const message = paymentType === 'installment' 
+        ? `Venta por abonos creada exitosamente. Total: $${total.toFixed(2)}, Pago inicial: $${downPayment.toFixed(2)}, Saldo pendiente: $${(total - downPayment).toFixed(2)}`
+        : 'Venta de contado realizada con éxito';
+      
+      alert(message);
     } catch (error) {
       console.error('Error creating sale:', error);
       alert('Error al realizar la venta: ' + (error as Error).message);
@@ -202,45 +318,181 @@ export default function NewSale() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900">Nueva Venta</h2>
-            <p className="text-slate-600">Procesa una nueva venta de productos</p>
+            <p className="text-slate-600">
+              {paymentType === 'cash' ? 'Venta de contado' : 'Venta por abonos'}
+            </p>
           </div>
           <div className="text-right">
             <p className="text-sm text-slate-600">Total a Pagar</p>
             <p className="text-3xl font-bold text-green-600">${calculateTotal().toFixed(2)}</p>
+            {paymentType === 'installment' && (
+              <div className="mt-2 text-sm">
+                <p className="text-slate-600">
+                  Pago inicial: ${parseFloat(installmentData.downPayment || '0').toFixed(2)}
+                </p>
+                <p className="text-slate-600">
+                  {installmentData.totalInstallments} cuotas de ${installmentData.installmentAmount}
+                </p>
+              </div>
+            )}
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
-          {selectedCustomer && (
-            <div className="flex items-center gap-3 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
-              <User className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="font-medium text-blue-900">{selectedCustomer.name}</p>
-                <p className="text-sm text-blue-600">Cliente seleccionado</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {selectedCustomer && (
+              <div className="flex items-center gap-3 bg-blue-50 px-4 py-2 rounded-lg border border-blue-200">
+                <User className="h-5 w-5 text-blue-600" />
+                <div>
+                  <p className="font-medium text-blue-900">{selectedCustomer.name}</p>
+                  <p className="text-sm text-blue-600">Cliente seleccionado</p>
+                </div>
               </div>
-            </div>
-          )}
-          {cart.length > 0 && (
-            <div className="flex items-center gap-3 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
-              <ShoppingCart className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="font-medium text-green-900">{cart.length} productos</p>
-                <p className="text-sm text-green-600">En el carrito</p>
+            )}
+            {cart.length > 0 && (
+              <div className="flex items-center gap-3 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
+                <ShoppingCart className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="font-medium text-green-900">{cart.length} productos</p>
+                  <p className="text-sm text-green-600">En el carrito</p>
+                </div>
               </div>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-4">
+            {/* Payment Type Selection */}
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border">
+              <button
+                onClick={() => setPaymentType('cash')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  paymentType === 'cash'
+                    ? 'bg-green-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Contado
+              </button>
+              <button
+                onClick={() => setPaymentType('installment')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  paymentType === 'installment'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Abonos
+              </button>
             </div>
-          )}
-          <button
-            onClick={handleSale}
-            disabled={cart.length === 0 || saving}
-            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center font-medium shadow-sm"
-          >
-            <ShoppingCart className="h-5 w-5 mr-2" />
-            {saving ? 'Procesando...' : 'Finalizar Venta'}
-          </button>
+            
+            <button
+              onClick={handleSale}
+              disabled={cart.length === 0 || saving}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center font-medium shadow-sm"
+            >
+              <ShoppingCart className="h-5 w-5 mr-2" />
+              {saving ? 'Procesando...' : 'Finalizar Venta'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Customer Selection - Improved */}
+      {/* Installment Configuration */}
+      {paymentType === 'installment' && (
+        <div className="bg-white rounded-xl shadow-sm border">
+          <div className="p-6 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 text-blue-600">
+              Configuración de Abonos
+            </h3>
+            <p className="text-sm text-slate-600 mt-1">Configure los términos del pago por abonos</p>
+          </div>
+          
+          <div className="p-6">
+            {!selectedCustomer && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <p className="text-yellow-800 font-medium">⚠️ Debe seleccionar un cliente para ventas por abonos</p>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Número de Cuotas
+                </label>
+                <select
+                  value={installmentData.totalInstallments}
+                  onChange={(e) => setInstallmentData(prev => ({
+                    ...prev,
+                    totalInstallments: parseInt(e.target.value)
+                  }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={2}>2 cuotas</option>
+                  <option value={3}>3 cuotas</option>
+                  <option value={4}>4 cuotas</option>
+                  <option value={6}>6 cuotas</option>
+                  <option value={12}>12 cuotas</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Pago Inicial (Opcional)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={calculateTotal()}
+                  value={installmentData.downPayment}
+                  onChange={(e) => setInstallmentData(prev => ({
+                    ...prev,
+                    downPayment: e.target.value
+                  }))}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Valor por Cuota
+                </label>
+                <input
+                  type="text"
+                  value={`$${installmentData.installmentAmount}`}
+                  readOnly
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-600"
+                />
+              </div>
+            </div>
+            
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="font-medium text-blue-900 mb-2">Resumen del Plan de Pagos</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-blue-600 font-medium">Total de la venta:</span>
+                  <p className="text-blue-900 font-bold">${calculateTotal().toFixed(2)}</p>
+                </div>
+                <div>
+                  <span className="text-blue-600 font-medium">Pago inicial:</span>
+                  <p className="text-blue-900 font-bold">${(parseFloat(installmentData.downPayment) || 0).toFixed(2)}</p>
+                </div>
+                <div>
+                  <span className="text-blue-600 font-medium">Saldo a financiar:</span>
+                  <p className="text-blue-900 font-bold">${(calculateTotal() - (parseFloat(installmentData.downPayment) || 0)).toFixed(2)}</p>
+                </div>
+                <div>
+                  <span className="text-blue-600 font-medium">Cuotas mensuales:</span>
+                  <p className="text-blue-900 font-bold">{installmentData.totalInstallments} x ${installmentData.installmentAmount}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Selection - Updated for installments */}
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="p-6 border-b border-slate-200">
           <div className="flex items-center justify-between">
@@ -248,8 +500,18 @@ export default function NewSale() {
               <h3 className="text-lg font-semibold text-slate-900 flex items-center">
                 <User className="h-5 w-5 mr-2 text-blue-600" />
                 Información del Cliente
+                {paymentType === 'installment' && (
+                  <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                    Requerido para abonos
+                  </span>
+                )}
               </h3>
-              <p className="text-sm text-slate-600 mt-1">Selecciona o crea un cliente para la venta</p>
+              <p className="text-sm text-slate-600 mt-1">
+                {paymentType === 'installment' 
+                  ? 'Debe seleccionar un cliente para ventas por abonos'
+                  : 'Selecciona o crea un cliente para la venta (opcional)'
+                }
+              </p>
             </div>
             <div className="flex gap-2">
               <button

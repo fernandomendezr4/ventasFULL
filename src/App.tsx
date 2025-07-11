@@ -9,6 +9,7 @@ import SupplierManager from './components/SupplierManager';
 import CustomerManager from './components/CustomerManager';
 import UserManager from './components/UserManager';
 import CashRegister from './components/CashRegister';
+import InstallmentManager from './components/InstallmentManager';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -25,6 +26,8 @@ function App() {
         return <SalesManager />;
       case 'new-sale':
         return <NewSale />;
+      case 'installments':
+        return <InstallmentManager />;
       case 'suppliers':
         return <SupplierManager />;
       case 'customers':

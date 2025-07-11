@@ -227,7 +227,7 @@ export default function InstallmentManager() {
                       <button
                         onClick={() => {
                           setSelectedSale(sale);
-                          setPaymentAmount((sale.total_amount - sale.total_paid).toFixed(2));
+                          setPaymentAmount((sale.total_amount - sale.total_paid).toString());
                           setShowPaymentModal(true);
                         }}
                         className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
@@ -310,15 +310,15 @@ export default function InstallmentManager() {
                           <div className="p-2 bg-green-100 rounded-lg">
                             <DollarSign className="h-4 w-4 text-green-600" />
                           </div>
-                              Total: {formatCurrency(sale.total_amount)}
+                          <div>
                             <h5 className="font-medium text-slate-900">
                               Abono de {formatCurrency(payment.amount_paid)}
                             </h5>
-                              Pagado: {formatCurrency(sale.total_paid)}
+                            <p className="text-sm text-slate-600">
                               {new Date(payment.payment_date).toLocaleDateString('es-ES')} • {payment.payment_method}
                             </p>
                             {payment.notes && (
-                              Saldo: {formatCurrency(sale.total_amount - sale.total_paid)}
+                              <p className="text-sm text-slate-500 mt-1">{payment.notes}</p>
                             )}
                           </div>
                         </div>

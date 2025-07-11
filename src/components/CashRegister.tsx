@@ -467,18 +467,18 @@ export default function CashRegister() {
                         </p>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
-                            Inicial: {formatCurrency(register.opening_amount || 0)}
-                          Inicial: ${(register.opening_amount || 0).toFixed(2)}
+                        <span>
+                          Inicial: {formatCurrency(register.opening_amount || 0)}
                         </span>
-                          <span>{formatCurrency(currentRegister.opening_amount || 0)}</span>
+                        {register.status === 'closed' && (
                           <>
-                                Final: {formatCurrency(register.closing_amount || 0)}
-                              Final: ${(register.closing_amount || 0).toFixed(2)}
-                          <span>{formatCurrency(currentRegister.total_sales || 0)}</span>
-                                Ventas: {formatCurrency(register.total_sales || 0)}
-                              Ventas: ${(register.total_sales || 0).toFixed(2)}
+                            <span>
+                              Final: {formatCurrency(register.closing_amount || 0)}
                             </span>
-                          <span>{formatCurrency((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0))}</span>
+                            <span>
+                              Ventas: {formatCurrency(register.total_sales || 0)}
+                            </span>
+                          </>
                         )}
                       </div>
                     </div>

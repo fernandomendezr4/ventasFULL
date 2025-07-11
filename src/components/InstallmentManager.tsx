@@ -75,8 +75,10 @@ export default function InstallmentManager() {
       }));
       
       setInstallmentSales(salesWithSortedPayments as SaleWithInstallments[]);
+      return salesWithSortedPayments as SaleWithInstallments[];
     } catch (error) {
       console.error('Error loading installment sales:', error);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -139,7 +141,13 @@ export default function InstallmentManager() {
       setPaymentAmount('');
       setPaymentNotes('');
       
-      loadInstallmentSales();
+      await loadInstallmentSales();
+      // Update the selected sale with fresh data
+      const updatedSales = await loadInstallmentSales();
+      const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
+      if (updatedSale) {
+        setSelectedSale(updatedSale);
+      }
       alert('Pago registrado exitosamente');
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -206,7 +214,13 @@ export default function InstallmentManager() {
       setPaymentAmount('');
       setPaymentNotes('');
       
-      loadInstallmentSales();
+      await loadInstallmentSales();
+      // Update the selected sale with fresh data
+      const updatedSales = await loadInstallmentSales();
+      const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
+      if (updatedSale) {
+        setSelectedSale(updatedSale);
+      }
       alert('Abono actualizado exitosamente');
     } catch (error) {
       console.error('Error updating payment:', error);
@@ -251,7 +265,13 @@ export default function InstallmentManager() {
 
       if (saleUpdateError) throw saleUpdateError;
 
-      loadInstallmentSales();
+      await loadInstallmentSales();
+      // Update the selected sale with fresh data
+      const updatedSales = await loadInstallmentSales();
+      const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
+      if (updatedSale) {
+        setSelectedSale(updatedSale);
+      }
       alert('Abono eliminado exitosamente');
     } catch (error) {
       console.error('Error deleting payment:', error);

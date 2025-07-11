@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Package, ShoppingCart, DollarSign, Calendar, Users, AlertTriangle, CheckCircle } from 'lucide-react';
+import { TrendingUp, Package, ShoppingCart, DollarSign, Calendar, Users, AlertTriangle, CheckCircle, Plus, Calculator } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Sale, Product, SaleWithItems } from '../lib/types';
 

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { CashRegisterWithUser, User as UserType } from '../lib/types';
+import { CashRegister as CashRegisterType, User as UserType } from '../lib/types';
+
+interface CashRegisterWithUser extends CashRegisterType {
+  user: UserType | null;
+}
 
 export default function CashRegister() {
   const [currentRegister, setCurrentRegister] = useState<CashRegisterWithUser | null>(null);
@@ -41,11 +45,12 @@ export default function CashRegister() {
 
   const loadCurrentRegister = async () => {
     try {
+      console.log('Cargando caja actual...');
       const { data, error } = await supabase
         .from('cash_registers')
         .select(`
           *,
-          user:users (*)
+          user:users(*)
         `)
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
@@ -53,6 +58,7 @@ export default function CashRegister() {
         .maybeSingle();
 
       if (error) throw error;
+      console.log('Caja actual:', data);
       setCurrentRegister(data as CashRegisterWithUser || null);
     } catch (error) {
       console.error('Error loading current register:', error);
@@ -62,24 +68,28 @@ export default function CashRegister() {
 
   const loadRegisters = async () => {
     try {
+      console.log('Cargando historial de cajas...');
       const { data, error } = await supabase
         .from('cash_registers')
         .select(`
           *,
-          user:users (*)
+          user:users(*)
         `)
         .order('opened_at', { ascending: false })
         .limit(10);
 
       if (error) throw error;
+      console.log('Historial de cajas:', data);
       setRegisters(data as CashRegisterWithUser[]);
     } catch (error) {
       console.error('Error loading registers:', error);
+      setRegisters([]);
     }
   };
 
   const loadUsers = async () => {
     try {
+      console.log('Cargando usuarios...');
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -87,31 +97,41 @@ export default function CashRegister() {
         .order('name');
 
       if (error) throw error;
+      console.log('Usuarios cargados:', data);
       setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
+      setUsers([]);
     }
   };
 
   const handleOpenRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      console.log('Abriendo caja con datos:', openFormData);
+      
       const registerData = {
         user_id: openFormData.user_id || null,
         opening_amount: parseFloat(openFormData.opening_amount),
         notes: openFormData.notes,
         status: 'open' as const,
+        total_sales: 0,
+        closing_amount: 0,
       };
 
+      console.log('Datos a insertar:', registerData);
+      
       const { error } = await supabase
         .from('cash_registers')
         .insert([registerData]);
 
       if (error) throw error;
 
+      console.log('Caja abierta exitosamente');
       setShowOpenForm(false);
       setOpenFormData({ user_id: '', opening_amount: '', notes: '' });
       loadData();
+      alert('Caja abierta exitosamente');
     } catch (error) {
       console.error('Error opening register:', error);
       alert('Error al abrir la caja');
@@ -123,6 +143,8 @@ export default function CashRegister() {
     if (!currentRegister) return;
 
     try {
+      console.log('Cerrando caja:', currentRegister.id);
+      
       // Calculate total sales for this register session
       const { data: salesData } = await supabase
         .from('sales')
@@ -130,6 +152,7 @@ export default function CashRegister() {
         .gte('created_at', currentRegister.opened_at);
 
       const totalSales = salesData?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
+      console.log('Ventas calculadas:', totalSales);
 
       const { error } = await supabase
         .from('cash_registers')
@@ -144,9 +167,11 @@ export default function CashRegister() {
 
       if (error) throw error;
 
+      console.log('Caja cerrada exitosamente');
       setShowCloseForm(false);
       setCloseFormData({ closing_amount: '', notes: '' });
       loadData();
+      alert('Caja cerrada exitosamente');
     } catch (error) {
       console.error('Error closing register:', error);
       alert('Error al cerrar la caja');
@@ -155,7 +180,9 @@ export default function CashRegister() {
 
   const calculateDifference = () => {
     if (!currentRegister || !closeFormData.closing_amount) return 0;
-    const expected = currentRegister.opening_amount + currentRegister.total_sales;
+    
+    // Calcular ventas desde que se abrió la caja
+    const expected = (currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0);
     const actual = parseFloat(closeFormData.closing_amount);
     return actual - expected;
   };
@@ -224,7 +251,7 @@ export default function CashRegister() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-blue-600">Monto Inicial</p>
-                  <p className="text-lg font-bold text-blue-900">${currentRegister.opening_amount.toFixed(2)}</p>
+                  <p className="text-lg font-bold text-blue-900">${(currentRegister.opening_amount || 0).toFixed(2)}</p>
                 </div>
                 <div className="p-2 bg-blue-100 rounded-full">
                   <TrendingUp className="h-6 w-6 text-blue-600" />
@@ -249,7 +276,7 @@ export default function CashRegister() {
             <div className="md:col-span-3 bg-slate-50 p-4 rounded-lg">
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span>Abierta el: {new Date(currentRegister.opened_at).toLocaleString('es-ES')}</span>
-                {currentRegister.notes && (
+                {currentRegister.notes && currentRegister.notes.trim() && (
                   <span className="flex items-center">
                     <FileText className="h-4 w-4 mr-1" />
                     Notas disponibles
@@ -345,15 +372,15 @@ export default function CashRegister() {
                 <div className="space-y-1 text-sm">
                   <div className="flex justify-between">
                     <span>Monto inicial:</span>
-                    <span>${currentRegister.opening_amount.toFixed(2)}</span>
+                    <span>${(currentRegister.opening_amount || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Ventas del día:</span>
-                    <span>${currentRegister.total_sales.toFixed(2)}</span>
+                    <span>${(currentRegister.total_sales || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between font-medium border-t pt-1">
                     <span>Esperado:</span>
-                    <span>${(currentRegister.opening_amount + currentRegister.total_sales).toFixed(2)}</span>
+                    <span>${((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0)).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -440,15 +467,15 @@ export default function CashRegister() {
                       </div>
                       <div className="flex items-center gap-4 text-sm">
                         <span className="text-slate-600">
-                          Inicial: ${register.opening_amount.toFixed(2)}
+                          Inicial: ${(register.opening_amount || 0).toFixed(2)}
                         </span>
                         {register.status === 'closed' && (
                           <>
                             <span className="text-slate-600">
-                              Final: ${register.closing_amount.toFixed(2)}
+                              Final: ${(register.closing_amount || 0).toFixed(2)}
                             </span>
                             <span className="text-slate-600">
-                              Ventas: ${register.total_sales.toFixed(2)}
+                              Ventas: ${(register.total_sales || 0).toFixed(2)}
                             </span>
                           </>
                         )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock } from 'lucide-react';
+import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock, Search, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
@@ -41,6 +41,9 @@ export default function InstallmentManager() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'created_at' | 'customer_name' | 'total_amount'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     loadInstallmentSales();
@@ -286,6 +289,56 @@ export default function InstallmentManager() {
     setShowEditModal(true);
   };
 
+  const filteredAndSortedSales = installmentSales.filter(sale => {
+    // Filter by status
+    if (statusFilter !== 'all' && sale.payment_status !== statusFilter) {
+      return false;
+    }
+    
+    // Filter by search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const customerName = sale.customer?.name?.toLowerCase() || '';
+      const customerPhone = sale.customer?.phone || '';
+      const customerEmail = sale.customer?.email?.toLowerCase() || '';
+      const saleId = sale.id.slice(-8);
+      
+      return (
+        customerName.includes(searchLower) ||
+        customerPhone.includes(searchTerm) ||
+        customerEmail.includes(searchLower) ||
+        saleId.includes(searchTerm)
+      );
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+    
+    switch (sortBy) {
+      case 'customer_name':
+        aValue = a.customer?.name || '';
+        bValue = b.customer?.name || '';
+        break;
+      case 'total_amount':
+        aValue = a.total_amount;
+        bValue = b.total_amount;
+        break;
+      case 'created_at':
+      default:
+        aValue = new Date(a.created_at).getTime();
+        bValue = new Date(b.created_at).getTime();
+        break;
+    }
+    
+    if (sortOrder === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
+  });
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'paid':
@@ -297,16 +350,39 @@ export default function InstallmentManager() {
     }
   };
 
-  const filteredSales = installmentSales.filter(sale => {
-    if (statusFilter === 'all') return true;
-    return sale.payment_status === statusFilter;
-  });
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Ventas por Abonos</h2>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar por cliente, teléfono o ID de venta..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+              />
+            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'created_at' | 'customer_name' | 'total_amount')}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="created_at">Ordenar por Fecha</option>
+              <option value="customer_name">Ordenar por Cliente</option>
+              <option value="total_amount">Ordenar por Monto</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              title={`Orden ${sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}`}
+            >
+              <Filter className={`h-4 w-4 ${sortOrder === 'desc' ? 'rotate-180' : ''} transition-transform duration-200`} />
+            </button>
+          </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -319,6 +395,17 @@ export default function InstallmentManager() {
           </select>
         </div>
       </div>
+
+      {/* Search Results Info */}
+      {(searchTerm || statusFilter !== 'all') && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-blue-800 text-sm">
+            Mostrando {filteredAndSortedSales.length} de {installmentSales.length} ventas
+            {searchTerm && ` que coinciden con "${searchTerm}"`}
+            {statusFilter !== 'all' && ` con estado "${statusFilter === 'paid' ? 'Pagadas' : statusFilter === 'partial' ? 'Parciales' : 'Pendientes'}"`}
+          </p>
+        </div>
+      )}
 
       {/* Installment Sales List */}
       <div className="bg-white rounded-xl shadow-sm border">
@@ -333,14 +420,18 @@ export default function InstallmentManager() {
               ))}
             </div>
           </div>
-        ) : filteredSales.length === 0 ? (
+        ) : filteredAndSortedSales.length === 0 ? (
           <div className="p-12 text-center">
             <DollarSign className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-500">No hay ventas por abonos registradas</p>
+            <p className="text-slate-500">
+              {installmentSales.length === 0 
+                ? 'No hay ventas por abonos registradas' 
+                : 'No se encontraron ventas que coincidan con los filtros aplicados'}
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-200">
-            {filteredSales.map((sale) => (
+            {filteredAndSortedSales.map((sale) => (
               <div key={sale.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">

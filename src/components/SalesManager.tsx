@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, Package, Eye, Trash2 } from 'lucide-react';
+import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -9,6 +9,10 @@ export default function SalesManager() {
   const [loading, setLoading] = useState(true);
   const [selectedSale, setSelectedSale] = useState<SaleWithItems | null>(null);
   const [dateFilter, setDateFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'created_at' | 'total_amount' | 'customer_name'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     loadSales();
@@ -21,6 +25,7 @@ export default function SalesManager() {
         .from('sales')
         .select(`
           *,
+          customer:customers (name, phone, email),
           sale_items (
             *,
             product:products (*)
@@ -54,56 +59,189 @@ export default function SalesManager() {
     }
   };
 
-  const filteredSales = sales.filter(sale => {
-    if (!dateFilter) return true;
-    return sale.created_at.startsWith(dateFilter);
+  const filteredAndSortedSales = sales.filter(sale => {
+    // Filter by date
+    if (dateFilter && !sale.created_at.startsWith(dateFilter)) {
+      return false;
+    }
+    
+    // Filter by payment type
+    if (paymentTypeFilter !== 'all' && sale.payment_type !== paymentTypeFilter) {
+      return false;
+    }
+    
+    // Filter by search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const saleId = sale.id.slice(-8);
+      const customerName = sale.customer?.name?.toLowerCase() || '';
+      const customerPhone = sale.customer?.phone || '';
+      const customerEmail = sale.customer?.email?.toLowerCase() || '';
+      
+      return (
+        saleId.includes(searchTerm) ||
+        customerName.includes(searchLower) ||
+        customerPhone.includes(searchTerm) ||
+        customerEmail.includes(searchLower) ||
+        sale.total_amount.toString().includes(searchTerm)
+      );
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+    
+    switch (sortBy) {
+      case 'total_amount':
+        aValue = a.total_amount;
+        bValue = b.total_amount;
+        break;
+      case 'customer_name':
+        aValue = a.customer?.name || '';
+        bValue = b.customer?.name || '';
+        break;
+      case 'created_at':
+      default:
+        aValue = new Date(a.created_at).getTime();
+        bValue = new Date(b.created_at).getTime();
+        break;
+    }
+    
+    if (sortOrder === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
   });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Ventas</h2>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              type="text"
+              placeholder="Buscar por ID de venta, cliente, teléfono o monto..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <select
+              value={paymentTypeFilter}
+              onChange={(e) => setPaymentTypeFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los tipos</option>
+              <option value="cash">Efectivo</option>
+              <option value="installment">Abonos</option>
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'created_at' | 'total_amount' | 'customer_name')}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="created_at">Ordenar por Fecha</option>
+              <option value="total_amount">Ordenar por Monto</option>
+              <option value="customer_name">Ordenar por Cliente</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              title={`Orden ${sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}`}
+            >
+              <Filter className={`h-4 w-4 ${sortOrder === 'desc' ? 'rotate-180' : ''} transition-transform duration-200`} />
+            </button>
+          </div>
         </div>
+        {(searchTerm || dateFilter || paymentTypeFilter !== 'all') && (
+          <div className="mt-3 text-sm text-slate-600">
+            Mostrando {filteredAndSortedSales.length} de {sales.length} ventas
+          </div>
+        )}
       </div>
+
+      {/* Sales Summary */}
+      {filteredAndSortedSales.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Resumen de Ventas</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <p className="text-sm font-medium text-blue-600">Total de Ventas</p>
+              <p className="text-2xl font-bold text-blue-900">{filteredAndSortedSales.length}</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <p className="text-sm font-medium text-green-600">Monto Total</p>
+              <p className="text-2xl font-bold text-green-900">
+                {formatCurrency(filteredAndSortedSales.reduce((sum, sale) => sum + sale.total_amount, 0))}
+              </p>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <p className="text-sm font-medium text-purple-600">Promedio por Venta</p>
+              <p className="text-2xl font-bold text-purple-900">
+                {formatCurrency(filteredAndSortedSales.reduce((sum, sale) => sum + sale.total_amount, 0) / filteredAndSortedSales.length)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sales List */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {loading ? (
-          <div className="p-6">
-            <div className="space-y-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
-                  <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                </div>
-              ))}
+          <div className="relative">
+            <div className="p-6">
+              <div className="space-y-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        ) : filteredSales.length === 0 ? (
+        ) : filteredAndSortedSales.length === 0 ? (
           <div className="p-12 text-center">
             <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-500">No hay ventas registradas</p>
+            <p className="text-slate-500">
+              {sales.length === 0 
+                ? 'No hay ventas registradas' 
+                : 'No se encontraron ventas que coincidan con los filtros aplicados'}
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-200">
-            {filteredSales.map((sale) => (
+            {filteredAndSortedSales.map((sale) => (
               <div key={sale.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-4">
                       <div>
                         <h3 className="font-semibold text-slate-900">
-                          Venta #{sale.id.slice(-8)}
+                          Venta #{sale.id.slice(-8)} 
+                          {sale.customer && (
+                            <span className="text-sm font-normal text-slate-600 ml-2">
+                              • {sale.customer.name}
+                            </span>
+                          )}
                         </h3>
                         <p className="text-sm text-slate-600">
                           {new Date(sale.created_at).toLocaleDateString('es-ES', {
@@ -114,6 +252,27 @@ export default function SalesManager() {
                             minute: '2-digit'
                           })}
                         </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                            sale.payment_type === 'cash' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}
+                          </span>
+                          {sale.payment_status && sale.payment_type === 'installment' && (
+                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                              sale.payment_status === 'paid' 
+                                ? 'bg-green-100 text-green-800' 
+                                : sale.payment_status === 'partial'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                            }`}>
+                              {sale.payment_status === 'paid' ? 'Pagada' : 
+                               sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600">
                         <span className="flex items-center">
@@ -125,6 +284,14 @@ export default function SalesManager() {
                           {formatCurrency(sale.total_amount)}
                         </span>
                       </div>
+                      {sale.customer && (
+                        <div className="flex items-center text-sm text-slate-500">
+                          <User className="h-4 w-4 mr-1" />
+                          {sale.customer.phone && (
+                            <span>{sale.customer.phone}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">

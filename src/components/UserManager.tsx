@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, User, Mail, Shield, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, User, Mail, Shield, CheckCircle, XCircle, Search, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { User as UserType } from '../lib/types';
 
@@ -8,6 +8,11 @@ export default function UserManager() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'created_at' | 'role'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -117,6 +122,60 @@ export default function UserManager() {
     }
   };
 
+  const filteredUsers = users.filter(user => {
+    // Filter by search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      if (!(
+        user.name.toLowerCase().includes(searchLower) ||
+        user.email.toLowerCase().includes(searchLower) ||
+        user.role.toLowerCase().includes(searchLower)
+      )) {
+        return false;
+      }
+    }
+    
+    // Filter by role
+    if (roleFilter !== 'all' && user.role !== roleFilter) {
+      return false;
+    }
+    
+    // Filter by status
+    if (statusFilter !== 'all') {
+      const isActive = statusFilter === 'active';
+      if (user.is_active !== isActive) {
+        return false;
+      }
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+    
+    switch (sortBy) {
+      case 'role':
+        aValue = a.role;
+        bValue = b.role;
+        break;
+      case 'created_at':
+        aValue = new Date(a.created_at).getTime();
+        bValue = new Date(b.created_at).getTime();
+        break;
+      case 'name':
+      default:
+        aValue = a.name;
+        bValue = b.name;
+        break;
+    }
+    
+    if (sortOrder === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
+  });
+
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin':
@@ -158,6 +217,64 @@ export default function UserManager() {
           <Plus className="h-4 w-4 mr-2" />
           Agregar Usuario
         </button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email o rol..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los roles</option>
+              <option value="admin">Administrador</option>
+              <option value="manager">Gerente</option>
+              <option value="employee">Empleado</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los estados</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'name' | 'created_at' | 'role')}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="name">Ordenar por Nombre</option>
+              <option value="role">Ordenar por Rol</option>
+              <option value="created_at">Ordenar por Fecha</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              title={`Orden ${sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}`}
+            >
+              <Filter className={`h-4 w-4 ${sortOrder === 'desc' ? 'rotate-180' : ''} transition-transform duration-200`} />
+            </button>
+          </div>
+        </div>
+        {(searchTerm || roleFilter !== 'all' || statusFilter !== 'all') && (
+          <div className="mt-3 text-sm text-slate-600">
+            Mostrando {filteredUsers.length} de {users.length} usuarios
+          </div>
+        )}
       </div>
 
       {/* User Form */}
@@ -250,13 +367,15 @@ export default function UserManager() {
               <div className="h-3 bg-slate-200 rounded w-1/2"></div>
             </div>
           ))
-        ) : users.length === 0 ? (
+        ) : filteredUsers.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-500">No hay usuarios registrados</p>
+            <p className="text-slate-500">
+              {users.length === 0 ? 'No hay usuarios registrados' : 'No se encontraron usuarios que coincidan con los filtros aplicados'}
+            </p>
           </div>
         ) : (
-          users.map((user) => (
+          filteredUsers.map((user) => (
             <div key={user.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">

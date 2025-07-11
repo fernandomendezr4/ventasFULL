@@ -86,9 +86,9 @@ export default function ProductManager() {
       const productData = {
         name: formData.name,
         description: formData.description,
-        sale_price: parseFloat(formData.sale_price),
+        sale_price: parseFloat(formData.sale_price) || 0,
         purchase_price: parseFloat(formData.purchase_price) || 0,
-        stock: parseInt(formData.stock),
+        stock: parseInt(formData.stock) || 0,
         barcode: formData.barcode,
         category_id: formData.category_id || null,
         supplier_id: formData.supplier_id || null,
@@ -294,7 +294,7 @@ export default function ProductManager() {
                 </label>
                 <FormattedNumberInput
                   value={formData.purchase_price}
-                  onChange={(e) => setFormData({ ...formData, purchase_price: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, purchase_price: value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="0"
                   min="0"
@@ -306,7 +306,7 @@ export default function ProductManager() {
                 </label>
                 <FormattedNumberInput
                   value={formData.sale_price}
-                  onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, sale_price: value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"
@@ -318,7 +318,7 @@ export default function ProductManager() {
                 </label>
                 <FormattedNumberInput
                   value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, stock: value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"

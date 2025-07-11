@@ -1,17 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, X, Search, Package } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, X, Search, Package, User, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Product, CartItem } from '../lib/types';
+import { Product, CartItem, Customer } from '../lib/types';
 
 export default function NewSale() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [showCustomerList, setShowCustomerList] = useState(false);
+  const [customerFormData, setCustomerFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    cedula: '',
+  });
 
   useEffect(() => {
     loadProducts();
+    loadCustomers();
   }, []);
 
   const loadProducts = async () => {
@@ -33,6 +46,43 @@ export default function NewSale() {
       setProducts([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setCustomers(data || []);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+      setCustomers([]);
+    }
+  };
+
+  const handleCustomerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .insert([customerFormData])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setSelectedCustomer(data);
+      setShowCustomerForm(false);
+      setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
+      loadCustomers();
+      alert('Cliente agregado exitosamente');
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      alert('Error al crear cliente: ' + (error as Error).message);
     }
   };
 
@@ -89,7 +139,7 @@ export default function NewSale() {
         .from('sales')
         .insert([{ 
           total_amount: total,
-          customer_id: null,
+          customer_id: selectedCustomer?.id || null,
           user_id: null
         }])
         .select()
@@ -124,6 +174,7 @@ export default function NewSale() {
 
       // Clear cart and refresh products
       setCart([]);
+      setSelectedCustomer(null);
       loadProducts();
       alert('Venta realizada con éxito');
     } catch (error) {
@@ -138,11 +189,26 @@ export default function NewSale() {
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const filteredCustomers = customers.filter(customer =>
+    customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    customer.cedula.includes(customerSearch) ||
+    customer.email.toLowerCase().includes(customerSearch.toLowerCase())
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
         <div className="flex items-center gap-4">
+          {selectedCustomer && (
+            <div className="text-right">
+              <p className="text-sm text-slate-600">Cliente</p>
+              <p className="font-medium text-slate-900">{selectedCustomer.name}</p>
+              {selectedCustomer.cedula && (
+                <p className="text-xs text-slate-500">CC: {selectedCustomer.cedula}</p>
+              )}
+            </div>
+          )}
           <div className="text-right">
             <p className="text-sm text-slate-600">Total</p>
             <p className="text-2xl font-bold text-slate-900">${calculateTotal().toFixed(2)}</p>
@@ -156,6 +222,157 @@ export default function NewSale() {
             {saving ? 'Procesando...' : 'Finalizar Venta'}
           </button>
         </div>
+      </div>
+
+      {/* Customer Selection */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-slate-900">Cliente</h3>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCustomerList(!showCustomerList)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+            >
+              <User className="h-4 w-4 mr-2" />
+              Seleccionar Cliente
+            </button>
+            <button
+              onClick={() => setShowCustomerForm(!showCustomerForm)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Nuevo Cliente
+            </button>
+          </div>
+        </div>
+
+        {selectedCustomer ? (
+          <div className="bg-blue-50 p-4 rounded-lg flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-blue-900">{selectedCustomer.name}</h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                {selectedCustomer.cedula && <p>Cédula: {selectedCustomer.cedula}</p>}
+                {selectedCustomer.email && <p>Email: {selectedCustomer.email}</p>}
+                {selectedCustomer.phone && <p>Teléfono: {selectedCustomer.phone}</p>}
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedCustomer(null)}
+              className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-slate-500">
+            <User className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+            <p>Venta sin cliente asignado</p>
+          </div>
+        )}
+
+        {/* Customer List */}
+        {showCustomerList && (
+          <div className="mt-4 border-t pt-4">
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, cédula o email..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              {filteredCustomers.map((customer) => (
+                <div
+                  key={customer.id}
+                  onClick={() => {
+                    setSelectedCustomer(customer);
+                    setShowCustomerList(false);
+                    setCustomerSearch('');
+                  }}
+                  className="p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors duration-200"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-slate-900">{customer.name}</h4>
+                      <div className="text-sm text-slate-600">
+                        {customer.cedula && <span>CC: {customer.cedula}</span>}
+                        {customer.cedula && customer.email && <span> • </span>}
+                        {customer.email && <span>{customer.email}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {filteredCustomers.length === 0 && (
+                <p className="text-center text-slate-500 py-4">No se encontraron clientes</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Customer Form */}
+        {showCustomerForm && (
+          <div className="mt-4 border-t pt-4">
+            <form onSubmit={handleCustomerSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="Nombre completo *"
+                  required
+                  value={customerFormData.name}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  placeholder="Cédula"
+                  value={customerFormData.cedula}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, cedula: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={customerFormData.email}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="tel"
+                  placeholder="Teléfono"
+                  value={customerFormData.phone}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Dirección"
+                value={customerFormData.address}
+                onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
+                >
+                  Crear Cliente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerForm(false)}
+                  className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

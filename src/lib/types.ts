@@ -57,6 +57,7 @@ export interface Database {
           email: string;
           phone: string;
           address: string;
+          cedula: string;
           created_at: string;
         };
         Insert: {
@@ -65,6 +66,7 @@ export interface Database {
           email?: string;
           phone?: string;
           address?: string;
+          cedula?: string;
           created_at?: string;
         };
         Update: {
@@ -73,6 +75,7 @@ export interface Database {
           email?: string;
           phone?: string;
           address?: string;
+          cedula?: string;
           created_at?: string;
         };
       };
@@ -285,6 +288,7 @@ export interface CustomerFormData {
   email: string;
   phone: string;
   address: string;
+  cedula: string;
 }
 
 export interface UserFormData {

@@ -97,17 +97,28 @@ export default function CashRegister() {
       if (error) throw error;
       
       if (data) {
-        // Calculate current balance based on register data
-        const currentBalance = (data.opening_amount || 0) + (data.total_sales || 0);
+        // Cargar movimientos de la caja actual
+        await loadMovements(data.id);
+        
+        // Calcular balance actual basado en movimientos
+        const movementsData = await getMovements(data.id);
+        const totalIncome = movementsData
+          .filter(m => m.type === 'income' || m.type === 'opening' || m.type === 'sale')
+          .reduce((sum, m) => sum + m.amount, 0);
+        const totalExpenses = movementsData
+          .filter(m => m.type === 'expense')
+          .reduce((sum, m) => sum + m.amount, 0);
+        
+        const currentBalance = totalIncome - totalExpenses;
+        
         const registerWithBalance = {
           ...data,
           current_balance: currentBalance,
-          total_income: data.total_sales || 0,
-          total_expenses: 0,
-          cash_movements: []
+          total_income: totalIncome - (data.opening_amount || 0), // Excluir monto inicial de ingresos
+          total_expenses: totalExpenses,
+          cash_movements: movementsData
         };
         setCurrentRegister(registerWithBalance as CashRegisterWithMovements);
-        setMovements([]);
       } else {
         setCurrentRegister(null);
         setMovements([]);
@@ -115,6 +126,32 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error loading current register:', error);
       setCurrentRegister(null);
+      setMovements([]);
+    }
+  };
+
+  const getMovements = async (registerId: string): Promise<CashMovement[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('cash_movements')
+        .select('*')
+        .eq('cash_register_id', registerId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error loading movements:', error);
+      return [];
+    }
+  };
+
+  const loadMovements = async (registerId: string) => {
+    try {
+      const movementsData = await getMovements(registerId);
+      setMovements(movementsData);
+    } catch (error) {
+      console.error('Error loading movements:', error);
       setMovements([]);
     }
   };
@@ -215,14 +252,61 @@ export default function CashRegister() {
 
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Temporarily disabled until cash_movements table is created
-    alert('Funcionalidad de movimientos temporalmente deshabilitada');
-    setShowMovementForm(false);
+    if (!currentRegister) return;
+
+    try {
+      const amount = parseFloat(movementFormData.amount);
+      
+      if (amount <= 0) {
+        alert('El monto debe ser mayor a 0');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('cash_movements')
+        .insert([{
+          cash_register_id: currentRegister.id,
+          type: movementFormData.type,
+          category: movementFormData.category,
+          amount: amount,
+          description: movementFormData.description,
+          created_by: currentRegister.user_id
+        }]);
+
+      if (error) throw error;
+
+      setShowMovementForm(false);
+      setMovementFormData({ type: 'income', category: '', amount: '', description: '' });
+      
+      // Recargar datos
+      await loadCurrentRegister();
+      alert('Movimiento registrado exitosamente');
+    } catch (error) {
+      console.error('Error adding movement:', error);
+      alert('Error al registrar movimiento: ' + (error as Error).message);
+    }
   };
 
   const handleDeleteMovement = async (movementId: string) => {
-    // Temporarily disabled until cash_movements table is created
-    alert('Funcionalidad de movimientos temporalmente deshabilitada');
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este movimiento?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('cash_movements')
+        .delete()
+        .eq('id', movementId);
+
+      if (error) throw error;
+
+      // Recargar datos
+      await loadCurrentRegister();
+      alert('Movimiento eliminado exitosamente');
+    } catch (error) {
+      console.error('Error deleting movement:', error);
+      alert('Error al eliminar movimiento: ' + (error as Error).message);
+    }
   };
 
   const calculateDifference = () => {
@@ -263,6 +347,23 @@ export default function CashRegister() {
         return 'text-red-600';
       default:
         return 'text-slate-600';
+    }
+  };
+
+  const getMovementTypeLabel = (type: string) => {
+    switch (type) {
+      case 'income':
+        return 'Ingreso';
+      case 'expense':
+        return 'Egreso';
+      case 'sale':
+        return 'Venta';
+      case 'opening':
+        return 'Apertura';
+      case 'closing':
+        return 'Cierre';
+      default:
+        return type;
     }
   };
 
@@ -424,7 +525,8 @@ export default function CashRegister() {
                       <div>
                         <p className="font-medium text-slate-900">{movement.description}</p>
                         <p className="text-sm text-slate-600">
-                          {getCategoryLabel(movement.category, movement.type)} • 
+                          {getMovementTypeLabel(movement.type)} • 
+                          {movement.category && getCategoryLabel(movement.category, movement.type)} • 
                           {new Date(movement.created_at).toLocaleString('es-ES')}
                         </p>
                       </div>
@@ -716,7 +818,13 @@ export default function CashRegister() {
                         <div className="flex-1">
                           <h5 className="font-medium text-slate-900">{movement.description}</h5>
                           <div className="flex items-center gap-4 text-sm text-slate-600">
-                            <span>{getCategoryLabel(movement.category, movement.type)}</span>
+                            <span>{getMovementTypeLabel(movement.type)}</span>
+                            {movement.category && (
+                              <>
+                                <span>•</span>
+                                <span>{getCategoryLabel(movement.category, movement.type)}</span>
+                              </>
+                            )}
                             <span>•</span>
                             <span>{new Date(movement.created_at).toLocaleString('es-ES')}</span>
                           </div>
@@ -727,7 +835,7 @@ export default function CashRegister() {
                           {movement.type === 'expense' || movement.type === 'closing' ? '-' : '+'}
                           {formatCurrency(movement.amount)}
                         </div>
-                        {movement.type !== 'opening' && movement.type !== 'sale' && (
+                        {movement.type !== 'opening' && movement.type !== 'closing' && movement.type !== 'sale' && (
                           <button
                             onClick={() => handleDeleteMovement(movement.id)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"

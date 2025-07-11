@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Users, Mail, Phone, MapPin } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Mail, Phone, MapPin, Search, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Customer } from '../lib/types';
 import FormattedNumberInput from './FormattedNumberInput';
@@ -9,6 +9,9 @@ export default function CustomerManager() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'created_at'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -104,6 +107,31 @@ export default function CustomerManager() {
     }
   };
 
+  const filteredCustomers = customers.filter(customer => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      customer.name.toLowerCase().includes(searchLower) ||
+      customer.email.toLowerCase().includes(searchLower) ||
+      customer.phone.includes(searchTerm) ||
+      customer.address.toLowerCase().includes(searchLower) ||
+      customer.cedula.includes(searchTerm)
+    );
+  }).sort((a, b) => {
+    let aValue = sortBy === 'name' ? a.name : a.created_at;
+    let bValue = sortBy === 'name' ? b.name : b.created_at;
+    
+    if (sortBy === 'created_at') {
+      aValue = new Date(aValue).getTime();
+      bValue = new Date(bValue).getTime();
+    }
+    
+    if (sortOrder === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -119,6 +147,44 @@ export default function CustomerManager() {
           <Plus className="h-4 w-4 mr-2" />
           Agregar Cliente
         </button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, email, teléfono, dirección o cédula..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'name' | 'created_at')}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="name">Ordenar por Nombre</option>
+              <option value="created_at">Ordenar por Fecha</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              title={`Orden ${sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}`}
+            >
+              <Filter className={`h-4 w-4 ${sortOrder === 'desc' ? 'rotate-180' : ''} transition-transform duration-200`} />
+            </button>
+          </div>
+        </div>
+        {searchTerm && (
+          <div className="mt-3 text-sm text-slate-600">
+            Mostrando {filteredCustomers.length} de {customers.length} clientes
+          </div>
+        )}
       </div>
 
       {/* Customer Form */}
@@ -215,13 +281,15 @@ export default function CustomerManager() {
               <div className="h-3 bg-slate-200 rounded w-2/3"></div>
             </div>
           ))
-        ) : customers.length === 0 ? (
+        ) : filteredCustomers.length === 0 ? (
           <div className="col-span-full text-center py-12">
             <Users className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-500">No hay clientes registrados</p>
+            <p className="text-slate-500">
+              {customers.length === 0 ? 'No hay clientes registrados' : 'No se encontraron clientes que coincidan con tu búsqueda'}
+            </p>
           </div>
         ) : (
-          customers.map((customer) => (
+          filteredCustomers.map((customer) => (
             <div key={customer.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">

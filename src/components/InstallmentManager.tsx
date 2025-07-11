@@ -371,7 +371,7 @@ export default function InstallmentManager() {
                   </label>
                   <FormattedNumberInput
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    onChange={(value) => setPaymentAmount(value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="0"
                     max={(selectedSale.total_amount - selectedSale.total_paid).toString()}

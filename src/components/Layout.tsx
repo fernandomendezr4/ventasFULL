@@ -10,7 +10,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, permissions } = useAuth();
   const [showProfile, setShowProfile] = React.useState(false);
 
   const getRoleColor = (role: string) => {

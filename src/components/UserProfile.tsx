@@ -64,6 +64,9 @@ export default function UserProfile({ onClose }: UserProfileProps) {
             </button>
           </div>
         </div>
+        <div className="p-6">
+          {false ? (
+            <form>
             </form>
           ) : (
             <div className="space-y-4">
@@ -71,28 +74,33 @@ export default function UserProfile({ onClose }: UserProfileProps) {
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
                     <h4 className="text-xl font-semibold text-slate-900">{user.name}</h4>
                     <span className={`inline-block text-xs px-2 py-1 rounded-full mt-2 ${getRoleColor(user.role)}`}>
-                <h4 className="text-xl font-semibold text-slate-900">{profile.name}</h4>
+                      <h4 className="text-xl font-semibold text-slate-900">{profile.name}</h4>
                       {getRoleLabel(user.role)}
-                  <Shield className="h-3 w-3 inline mr-1" />
-                  {getRoleLabel(profile.role_name)}
-                </span>
+                      <Shield className="h-3 w-3 inline mr-1" />
+                      {getRoleLabel(profile.role_name)}
+                    </span>
+                </div>
               </div>
 
               <div className="space-y-3 text-sm">
-                      <span>{user.email}</span>
+                <div>
+                  <Mail className="h-4 w-4 mr-3" />
+                  <span>{user.email}</span>
+                </div>
+                <div>
                   <Calendar className="h-4 w-4 mr-3" />
                   <span>Miembro desde {new Date(user?.created_at || '').toLocaleDateString('es-ES')}</span>
                 </div>
               </div>
-                  Editar
-                </button>
-                      className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center justify-center"
+              <div className="flex gap-2 mt-6">
+                <button
+                  className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center justify-center"
                   onClick={handleSignOut}
-                  className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center justify-center"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Cerrar Sesión
                 </button>
+              </div>
             </div>
           )}
         </div>

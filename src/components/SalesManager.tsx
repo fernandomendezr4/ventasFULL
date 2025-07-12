@@ -3,8 +3,10 @@ import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User } from
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SalesManager() {
+  const { user } = useAuth();
   const [sales, setSales] = useState<SaleWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSale, setSelectedSale] = useState<SaleWithItems | null>(null);
@@ -301,12 +303,15 @@ export default function SalesManager() {
                     >
                       <Eye className="h-4 w-4" />
                     </button>
+                    {/* Solo mostrar botón de eliminar para admin y manager */}
+                    {user?.role !== 'employee' && (
                     <button
                       onClick={() => handleDelete(sale.id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
+                    )}
                   </div>
                 </div>
               </div>

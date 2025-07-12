@@ -68,12 +68,13 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
     { id: 'users', label: 'Usuarios', icon: User, category: 'admin', permission: 'manage_users' },
   ];
 
-  const renderTabGroup = (title: string, tabs: typeof mainTabs, bgColor: string) => (
+  const renderTabGroup = (title: string, tabs: typeof mainTabs, bgColor: string) => {
     const visibleTabs = tabs.filter(tab => hasPermission(tab.permission));
     
     if (visibleTabs.length === 0) return null;
 
-    <div className="mb-6">
+    return (
+      <div className="mb-6">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-3">
         {title}
       </h3>
@@ -97,7 +98,8 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
         })}
       </nav>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex">

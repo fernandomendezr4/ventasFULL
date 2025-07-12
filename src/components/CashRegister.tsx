@@ -221,8 +221,11 @@ export default function CashRegister() {
   const handleOpenRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Para empleados, asignar automáticamente su propio ID
+      const userId = currentUser?.role === 'employee' ? currentUser.id : openFormData.user_id;
+      
       const registerData = {
-        user_id: openFormData.user_id || null,
+        user_id: userId || null,
         opening_amount: parseFloat(openFormData.opening_amount),
         notes: openFormData.notes,
         status: 'open' as const,
@@ -599,28 +602,42 @@ export default function CashRegister() {
       </div>
 
       {/* Open Register Form */}
-      {showOpenForm && currentUser?.role !== 'employee' && (
+      {showOpenForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Abrir Caja</h3>
           <form onSubmit={handleOpenRegister} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Operador
-                </label>
-                <select
-                  value={openFormData.user_id}
-                  onChange={(e) => setOpenFormData({ ...openFormData, user_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Seleccionar operador</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Solo mostrar selector de operador para admin y manager */}
+              {currentUser?.role !== 'employee' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Operador
+                  </label>
+                  <select
+                    value={openFormData.user_id}
+                    onChange={(e) => setOpenFormData({ ...openFormData, user_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Seleccionar operador</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Para empleados, mostrar información del operador */}
+              {currentUser?.role === 'employee' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Operador
+                  </label>
+                  <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-700">
+                    {currentUser.name}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Monto Inicial

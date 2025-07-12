@@ -93,9 +93,6 @@ const DEFAULT_PERMISSIONS = {
     'manage_cash_register',
     'view_sales',
     'manage_installments',
-    'view_categories',
-    'create_categories',
-    'edit_categories',
     'view_customers',
     'create_customers',
     'edit_customers'

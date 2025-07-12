@@ -427,7 +427,7 @@ export default function CashRegister() {
           ) : (
             <>
               {/* Solo mostrar botones de ingreso/egreso para administradores */}
-              {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
                 <>
                   <button
                     onClick={() => {
@@ -461,7 +461,7 @@ export default function CashRegister() {
                 Ver Movimientos
               </button>
               {/* Solo mostrar botón de cerrar caja para administradores */}
-              {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
                 <button
                   onClick={() => setShowCloseForm(true)}
                   className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center"
@@ -608,7 +608,7 @@ export default function CashRegister() {
           <form onSubmit={handleOpenRegister} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Solo mostrar detalles financieros para administradores únicamente */}
-              {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Operador
@@ -628,7 +628,7 @@ export default function CashRegister() {
                 </div>
               )}
               {/* Para empleados, mostrar información del operador */}
-              {currentUser?.role === 'employee' && (
+              {currentUser && currentUser.role === 'employee' && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Operador
@@ -682,7 +682,7 @@ export default function CashRegister() {
       )}
 
       {/* Movement Form */}
-      {showMovementForm && (currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+      {showMovementForm && currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
             Registrar {movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'}
@@ -757,7 +757,7 @@ export default function CashRegister() {
       )}
 
       {/* Close Register Form */}
-      {showCloseForm && currentRegister && (currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+      {showCloseForm && currentRegister && currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Cerrar Caja</h3>
           <form onSubmit={handleCloseRegister} className="space-y-4">
@@ -937,7 +937,7 @@ export default function CashRegister() {
                         </p>
                       </div>
                       {/* Solo mostrar detalles financieros para admin y manager */}
-                      {(currentUser?.role === 'admin' || currentUser?.role === 'manager') && (
+                      {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
                         <div className="flex items-center gap-4 text-sm">
                           <span>Inicial: {formatCurrency(register.opening_amount || 0)}</span>
                           {register.status === 'closed' && (

@@ -72,14 +72,13 @@ export default function UserProfile({ onClose }: UserProfileProps) {
             <div className="space-y-4">
               <div className="text-center">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <h4 className="text-xl font-semibold text-slate-900">{user.name}</h4>
-                    <span className={`inline-block text-xs px-2 py-1 rounded-full mt-2 ${getRoleColor(user.role)}`}>
-                      <h4 className="text-xl font-semibold text-slate-900">{profile.name}</h4>
-                      {getRoleLabel(user.role)}
-                      <Shield className="h-3 w-3 inline mr-1" />
-                      {getRoleLabel(profile.role_name)}
-                    </span>
+                  <User className="h-8 w-8 text-blue-600" />
                 </div>
+                <h4 className="text-xl font-semibold text-slate-900">{user.name}</h4>
+                <span className={`inline-block text-xs px-2 py-1 rounded-full mt-2 ${getRoleColor(user.role)}`}>
+                  <Shield className="h-3 w-3 inline mr-1" />
+                  {getRoleLabel(user.role)}
+                </span>
               </div>
 
               <div className="space-y-3 text-sm">

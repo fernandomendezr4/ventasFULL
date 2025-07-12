@@ -107,24 +107,6 @@ export default function LoginForm() {
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h4 className="font-medium text-blue-900 mb-2">Cuentas de prueba:</h4>
-          <div className="space-y-2 text-xs text-blue-800">
-            <div>
-              <strong>Administrador:</strong> admin@ventasfull.com<br />
-              <strong>Contraseña:</strong> admin123
-            </div>
-            <div>
-              <strong>Empleado:</strong> juan@empresa.com<br />
-              <strong>Contraseña:</strong> empleado123
-            </div>
-            <div>
-              <strong>Gerente:</strong> carlos@empresa.com<br />
-              <strong>Contraseña:</strong> empleado123
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

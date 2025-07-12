@@ -106,7 +106,7 @@ export default function LoginForm() {
             )}
           </button>
         </form>
-
+      </div>
     </div>
   );
 }

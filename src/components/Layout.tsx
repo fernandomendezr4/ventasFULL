@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard } from 'lucide-react';
+import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Calendar, AlertTriangle, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
 
@@ -52,16 +52,21 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
     { id: 'cash-register', label: 'Caja', icon: Calculator, category: 'sales', permission: 'manage_cash_register' },
     { id: 'sales', label: 'Historial', icon: BarChart3, category: 'sales', permission: 'view_sales' },
     { id: 'installments', label: 'Abonos', icon: CreditCard, category: 'sales', permission: 'manage_installments' },
+    { id: 'daily-sales', label: 'Ventas del Día', icon: Calendar, category: 'sales', permission: 'view_sales' },
+    { id: 'quick-sale', label: 'Venta Rápida', icon: ShoppingCart, category: 'sales', permission: 'create_sales' },
   ];
 
   const inventoryTabs = [
     { id: 'products', label: 'Productos', icon: Package, category: 'inventory', permission: 'view_products' },
     { id: 'categories', label: 'Categorías', icon: Tag, category: 'inventory', permission: 'view_categories' },
+    { id: 'stock-check', label: 'Revisar Stock', icon: Package, category: 'inventory', permission: 'view_products' },
+    { id: 'low-stock', label: 'Stock Bajo', icon: AlertTriangle, category: 'inventory', permission: 'view_products' },
   ];
 
   const contactsTabs = [
     { id: 'customers', label: 'Clientes', icon: Users, category: 'contacts', permission: 'view_customers' },
     { id: 'suppliers', label: 'Proveedores', icon: Truck, category: 'contacts', permission: 'view_suppliers' },
+    { id: 'customer-search', label: 'Buscar Cliente', icon: Search, category: 'contacts', permission: 'view_customers' },
   ];
 
   const adminTabs = [

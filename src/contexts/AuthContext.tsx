@@ -95,7 +95,12 @@ const DEFAULT_PERMISSIONS = {
     'view_categories',
     'view_customers',
     'create_customers',
-    'view_suppliers'
+    'view_suppliers',
+    'view_daily_sales',
+    'quick_sale',
+    'stock_check',
+    'view_low_stock',
+    'customer_search'
   ]
 };
 

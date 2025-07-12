@@ -7,6 +7,7 @@ interface User {
   name: string;
   role: string;
   is_active: boolean;
+  created_at: string;
 }
 
 interface Permission {
@@ -35,6 +36,69 @@ export function useAuth() {
   return context;
 }
 
+// Permisos por defecto para cada rol
+const DEFAULT_PERMISSIONS = {
+  admin: [
+    'view_dashboard',
+    'create_sales',
+    'manage_cash_register',
+    'view_sales',
+    'manage_installments',
+    'view_products',
+    'create_products',
+    'edit_products',
+    'delete_products',
+    'view_categories',
+    'create_categories',
+    'edit_categories',
+    'delete_categories',
+    'view_customers',
+    'create_customers',
+    'edit_customers',
+    'delete_customers',
+    'view_suppliers',
+    'create_suppliers',
+    'edit_suppliers',
+    'delete_suppliers',
+    'manage_users',
+    'view_users',
+    'create_users',
+    'edit_users',
+    'delete_users'
+  ],
+  manager: [
+    'view_dashboard',
+    'create_sales',
+    'manage_cash_register',
+    'view_sales',
+    'manage_installments',
+    'view_products',
+    'create_products',
+    'edit_products',
+    'view_categories',
+    'create_categories',
+    'edit_categories',
+    'view_customers',
+    'create_customers',
+    'edit_customers',
+    'view_suppliers',
+    'create_suppliers',
+    'edit_suppliers'
+  ],
+  employee: [
+    'view_dashboard',
+    'create_sales',
+    'manage_cash_register',
+    'view_sales',
+    'manage_installments',
+    'view_products',
+    'view_categories',
+    'view_customers',
+    'create_customers',
+    'view_suppliers'
+  ]
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -46,13 +110,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (sessionToken) {
       validateSession(sessionToken);
     } else {
-      setLoading(false);
+      // Verificar sesión de Supabase Auth
+      checkSupabaseSession();
     }
   }, []);
 
+  const checkSupabaseSession = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (!error && session?.user) {
+        // Buscar el usuario en la tabla users
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', session.user.email)
+          .single();
+
+        if (!userError && userData) {
+          setUser(userData);
+          loadDefaultPermissions(userData.role);
+        } else {
+          // Si no existe en users, crear un usuario admin por defecto
+          if (session.user.email === 'estivenmendezr@gmail.com') {
+            await createDefaultAdmin(session.user);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking Supabase session:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createDefaultAdmin = async (authUser: any) => {
+    try {
+      const adminData = {
+        id: authUser.id,
+        name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Administrador',
+        email: authUser.email,
+        role: 'admin',
+        is_active: true
+      };
+
+      const { data, error } = await supabase
+        .from('users')
+        .insert([adminData])
+        .select()
+        .single();
+
+      if (!error && data) {
+        setUser(data);
+        loadDefaultPermissions('admin');
+      }
+    } catch (error) {
+      console.error('Error creating default admin:', error);
+    }
+  };
+
   const validateSession = async (sessionToken: string) => {
     try {
-      // Primero intentar validar como empleado
+      // Intentar validar como empleado
       const { data: employeeData, error: employeeError } = await supabase.rpc('validate_employee_session', {
         p_session_token: sessionToken
       });
@@ -60,52 +179,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!employeeError && employeeData && employeeData.length > 0) {
         const userData = employeeData[0];
         setUser(userData);
-        await loadPermissions(userData.user_id);
+        loadDefaultPermissions(userData.role);
         setLoading(false);
         return;
       }
 
-      // Si no es empleado, intentar validar como usuario de Supabase Auth
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
-      
-      if (!authError && session?.user) {
-        const { data: profileData, error: profileError } = await supabase
-          .rpc('get_current_user_profile');
-
-        if (!profileError && profileData && profileData.length > 0) {
-          const profile = profileData[0];
-          setUser({
-            id: profile.id,
-            email: profile.email,
-            name: profile.name,
-            role: profile.role_name,
-            is_active: profile.is_active
-          });
-          await loadPermissions(profile.id);
-        }
-      } else {
-        localStorage.removeItem('session_token');
-      }
+      // Si no es empleado, limpiar token y verificar Supabase Auth
+      localStorage.removeItem('session_token');
+      await checkSupabaseSession();
     } catch (error) {
       console.error('Error validating session:', error);
       localStorage.removeItem('session_token');
-    } finally {
-      setLoading(false);
+      await checkSupabaseSession();
     }
   };
 
-  const loadPermissions = async (userId: string) => {
-    try {
-      const { data, error } = await supabase.rpc('get_employee_permissions', {
-        p_user_id: userId
-      });
-
-      if (error) throw error;
-      setPermissions(data || []);
-    } catch (error) {
-      console.error('Error loading permissions:', error);
-      setPermissions([]);
-    }
+  const loadDefaultPermissions = (role: string) => {
+    const rolePermissions = DEFAULT_PERMISSIONS[role as keyof typeof DEFAULT_PERMISSIONS] || [];
+    const permissionObjects = rolePermissions.map(permission => ({
+      permission_name: permission,
+      permission_description: permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      module: permission.split('_')[0]
+    }));
+    setPermissions(permissionObjects);
   };
 
   const signIn = async (email: string, password: string) => {
@@ -130,11 +226,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: authData.name,
           email: authData.email,
           role: authData.role,
-          is_active: authData.is_active
+          is_active: authData.is_active,
+          created_at: authData.created_at || new Date().toISOString()
         });
 
-        // Cargar permisos
-        await loadPermissions(authData.user_id);
+        // Cargar permisos por defecto
+        loadDefaultPermissions(authData.role);
 
         return { error: null };
       }
@@ -146,21 +243,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!authError && authData.user) {
-        // Cargar perfil del usuario
-        const { data: profileData, error: profileError } = await supabase
-          .rpc('get_current_user_profile');
+        // Buscar el usuario en la tabla users
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .single();
 
-        if (!profileError && profileData && profileData.length > 0) {
-          const profile = profileData[0];
-          setUser({
-            id: profile.id,
-            email: profile.email,
-            name: profile.name,
-            role: profile.role_name,
-            is_active: profile.is_active
-          });
-          await loadPermissions(profile.id);
+        if (!userError && userData) {
+          setUser(userData);
+          loadDefaultPermissions(userData.role);
           return { error: null };
+        } else {
+          // Si no existe, crear usuario admin para emails específicos
+          if (email === 'estivenmendezr@gmail.com') {
+            await createDefaultAdmin(authData.user);
+            return { error: null };
+          }
         }
       }
 
@@ -182,7 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           p_session_token: sessionToken
         });
       }
-      // También cerrar sesión de Supabase Auth por si acaso
+      // También cerrar sesión de Supabase Auth
       await supabase.auth.signOut();
     } catch (error) {
       console.error('Error signing out:', error);
@@ -194,10 +293,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const hasPermission = (permissionName: string): boolean => {
+    // Los administradores tienen todos los permisos
+    if (user?.role === 'admin') {
+      return true;
+    }
+    
     return permissions.some(p => p.permission_name === permissionName);
   };
 
   const hasAnyPermission = (permissionNames: string[]): boolean => {
+    // Los administradores tienen todos los permisos
+    if (user?.role === 'admin') {
+      return true;
+    }
+    
     return permissionNames.some(permissionName => hasPermission(permissionName));
   };
 

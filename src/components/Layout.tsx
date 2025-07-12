@@ -75,10 +75,10 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
     return (
       <div className="mb-6">
-      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-3">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-3">
         {title}
       </h3>
-      <nav className="space-y-1">
+        <nav className="space-y-1">
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -96,8 +96,8 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             </button>
           );
         })}
-      </nav>
-    </div>
+        </nav>
+      </div>
     );
   };
 
@@ -120,6 +120,14 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
         {/* Navigation */}
         <div className="flex-1 p-4 overflow-y-auto">
+          {/* Debug info - solo para desarrollo */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <p>Usuario: {user?.name}</p>
+              <p>Rol: {user?.role}</p>
+              <p>Permisos: {permissions.length}</p>
+            </div>
+          )}
           {renderTabGroup('Principal', mainTabs, 'bg-blue-600')}
           {renderTabGroup('Ventas', salesTabs, 'bg-green-600')}
           {renderTabGroup('Inventario', inventoryTabs, 'bg-purple-600')}

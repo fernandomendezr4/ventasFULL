@@ -426,8 +426,8 @@ export default function CashRegister() {
             </button>
           ) : (
             <>
-              {/* Solo mostrar botones de ingreso/egreso para admin y manager */}
-              {currentUser?.role !== 'employee' && (
+              {/* Solo mostrar botones de ingreso/egreso para administradores únicamente */}
+              {currentUser?.role === 'admin' && (
                 <>
                   <button
                     onClick={() => {
@@ -460,8 +460,8 @@ export default function CashRegister() {
                 <Eye className="h-4 w-4 mr-2" />
                 Ver Movimientos
               </button>
-              {/* Solo mostrar botón de cerrar caja para admin y manager */}
-              {currentUser?.role !== 'employee' && (
+              {/* Solo mostrar botón de cerrar caja para administradores únicamente */}
+              {currentUser?.role === 'admin' && (
                 <button
                   onClick={() => setShowCloseForm(true)}
                   className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center"
@@ -607,8 +607,8 @@ export default function CashRegister() {
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Abrir Caja</h3>
           <form onSubmit={handleOpenRegister} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Solo mostrar selector de operador para admin y manager */}
-              {currentUser?.role !== 'employee' && (
+              {/* Solo mostrar detalles financieros para administradores únicamente */}
+              {currentUser?.role === 'admin' && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     Operador
@@ -682,7 +682,7 @@ export default function CashRegister() {
       )}
 
       {/* Movement Form */}
-      {showMovementForm && currentUser?.role !== 'employee' && (
+      {showMovementForm && currentUser?.role === 'admin' && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
             Registrar {movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'}
@@ -757,7 +757,7 @@ export default function CashRegister() {
       )}
 
       {/* Close Register Form */}
-      {showCloseForm && currentRegister && currentUser?.role !== 'employee' && (
+      {showCloseForm && currentRegister && currentUser?.role === 'admin' && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Cerrar Caja</h3>
           <form onSubmit={handleCloseRegister} className="space-y-4">
@@ -893,7 +893,7 @@ export default function CashRegister() {
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
                             title="Eliminar movimiento"
                             style={{ 
-                              display: currentUser?.role === 'employee' && movement.created_by !== currentUser.id ? 'none' : 'block' 
+                              display: currentUser?.role !== 'admin' && movement.created_by !== currentUser.id ? 'none' : 'block' 
                             }}
                           >
                             <Trash2 className="h-4 w-4" />

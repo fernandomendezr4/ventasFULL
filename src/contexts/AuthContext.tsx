@@ -92,10 +92,17 @@ const DEFAULT_PERMISSIONS = {
     'view_sales',
     'manage_installments',
     'view_products',
+    'create_products',
+    'edit_products',
     'view_categories',
+    'create_categories',
+    'edit_categories',
     'view_customers',
     'create_customers',
-    'view_suppliers'
+    'edit_customers',
+    'view_suppliers',
+    'create_suppliers',
+    'edit_suppliers'
   ]
 };
 

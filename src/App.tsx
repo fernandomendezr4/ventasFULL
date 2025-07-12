@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -15,6 +16,14 @@ import InstallmentManager from './components/InstallmentManager';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const { user } = useAuth();
+
+  // Reset to dashboard when user changes (login/logout)
+  React.useEffect(() => {
+    if (user) {
+      setActiveTab('dashboard');
+    }
+  }, [user]);
 
   const renderContent = () => {
     switch (activeTab) {

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, User as UserType, CashMovement } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CashRegisterWithUser extends CashRegisterType {
   user: UserType | null;
@@ -33,6 +34,7 @@ const EXPENSE_CATEGORIES = [
 ];
 
 export default function CashRegister() {
+  const { user: currentUser } = useAuth();
   const [currentRegister, setCurrentRegister] = useState<CashRegisterWithMovements | null>(null);
   const [registers, setRegisters] = useState<CashRegisterWithUser[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
@@ -83,7 +85,7 @@ export default function CashRegister() {
 
   const loadCurrentRegister = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_registers')
         .select(`
           *,
@@ -91,7 +93,15 @@ export default function CashRegister() {
         `)
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
-        .limit(1)
+        .limit(1);
+
+      // Si es empleado, solo mostrar su propia caja
+      if (currentUser?.role === 'employee') {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data, error } = await supabase
+        query
         .maybeSingle();
 
       if (error) throw error;
@@ -148,7 +158,17 @@ export default function CashRegister() {
 
   const loadMovements = async (registerId: string) => {
     try {
-      const movementsData = await getMovements(registerId);
+      let movementsData = await getMovements(registerId);
+      
+      // Si es empleado, filtrar solo sus movimientos
+      if (currentUser?.role === 'employee') {
+        movementsData = movementsData.filter(movement => 
+          movement.created_by === currentUser.id || 
+          movement.type === 'opening' || 
+          movement.type === 'closing'
+        );
+      }
+      
       setMovements(movementsData);
     } catch (error) {
       console.error('Error loading movements:', error);
@@ -158,7 +178,7 @@ export default function CashRegister() {
 
   const loadRegisters = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_registers')
         .select(`
           *,
@@ -166,6 +186,13 @@ export default function CashRegister() {
         `)
         .order('opened_at', { ascending: false })
         .limit(10);
+
+      // Si es empleado, solo mostrar sus propias cajas
+      if (currentUser?.role === 'employee') {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setRegisters(data as CashRegisterWithUser[]);
@@ -396,28 +423,33 @@ export default function CashRegister() {
             </button>
           ) : (
             <>
-              <button
-                onClick={() => {
-                  setMovementType('income');
-                  setMovementFormData({ ...movementFormData, type: 'income' });
-                  setShowMovementForm(true);
-                }}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Ingreso
-              </button>
-              <button
-                onClick={() => {
-                  setMovementType('expense');
-                  setMovementFormData({ ...movementFormData, type: 'expense' });
-                  setShowMovementForm(true);
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
-              >
-                <Minus className="h-4 w-4 mr-2" />
-                Egreso
-              </button>
+              {/* Solo mostrar botones de ingreso/egreso para admin y manager */}
+              {currentUser?.role !== 'employee' && (
+                <>
+                  <button
+                    onClick={() => {
+                      setMovementType('income');
+                      setMovementFormData({ ...movementFormData, type: 'income' });
+                      setShowMovementForm(true);
+                    }}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ingreso
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMovementType('expense');
+                      setMovementFormData({ ...movementFormData, type: 'expense' });
+                      setShowMovementForm(true);
+                    }}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
+                  >
+                    <Minus className="h-4 w-4 mr-2" />
+                    Egreso
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setShowMovementsModal(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
@@ -425,13 +457,16 @@ export default function CashRegister() {
                 <Eye className="h-4 w-4 mr-2" />
                 Ver Movimientos
               </button>
-              <button
-                onClick={() => setShowCloseForm(true)}
-                className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center"
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                Cerrar Caja
-              </button>
+              {/* Solo mostrar botón de cerrar caja para admin y manager */}
+              {currentUser?.role !== 'employee' && (
+                <button
+                  onClick={() => setShowCloseForm(true)}
+                  className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center"
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Cerrar Caja
+                </button>
+              )}
             </>
           )}
         </div>
@@ -564,7 +599,7 @@ export default function CashRegister() {
       </div>
 
       {/* Open Register Form */}
-      {showOpenForm && (
+      {showOpenForm && currentUser?.role !== 'employee' && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Abrir Caja</h3>
           <form onSubmit={handleOpenRegister} className="space-y-4">
@@ -630,7 +665,7 @@ export default function CashRegister() {
       )}
 
       {/* Movement Form */}
-      {showMovementForm && (
+      {showMovementForm && currentUser?.role !== 'employee' && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
             Registrar {movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'}
@@ -705,7 +740,7 @@ export default function CashRegister() {
       )}
 
       {/* Close Register Form */}
-      {showCloseForm && currentRegister && (
+      {showCloseForm && currentRegister && currentUser?.role !== 'employee' && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Cerrar Caja</h3>
           <form onSubmit={handleCloseRegister} className="space-y-4">
@@ -840,6 +875,9 @@ export default function CashRegister() {
                             onClick={() => handleDeleteMovement(movement.id)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
                             title="Eliminar movimiento"
+                            style={{ 
+                              display: currentUser?.role === 'employee' && movement.created_by !== currentUser.id ? 'none' : 'block' 
+                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -857,11 +895,15 @@ export default function CashRegister() {
       {/* Register History */}
       <div className="bg-white rounded-xl shadow-sm">
         <div className="p-6 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-900">Historial de Cajas</h3>
+          <h3 className="text-lg font-semibold text-slate-900">
+            {currentUser?.role === 'employee' ? 'Mis Cajas' : 'Historial de Cajas'}
+          </h3>
         </div>
         <div className="p-6">
           {registers.length === 0 ? (
-            <p className="text-slate-500 text-center py-8">No hay registros de caja</p>
+            <p className="text-slate-500 text-center py-8">
+              {currentUser?.role === 'employee' ? 'No tienes cajas registradas' : 'No hay registros de caja'}
+            </p>
           ) : (
             <div className="space-y-4">
               {registers.map((register) => (
@@ -877,15 +919,18 @@ export default function CashRegister() {
                           {register.status === 'open' ? ' Abierta' : ` Cerrada a las ${new Date(register.closed_at!).toLocaleTimeString('es-ES')}`}
                         </p>
                       </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span>Inicial: {formatCurrency(register.opening_amount || 0)}</span>
-                        {register.status === 'closed' && (
-                          <>
-                            <span>Final: {formatCurrency(register.closing_amount || 0)}</span>
-                            <span>Balance: {formatCurrency(register.current_balance || 0)}</span>
-                          </>
-                        )}
-                      </div>
+                      {/* Solo mostrar detalles financieros para admin y manager */}
+                      {currentUser?.role !== 'employee' && (
+                        <div className="flex items-center gap-4 text-sm">
+                          <span>Inicial: {formatCurrency(register.opening_amount || 0)}</span>
+                          {register.status === 'closed' && (
+                            <>
+                              <span>Final: {formatCurrency(register.closing_amount || 0)}</span>
+                              <span>Balance: {formatCurrency(register.current_balance || 0)}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">

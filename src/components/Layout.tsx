@@ -10,41 +10,75 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
-  const { profile } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [showProfile, setShowProfile] = React.useState(false);
 
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return 'bg-red-100 text-red-800';
+      case 'manager':
+        return 'bg-purple-100 text-purple-800';
+      case 'employee':
+        return 'bg-blue-100 text-blue-800';
+      case 'cashier':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return 'Administrador';
+      case 'manager':
+        return 'Gerente';
+      case 'employee':
+        return 'Empleado';
+      case 'cashier':
+        return 'Cajero';
+      default:
+        return role;
+    }
+  };
+
   const mainTabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home, category: 'main' },
-    { id: 'new-sale', label: 'Nueva Venta', icon: Plus, category: 'sales' },
-    { id: 'cash-register', label: 'Caja', icon: Calculator, category: 'sales' },
+    { id: 'dashboard', label: 'Dashboard', icon: Home, category: 'main', permission: 'view_dashboard' },
   ];
 
   const salesTabs = [
-    { id: 'sales', label: 'Historial', icon: BarChart3, category: 'sales' },
-    { id: 'installments', label: 'Abonos', icon: CreditCard, category: 'sales' },
+    { id: 'new-sale', label: 'Nueva Venta', icon: Plus, category: 'sales', permission: 'create_sales' },
+    { id: 'cash-register', label: 'Caja', icon: Calculator, category: 'sales', permission: 'manage_cash_register' },
+    { id: 'sales', label: 'Historial', icon: BarChart3, category: 'sales', permission: 'view_sales' },
+    { id: 'installments', label: 'Abonos', icon: CreditCard, category: 'sales', permission: 'manage_installments' },
   ];
 
   const inventoryTabs = [
-    { id: 'products', label: 'Productos', icon: Package, category: 'inventory' },
-    { id: 'categories', label: 'Categorías', icon: Tag, category: 'inventory' },
+    { id: 'products', label: 'Productos', icon: Package, category: 'inventory', permission: 'view_products' },
+    { id: 'categories', label: 'Categorías', icon: Tag, category: 'inventory', permission: 'view_categories' },
   ];
 
   const contactsTabs = [
-    { id: 'customers', label: 'Clientes', icon: Users, category: 'contacts' },
-    { id: 'suppliers', label: 'Proveedores', icon: Truck, category: 'contacts' },
+    { id: 'customers', label: 'Clientes', icon: Users, category: 'contacts', permission: 'view_customers' },
+    { id: 'suppliers', label: 'Proveedores', icon: Truck, category: 'contacts', permission: 'view_suppliers' },
   ];
 
   const adminTabs = [
-    { id: 'users', label: 'Usuarios', icon: User, category: 'admin' },
+    { id: 'users', label: 'Usuarios', icon: User, category: 'admin', permission: 'manage_users' },
   ];
 
   const renderTabGroup = (title: string, tabs: typeof mainTabs, bgColor: string) => (
+    const visibleTabs = tabs.filter(tab => hasPermission(tab.permission));
+    
+    if (visibleTabs.length === 0) return null;
+
     <div className="mb-6">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-3">
         {title}
       </h3>
       <nav className="space-y-1">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <button
@@ -103,8 +137,8 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                   <User className="h-4 w-4 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{profile?.name}</p>
-                  <p className="text-xs text-slate-500 truncate">{profile?.role_name}</p>
+                  <p className="text-sm font-medium text-slate-900 truncate">{user?.name}</p>
+                  <p className="text-xs text-slate-500 truncate">{getRoleLabel(user?.role || '')}</p>
                 </div>
               </div>
             </button>
@@ -137,8 +171,10 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             </div>
             <div className="flex items-center space-x-3">
               <div className="text-right">
-                <p className="text-sm font-medium text-slate-900">{profile?.name}</p>
-                <p className="text-xs text-slate-600">{profile?.role_name}</p>
+                <p className="text-sm font-medium text-slate-900">{user?.name}</p>
+                <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(user?.role || '')}`}>
+                  {getRoleLabel(user?.role || '')}
+                </span>
               </div>
               <button
                 onClick={() => setShowProfile(true)}

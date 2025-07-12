@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -21,11 +21,11 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     );
   }
 
-  if (!user || !profile) {
+  if (!user) {
     return <LoginForm />;
   }
 
-  if (!profile.is_active) {
+  if (!user.is_active) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm p-8 max-w-md text-center">
@@ -43,7 +43,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     );
   }
 
-  if (requiredRole && profile.role_name !== requiredRole && profile.role_name !== 'admin') {
+  if (requiredRole && user.role !== requiredRole && user.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm p-8 max-w-md text-center">

@@ -106,7 +106,17 @@ export default function UserManager() {
       alert(editingUser ? 'Usuario actualizado exitosamente' : 'Usuario creado exitosamente');
     } catch (error) {
       console.error('Error saving user:', error);
-      alert('Error al guardar usuario: ' + (error as Error).message);
+      
+      const errorMessage = (error as Error).message;
+      
+      // Handle specific error cases with user-friendly messages
+      if (errorMessage.includes('Email already exists in authentication system')) {
+        alert('Este email ya está registrado en el sistema. Por favor:\n\n• Verifica si el usuario ya existe\n• Usa un email diferente\n• Contacta al administrador si necesitas vincular este email');
+      } else if (errorMessage.includes('duplicate key value violates unique constraint')) {
+        alert('Este email ya está en uso. Por favor usa un email diferente.');
+      } else {
+        alert('Error al guardar usuario: ' + errorMessage);
+      }
     }
   };
 

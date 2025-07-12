@@ -55,7 +55,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
   ];
 
   const inventoryTabs = [
-    { id: 'products', label: 'Productos', icon: Package, category: 'inventory', permission: 'view_products' },
+    { id: 'products', label: 'Productos', icon: Package, category: 'inventory', permission: 'manage_products' },
     { id: 'categories', label: 'Categorías', icon: Tag, category: 'inventory', permission: 'view_categories' },
   ];
 

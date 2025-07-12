@@ -98,10 +98,7 @@ const DEFAULT_PERMISSIONS = {
     'edit_categories',
     'view_customers',
     'create_customers',
-    'edit_customers',
-    'view_suppliers',
-    'create_suppliers',
-    'edit_suppliers'
+    'edit_customers'
   ]
 };
 

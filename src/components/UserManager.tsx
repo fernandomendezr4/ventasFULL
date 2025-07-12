@@ -16,9 +16,11 @@ export default function UserManager() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     role: 'employee',
     is_active: true,
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -45,7 +47,7 @@ export default function UserManager() {
     e.preventDefault();
     try {
       if (editingUser) {
-        // Actualizar usuario existente
+        // Actualizar usuario existente (sin contraseña)
         const { error } = await supabase
           .from('users')
           .update({
@@ -57,26 +59,83 @@ export default function UserManager() {
           .eq('id', editingUser.id);
 
         if (error) throw error;
+        
+        // Si se proporcionó una nueva contraseña, actualizarla
+        if (formData.password.trim()) {
+          const { data: passwordResult, error: passwordError } = await supabase.rpc('update_user_password', {
+            p_user_id: editingUser.id,
+            p_new_password: formData.password
+          });
+          
+          if (passwordError) throw passwordError;
+          
+          const result = passwordResult as { success: boolean; error?: string };
+          if (!result.success) {
+            throw new Error(result.error || 'Error al actualizar contraseña');
+          }
+        }
       } else {
-        // Crear nuevo usuario
-        const { error } = await supabase
-          .from('users')
-          .insert([{
-            name: formData.name,
-            email: formData.email,
-            role: formData.role,
-            is_active: formData.is_active,
-          }]);
+        // Validar que se proporcione contraseña para usuarios nuevos
+        if (!formData.password.trim()) {
+          alert('La contraseña es requerida para usuarios nuevos');
+          return;
+        }
+        
+        // Crear nuevo usuario con contraseña
+        const { data: result, error } = await supabase.rpc('create_user_with_password', {
+          p_name: formData.name,
+          p_email: formData.email,
+          p_password: formData.password,
+          p_role: formData.role,
+          p_is_active: formData.is_active
+        });
         
         if (error) throw error;
+        
+        const userResult = result as { success: boolean; error?: string };
+        if (!userResult.success) {
+          throw new Error(userResult.error || 'Error al crear usuario');
+        }
       }
+      
       setShowForm(false);
       setEditingUser(null);
-      setFormData({ name: '', email: '', role: 'employee', is_active: true });
+      setFormData({ name: '', email: '', password: '', role: 'employee', is_active: true });
       loadUsers();
+      
+      alert(editingUser ? 'Usuario actualizado exitosamente' : 'Usuario creado exitosamente');
     } catch (error) {
       console.error('Error saving user:', error);
       alert('Error al guardar usuario: ' + (error as Error).message);
+    }
+  };
+
+  const handleChangePassword = async (user: UserType) => {
+    const newPassword = prompt('Ingresa la nueva contraseña (mínimo 6 caracteres):');
+    if (!newPassword) return;
+    
+    if (newPassword.length < 6) {
+      alert('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    
+    try {
+      const { data: result, error } = await supabase.rpc('update_user_password', {
+        p_user_id: user.id,
+        p_new_password: newPassword
+      });
+      
+      if (error) throw error;
+      
+      const passwordResult = result as { success: boolean; error?: string };
+      if (!passwordResult.success) {
+        throw new Error(passwordResult.error || 'Error al actualizar contraseña');
+      }
+      
+      alert('Contraseña actualizada exitosamente');
+    } catch (error) {
+      console.error('Error updating password:', error);
+      alert('Error al actualizar contraseña: ' + (error as Error).message);
     }
   };
 
@@ -85,6 +144,7 @@ export default function UserManager() {
     setFormData({
       name: user.name,
       email: user.email,
+      password: '', // No mostrar contraseña actual
       role: user.role,
       is_active: user.is_active,
     });
@@ -210,7 +270,7 @@ export default function UserManager() {
           onClick={() => {
             setShowForm(true);
             setEditingUser(null);
-            setFormData({ name: '', email: '', role: 'employee', is_active: true });
+            setFormData({ name: '', email: '', password: '', role: 'employee', is_active: true });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
@@ -308,6 +368,43 @@ export default function UserManager() {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  {editingUser ? 'Nueva Contraseña (opcional)' : 'Contraseña *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required={!editingUser}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder={editingUser ? 'Dejar vacío para mantener actual' : 'Mínimo 6 caracteres'}
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? (
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {!editingUser && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    La contraseña debe tener al menos 6 caracteres
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -414,12 +511,23 @@ export default function UserManager() {
                   <button
                     onClick={() => handleEdit(user)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                    title="Editar usuario"
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
                   <button
+                    onClick={() => handleChangePassword(user)}
+                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                    title="Cambiar contraseña"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  </button>
+                  <button
                     onClick={() => handleDelete(user.id)}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                    title="Eliminar usuario"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

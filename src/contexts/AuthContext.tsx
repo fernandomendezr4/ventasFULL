@@ -105,14 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar si hay una sesión guardada
-    const sessionToken = localStorage.getItem('session_token');
-    if (sessionToken) {
-      validateSession(sessionToken);
-    } else {
-      // Verificar sesión de Supabase Auth
-      checkSupabaseSession();
-    }
+    // Verificar sesión de Supabase Auth
+    checkSupabaseSession();
   }, []);
 
   const checkSupabaseSession = async () => {
@@ -169,31 +163,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const validateSession = async (sessionToken: string) => {
-    try {
-      // Intentar validar como empleado
-      const { data: employeeData, error: employeeError } = await supabase.rpc('validate_employee_session', {
-        p_session_token: sessionToken
-      });
-
-      if (!employeeError && employeeData && employeeData.length > 0) {
-        const userData = employeeData[0];
-        setUser(userData);
-        loadDefaultPermissions(userData.role);
-        setLoading(false);
-        return;
-      }
-
-      // Si no es empleado, limpiar token y verificar Supabase Auth
-      localStorage.removeItem('session_token');
-      await checkSupabaseSession();
-    } catch (error) {
-      console.error('Error validating session:', error);
-      localStorage.removeItem('session_token');
-      await checkSupabaseSession();
-    }
-  };
-
   const loadDefaultPermissions = (role: string) => {
     const rolePermissions = DEFAULT_PERMISSIONS[role as keyof typeof DEFAULT_PERMISSIONS] || [];
     const permissionObjects = rolePermissions.map(permission => ({
@@ -208,47 +177,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
-      // Primero intentar autenticación como empleado
-      const { data: employeeData, error: employeeError } = await supabase.rpc('authenticate_employee', {
-        p_email: email,
-        p_password: password
-      });
-
-      if (!employeeError && employeeData && employeeData.length > 0) {
-        const authData = employeeData[0];
-        
-        // Limpiar cualquier sesión de Supabase Auth existente
-        await supabase.auth.signOut();
-        
-        // Guardar token de sesión
-        localStorage.setItem('session_token', authData.session_token);
-        
-        // Establecer usuario
-        setUser({
-          id: authData.user_id,
-          name: authData.name,
-          email: authData.email,
-          role: authData.role,
-          is_active: authData.is_active,
-          created_at: authData.created_at || new Date().toISOString()
-        });
-
-        // Cargar permisos por defecto
-        loadDefaultPermissions(authData.role);
-
-        return { error: null };
-      }
-
-      // Si no es empleado, intentar autenticación con Supabase Auth
+      // Autenticación con Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (!authError && authData.user) {
-        // Limpiar cualquier token de sesión de empleado existente
-        localStorage.removeItem('session_token');
-        
         // Buscar el usuario en la tabla users
         const { data: userData, error: userError } = await supabase
           .from('users')
@@ -280,19 +215,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      const sessionToken = localStorage.getItem('session_token');
-      if (sessionToken) {
-        // Intentar cerrar sesión de empleado
-        await supabase.rpc('logout_employee', {
-          p_session_token: sessionToken
-        });
-      }
-      // También cerrar sesión de Supabase Auth
+      // Cerrar sesión de Supabase Auth
       await supabase.auth.signOut();
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {
-      localStorage.removeItem('session_token');
       setUser(null);
       setPermissions([]);
     }

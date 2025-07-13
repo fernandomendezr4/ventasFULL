@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, X, Search, Package, User, UserPlus, Scan } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, X, Search, Package, User, UserPlus, Scan, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Product, CartItem, Customer } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function NewSale() {
+  const { user: currentUser } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,12 +40,40 @@ export default function NewSale() {
       setLoading(true);
       await Promise.all([
         loadProducts(),
-        loadCustomers()
+        loadCustomers(),
+        loadCurrentCashRegister()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCurrentCashRegister = async () => {
+    try {
+      let query = supabase
+        .from('cash_registers')
+        .select(`
+          *,
+          user:users(*)
+        `)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1);
+
+      // Si es empleado, solo mostrar su propia caja
+      if (currentUser?.role === 'employee') {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data, error } = await query.maybeSingle();
+
+      if (error) throw error;
+      setCurrentCashRegister(data);
+    } catch (error) {
+      console.error('Error loading current cash register:', error);
+      setCurrentCashRegister(null);
     }
   };
 
@@ -170,6 +201,11 @@ export default function NewSale() {
       return;
     }
 
+    if (!currentCashRegister) {
+      alert('Debe haber una caja abierta para realizar ventas. Ve a la sección de Caja Registradora para abrir una caja.');
+      return;
+    }
+
     if (paymentType === 'installment' && !selectedCustomer) {
       alert('Selecciona un cliente para ventas por abonos');
       return;
@@ -198,6 +234,7 @@ export default function NewSale() {
         discount_amount: discount,
         total_amount: total,
         customer_id: selectedCustomer?.id || null,
+        user_id: currentCashRegister.user_id,
         payment_type: paymentType,
         total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
         payment_status: paymentType === 'cash' ? 'paid' : 
@@ -238,6 +275,31 @@ export default function NewSale() {
         if (stockError) throw stockError;
       }
 
+      // Register sale movement in cash register
+      const { error: movementError } = await supabase
+        .from('cash_movements')
+        .insert([{
+          cash_register_id: currentCashRegister.id,
+          type: 'sale',
+          category: 'ventas_efectivo',
+          amount: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
+          description: `Venta #${sale.id.slice(-8)} - ${cart.length} productos`,
+          reference_id: sale.id,
+          created_by: currentCashRegister.user_id
+        }]);
+
+      if (movementError) console.error('Error registering sale movement:', movementError);
+
+      // Update cash register total sales
+      const { error: registerUpdateError } = await supabase
+        .from('cash_registers')
+        .update({
+          total_sales: (currentCashRegister.total_sales || 0) + (paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0))
+        })
+        .eq('id', currentCashRegister.id);
+
+      if (registerUpdateError) console.error('Error updating cash register:', registerUpdateError);
+
       // Record payment for cash sales
       if (paymentType === 'cash' || (paymentType === 'installment' && parseFloat(initialPayment) > 0)) {
         const paymentAmount = paymentType === 'cash' ? total : parseFloat(initialPayment);
@@ -273,12 +335,13 @@ export default function NewSale() {
       setDiscountAmount('');
       setPaymentType('cash');
       setInitialPayment('');
-      setInitialPayment('');
       setSearchTerm('');
       setBarcodeSearch('');
       
       // Reload products to update stock
       await loadProducts();
+      // Reload cash register to update totals
+      await loadCurrentCashRegister();
 
       alert(`Venta ${paymentType === 'cash' ? 'completada' : 'registrada'} exitosamente`);
     } catch (error) {
@@ -335,11 +398,22 @@ export default function NewSale() {
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
         <div className="flex items-center gap-4">
+          {/* Cash Register Status */}
+          <div className={`px-3 py-1 rounded-lg text-sm font-medium ${
+            currentCashRegister 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-red-100 text-red-800'
+          }`}>
+            {currentCashRegister 
+              ? `Caja Abierta - ${currentCashRegister.user?.name || 'Sin operador'}` 
+              : 'Sin Caja Abierta'}
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-slate-700">Tipo de pago:</label>
             <select
               value={paymentType}
               onChange={(e) => setPaymentType(e.target.value as 'cash' | 'installment')}
+              disabled={!currentCashRegister}
               className="px-3 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="cash">Efectivo</option>
@@ -348,6 +422,24 @@ export default function NewSale() {
           </div>
         </div>
       </div>
+
+      {/* Cash Register Warning */}
+      {!currentCashRegister && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <div className="flex items-center">
+            <AlertCircle className="h-5 w-5 text-red-600 mr-3" />
+            <div>
+              <h3 className="text-red-800 font-medium">Caja Registradora Cerrada</h3>
+              <p className="text-red-700 text-sm mt-1">
+                Debe abrir una caja registradora antes de realizar ventas. 
+                {currentUser?.role === 'employee' 
+                  ? ' Contacta a tu supervisor para abrir la caja.' 
+                  : ' Ve a la sección de Caja Registradora para abrir una caja.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Products Section */}
@@ -599,7 +691,7 @@ export default function NewSale() {
               
               <button
                 onClick={handleSale}
-                disabled={saving || cart.length === 0 || (paymentType === 'installment' && !selectedCustomer)}
+                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer)}
                 className="w-full mt-4 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
               >
                 {saving ? 'Procesando...' : 

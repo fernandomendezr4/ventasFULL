@@ -121,11 +121,16 @@ export default function CashRegister() {
         
         const currentBalance = totalIncome - totalExpenses;
         
+        // Calcular ganancias de ventas
+        const salesMovements = movementsData.filter(m => m.type === 'sale');
+        const totalSalesAmount = salesMovements.reduce((sum, m) => sum + m.amount, 0);
+        
         const registerWithBalance = {
           ...data,
           current_balance: currentBalance,
-          total_income: totalIncome - (data.opening_amount || 0), // Excluir monto inicial de ingresos
+          total_income: totalIncome - (data.opening_amount || 0),
           total_expenses: totalExpenses,
+          total_sales_amount: totalSalesAmount,
           cash_movements: movementsData
         };
         setCurrentRegister(registerWithBalance as CashRegisterWithMovements);
@@ -517,13 +522,27 @@ export default function CashRegister() {
               <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-emerald-600">Total Ingresos</p>
+                    <p className="text-sm font-medium text-emerald-600">Total Ventas</p>
                     <p className="text-xl font-bold text-emerald-900">
-                      {formatCurrency(currentRegister.total_income || 0)}
+                      {formatCurrency(currentRegister.total_sales_amount || 0)}
                     </p>
                   </div>
                   <div className="p-2 bg-emerald-100 rounded-full">
-                    <ArrowUpCircle className="h-6 w-6 text-emerald-600" />
+                    <ShoppingCart className="h-6 w-6 text-emerald-600" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-purple-600">Otros Ingresos</p>
+                    <p className="text-xl font-bold text-purple-900">
+                      {formatCurrency(currentRegister.total_income || 0)}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-purple-100 rounded-full">
+                    <ArrowUpCircle className="h-6 w-6 text-purple-600" />
                   </div>
                 </div>
               </div>

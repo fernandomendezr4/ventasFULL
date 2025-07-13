@@ -15,6 +15,7 @@ export default function NewSale() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [cashRegisterLoading, setCashRegisterLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [barcodeSearch, setBarcodeSearch] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -52,6 +53,7 @@ export default function NewSale() {
 
   const loadCurrentCashRegister = async () => {
     try {
+      setCashRegisterLoading(true);
       let query = supabase
         .from('cash_registers')
         .select(`
@@ -71,9 +73,19 @@ export default function NewSale() {
 
       if (error) throw error;
       setCurrentCashRegister(data);
+      
+      // Si no hay caja abierta, limpiar el carrito por seguridad
+      if (!data) {
+        setCart([]);
+        setSelectedCustomer(null);
+      }
     } catch (error) {
       console.error('Error loading current cash register:', error);
       setCurrentCashRegister(null);
+      setCart([]);
+      setSelectedCustomer(null);
+    } finally {
+      setCashRegisterLoading(false);
     }
   };
 
@@ -110,6 +122,11 @@ export default function NewSale() {
 
   const handleBarcodeSearch = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && barcodeSearch.trim()) {
+      if (!currentCashRegister) {
+        alert('Debe haber una caja abierta para buscar productos');
+        return;
+      }
+      
       const product = products.find(p => 
         p.barcode && p.barcode.toLowerCase() === barcodeSearch.trim().toLowerCase()
       );
@@ -123,6 +140,11 @@ export default function NewSale() {
   };
 
   const addToCart = (product: Product) => {
+    if (!currentCashRegister) {
+      alert('Debe haber una caja abierta para agregar productos al carrito');
+      return;
+    }
+    
     const existingItem = cart.find(item => item.product.id === product.id);
     
     if (existingItem) {
@@ -141,6 +163,11 @@ export default function NewSale() {
   };
 
   const updateQuantity = (productId: string, newQuantity: number) => {
+    if (!currentCashRegister) {
+      alert('Debe haber una caja abierta para modificar el carrito');
+      return;
+    }
+    
     if (newQuantity === 0) {
       removeFromCart(productId);
       return;
@@ -160,6 +187,11 @@ export default function NewSale() {
   };
 
   const removeFromCart = (productId: string) => {
+    if (!currentCashRegister) {
+      alert('Debe haber una caja abierta para modificar el carrito');
+      return;
+    }
+    
     setCart(cart.filter(item => item.product.id !== productId));
   };
 
@@ -425,16 +457,18 @@ export default function NewSale() {
 
       {/* Cash Register Warning */}
       {!currentCashRegister && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6 mb-6">
           <div className="flex items-center">
             <AlertCircle className="h-5 w-5 text-red-600 mr-3" />
             <div>
-              <h3 className="text-red-800 font-medium">Caja Registradora Cerrada</h3>
-              <p className="text-red-700 text-sm mt-1">
-                Debe abrir una caja registradora antes de realizar ventas. 
+              <h3 className="text-red-800 font-bold text-lg">⚠️ Caja Registradora Cerrada</h3>
+              <p className="text-red-700 mt-2">
+                <strong>No se pueden realizar ventas sin una caja abierta.</strong>
+              </p>
+              <p className="text-red-600 text-sm mt-1">
                 {currentUser?.role === 'employee' 
-                  ? ' Contacta a tu supervisor para abrir la caja.' 
-                  : ' Ve a la sección de Caja Registradora para abrir una caja.'}
+                  ? 'Contacta a tu supervisor para abrir la caja registradora.' 
+                  : 'Ve a la sección "Caja" en el menú lateral para abrir una caja registradora.'}
               </p>
             </div>
           </div>
@@ -442,7 +476,7 @@ export default function NewSale() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Products Section */}
+        {/* Products Section - Disabled if no cash register */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Productos</h3>
           
@@ -459,6 +493,7 @@ export default function NewSale() {
                 value={barcodeSearch}
                 onChange={(e) => setBarcodeSearch(e.target.value)}
                 onKeyDown={handleBarcodeSearch}
+                disabled={!currentCashRegister}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -474,6 +509,7 @@ export default function NewSale() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={!currentCashRegister}
               />
             </div>
           </div>
@@ -484,7 +520,12 @@ export default function NewSale() {
               <div className="text-center py-8">
                 <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                 <p className="text-slate-500">
-                  {products.length === 0 ? 'No hay productos con stock disponible' : 'No se encontraron productos'}
+                  {!currentCashRegister 
+                    ? 'Abre una caja registradora para ver los productos' 
+                    : products.length === 0 
+                      ? 'No hay productos con stock disponible' 
+                      : 'No se encontraron productos'
+                  }
                 </p>
               </div>
             ) : (
@@ -492,7 +533,8 @@ export default function NewSale() {
                 <div
                   key={product.id}
                   className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors duration-200"
-                  onClick={() => addToCart(product)}
+                  onClick={() => currentCashRegister && addToCart(product)}
+                  style={{ opacity: currentCashRegister ? 1 : 0.5, cursor: currentCashRegister ? 'pointer' : 'not-allowed' }}
                 >
                   <div className="flex-1">
                     <h4 className="font-medium text-slate-900">{product.name}</h4>
@@ -512,7 +554,11 @@ export default function NewSale() {
                       )}
                     </div>
                   </div>
-                  <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200">
+                  <button 
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                    disabled={!currentCashRegister}
+                    onClick={(e) => { e.stopPropagation(); currentCashRegister && addToCart(product); }}
+                  >
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
@@ -521,7 +567,7 @@ export default function NewSale() {
           </div>
         </div>
 
-        {/* Cart Section */}
+        {/* Cart Section - Disabled if no cash register */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
             <ShoppingCart className="h-5 w-5 mr-2" />
@@ -529,7 +575,7 @@ export default function NewSale() {
           </h3>
 
           {/* Customer Selection for Installments */}
-          {paymentType === 'installment' && (
+          {paymentType === 'installment' && currentCashRegister && (
             <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <h4 className="font-medium text-blue-900 mb-2">Cliente (requerido para abonos)</h4>
               {selectedCustomer ? (
@@ -556,6 +602,7 @@ export default function NewSale() {
                     <button
                       onClick={() => setShowCustomerList(true)}
                       className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm flex items-center justify-center"
+                      disabled={!currentCashRegister}
                     >
                       <User className="h-4 w-4 mr-1" />
                       Seleccionar Cliente
@@ -563,6 +610,7 @@ export default function NewSale() {
                     <button
                       onClick={() => setShowCustomerForm(true)}
                       className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
+                      disabled={!currentCashRegister}
                     >
                       <UserPlus className="h-4 w-4 mr-1" />
                       Nuevo
@@ -578,8 +626,14 @@ export default function NewSale() {
             {cart.length === 0 ? (
               <div className="text-center py-8">
                 <ShoppingCart className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-500">El carrito está vacío</p>
-                <p className="text-sm text-slate-400 mt-1">Agrega productos haciendo clic en ellos</p>
+                <p className="text-slate-500">
+                  {!currentCashRegister ? 'Caja cerrada - No se pueden agregar productos' : 'El carrito está vacío'}
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
+                  {!currentCashRegister 
+                    ? 'Abre una caja registradora para comenzar a vender' 
+                    : 'Agrega productos haciendo clic en ellos'}
+                </p>
               </div>
             ) : (
               cart.map((item) => (
@@ -594,6 +648,7 @@ export default function NewSale() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                      disabled={!currentCashRegister}
                       className="p-1 text-slate-600 hover:bg-slate-200 rounded transition-colors duration-200"
                     >
                       <Minus className="h-4 w-4" />
@@ -601,12 +656,14 @@ export default function NewSale() {
                     <span className="w-8 text-center font-medium">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                      disabled={!currentCashRegister}
                       className="p-1 text-slate-600 hover:bg-slate-200 rounded transition-colors duration-200"
                     >
                       <Plus className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => removeFromCart(item.product.id)}
+                      disabled={!currentCashRegister}
                       className="p-1 text-red-600 hover:bg-red-50 rounded ml-2 transition-colors duration-200"
                     >
                       <X className="h-4 w-4" />
@@ -621,7 +678,7 @@ export default function NewSale() {
           </div>
 
           {/* Discount */}
-          {cart.length > 0 && (
+          {cart.length > 0 && currentCashRegister && (
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Descuento (en pesos)
@@ -631,6 +688,7 @@ export default function NewSale() {
                 onChange={(value) => setDiscountAmount(value)}
                 placeholder="0"
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={!currentCashRegister}
                 min="0"
                 max={calculateSubtotal().toString()}
               />
@@ -638,7 +696,7 @@ export default function NewSale() {
           )}
 
           {/* Initial Payment for Installments */}
-          {cart.length > 0 && paymentType === 'installment' && (
+          {cart.length > 0 && paymentType === 'installment' && currentCashRegister && (
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Abono Inicial (opcional)
@@ -648,6 +706,7 @@ export default function NewSale() {
                 onChange={(value) => setInitialPayment(value)}
                 placeholder="0"
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={!currentCashRegister}
                 min="0"
                 max={calculateTotal().toString()}
               />
@@ -658,7 +717,7 @@ export default function NewSale() {
           )}
 
           {/* Total */}
-          {cart.length > 0 && (
+          {cart.length > 0 && currentCashRegister && (
             <div className="border-t border-slate-200 pt-4">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -691,7 +750,7 @@ export default function NewSale() {
               
               <button
                 onClick={handleSale}
-                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer)}
+                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer) || cashRegisterLoading}
                 className="w-full mt-4 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
               >
                 {saving ? 'Procesando...' : 
@@ -700,6 +759,17 @@ export default function NewSale() {
             </div>
           )}
         </div>
+        
+        {/* Message when no cash register */}
+        {!currentCashRegister && !loading && (
+          <div className="lg:col-span-2 bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+            <AlertCircle className="h-16 w-16 text-yellow-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-yellow-800 mb-2">Sistema de Ventas Deshabilitado</h3>
+            <p className="text-yellow-700 mb-4">
+              Para realizar ventas, primero debe abrir una caja registradora.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Customer List Modal */}

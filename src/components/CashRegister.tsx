@@ -424,7 +424,7 @@ export default function CashRegister() {
           {!currentRegister ? (
             <button
               onClick={() => setShowOpenForm(true)}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center text-lg font-medium shadow-lg"
             >
               <DollarSign className="h-4 w-4 mr-2" />
               Abrir Caja
@@ -484,7 +484,7 @@ export default function CashRegister() {
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
           <Calculator className="h-5 w-5 mr-2 text-blue-600" />
-          Estado Actual de la Caja
+          {currentRegister ? 'Caja Abierta - Estado Actual' : 'Estado de la Caja'}
         </h3>
         
         {currentRegister ? (
@@ -613,9 +613,9 @@ export default function CashRegister() {
           </div>
         ) : (
           <div className="text-center py-8">
-            <AlertCircle className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-500">No hay caja abierta actualmente</p>
-            <p className="text-sm text-slate-400 mt-1">Abre una caja para comenzar las operaciones del día</p>
+            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
+            <p className="text-slate-700 text-lg font-medium">No hay caja abierta actualmente</p>
+            <p className="text-slate-500 mt-2">Abre una caja para comenzar las operaciones del día y habilitar las ventas</p>
           </div>
         )}
       </div>

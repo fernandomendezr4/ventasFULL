@@ -19,6 +19,7 @@ export default function NewSale() {
   const [showCustomerList, setShowCustomerList] = useState(false);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
   const [discountAmount, setDiscountAmount] = useState('');
+  const [initialPayment, setInitialPayment] = useState('');
   const [customerFormData, setCustomerFormData] = useState({
     name: '',
     email: '',
@@ -198,8 +199,10 @@ export default function NewSale() {
         total_amount: total,
         customer_id: selectedCustomer?.id || null,
         payment_type: paymentType,
-        total_paid: paymentType === 'cash' ? total : 0,
-        payment_status: paymentType === 'cash' ? 'paid' : 'pending'
+        total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
+        payment_status: paymentType === 'cash' ? 'paid' : 
+                       (parseFloat(initialPayment) || 0) >= total ? 'paid' :
+                       (parseFloat(initialPayment) || 0) > 0 ? 'partial' : 'pending'
       };
 
       const { data: sale, error: saleError } = await supabase
@@ -236,17 +239,32 @@ export default function NewSale() {
       }
 
       // Record payment for cash sales
-      if (paymentType === 'cash') {
+      if (paymentType === 'cash' || (paymentType === 'installment' && parseFloat(initialPayment) > 0)) {
+        const paymentAmount = paymentType === 'cash' ? total : parseFloat(initialPayment);
         const { error: paymentError } = await supabase
           .from('payments')
           .insert([{
             sale_id: sale.id,
-            amount: total,
+            amount: paymentAmount,
             payment_method: 'cash',
-            notes: 'Pago completo en efectivo'
+            notes: paymentType === 'cash' ? 'Pago completo en efectivo' : 'Abono inicial'
           }]);
 
         if (paymentError) console.error('Error recording payment:', paymentError);
+        
+        // Record initial payment as installment if it's an installment sale
+        if (paymentType === 'installment' && parseFloat(initialPayment) > 0) {
+          const { error: installmentError } = await supabase
+            .from('payment_installments')
+            .insert([{
+              sale_id: sale.id,
+              amount_paid: parseFloat(initialPayment),
+              payment_method: 'cash',
+              notes: 'Abono inicial'
+            }]);
+
+          if (installmentError) console.error('Error recording initial installment:', installmentError);
+        }
       }
 
       // Reset form
@@ -254,6 +272,8 @@ export default function NewSale() {
       setSelectedCustomer(null);
       setDiscountAmount('');
       setPaymentType('cash');
+      setInitialPayment('');
+      setInitialPayment('');
       setSearchTerm('');
       setBarcodeSearch('');
       
@@ -525,6 +545,26 @@ export default function NewSale() {
             </div>
           )}
 
+          {/* Initial Payment for Installments */}
+          {cart.length > 0 && paymentType === 'installment' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Abono Inicial (opcional)
+              </label>
+              <FormattedNumberInput
+                value={initialPayment}
+                onChange={(value) => setInitialPayment(value)}
+                placeholder="0"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                min="0"
+                max={calculateTotal().toString()}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Monto que el cliente paga ahora. El resto quedará pendiente para futuros abonos.
+              </p>
+            </div>
+          )}
+
           {/* Total */}
           {cart.length > 0 && (
             <div className="border-t border-slate-200 pt-4">
@@ -539,10 +579,22 @@ export default function NewSale() {
                     <span>-{formatCurrency(parseFloat(discountAmount))}</span>
                   </div>
                 )}
+                {paymentType === 'installment' && parseFloat(initialPayment) > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Abono inicial:</span>
+                    <span>{formatCurrency(parseFloat(initialPayment))}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-lg font-bold border-t pt-2">
                   <span>Total:</span>
                   <span className="text-green-600">{formatCurrency(calculateTotal())}</span>
                 </div>
+                {paymentType === 'installment' && (
+                  <div className="flex justify-between text-sm text-orange-600">
+                    <span>Saldo pendiente:</span>
+                    <span>{formatCurrency(calculateTotal() - (parseFloat(initialPayment) || 0))}</span>
+                  </div>
+                )}
               </div>
               
               <button

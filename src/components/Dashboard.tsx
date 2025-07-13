@@ -3,8 +3,10 @@ import { TrendingUp, Package, ShoppingCart, DollarSign, Calendar, Users, AlertTr
 import { supabase } from '../lib/supabase';
 import { Sale, Product, SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     totalSales: 0,
     totalProducts: 0,
@@ -273,32 +275,34 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Acciones Rápidas</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button
-            onClick={() => window.location.hash = 'new-sale'}
-            className="flex items-center justify-center p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors duration-200 group"
-          >
-            <Plus className="h-5 w-5 text-green-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
-            <span className="font-medium text-green-700">Nueva Venta</span>
-          </button>
-          <button
-            onClick={() => window.location.hash = 'products'}
-            className="flex items-center justify-center p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors duration-200 group"
-          >
-            <Package className="h-5 w-5 text-purple-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
-            <span className="font-medium text-purple-700">Gestionar Productos</span>
-          </button>
-          <button
-            onClick={() => window.location.hash = 'cash-register'}
-            className="flex items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200 group"
-          >
-            <Calculator className="h-5 w-5 text-blue-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
-            <span className="font-medium text-blue-700">Abrir Caja</span>
-          </button>
+      {user?.role === 'admin' && (
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Acciones Rápidas</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button
+              onClick={() => window.location.hash = 'new-sale'}
+              className="flex items-center justify-center p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors duration-200 group"
+            >
+              <Plus className="h-5 w-5 text-green-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+              <span className="font-medium text-green-700">Nueva Venta</span>
+            </button>
+            <button
+              onClick={() => window.location.hash = 'products'}
+              className="flex items-center justify-center p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors duration-200 group"
+            >
+              <Package className="h-5 w-5 text-purple-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+              <span className="font-medium text-purple-700">Gestionar Productos</span>
+            </button>
+            <button
+              onClick={() => window.location.hash = 'cash-register'}
+              className="flex items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200 group"
+            >
+              <Calculator className="h-5 w-5 text-blue-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+              <span className="font-medium text-blue-700">Abrir Caja</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard } from 'lucide-react';
+import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UserProfile from './UserProfile';
 
@@ -66,6 +66,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
   const adminTabs = [
     { id: 'users', label: 'Usuarios', icon: User, category: 'admin', permission: 'manage_users' },
+    { id: 'settings', label: 'Configuración', icon: Settings, category: 'admin', permission: 'manage_settings' },
   ];
 
   const renderTabGroup = (title: string, tabs: typeof mainTabs, bgColor: string) => {
@@ -107,12 +108,29 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       <div className="w-64 bg-white shadow-lg border-r border-slate-200 flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-slate-200">
+          {React.useEffect(() => {
+            // Actualizar el título de la página con el nombre configurado
+            const savedSettings = localStorage.getItem('app_settings');
+            if (savedSettings) {
+              const settings = JSON.parse(savedSettings);
+              document.title = settings.app_name || 'VentasFULL';
+            }
+          }, [])}
           <div className="flex items-center">
             <div className="p-2 bg-blue-600 rounded-lg">
               <ShoppingCart className="h-6 w-6 text-white" />
             </div>
             <div className="ml-3">
-              <h1 className="text-lg font-bold text-slate-900">VentasFULL</h1>
+              <h1 className="text-lg font-bold text-slate-900">
+                {(() => {
+                  const savedSettings = localStorage.getItem('app_settings');
+                  if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    return settings.app_name || 'VentasFULL';
+                  }
+                  return 'VentasFULL';
+                })()}
+              </h1>
               <p className="text-xs text-slate-500">Sistema de Ventas</p>
             </div>
           </div>

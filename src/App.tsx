@@ -13,6 +13,7 @@ import CustomerManager from './components/CustomerManager';
 import UserManager from './components/UserManager';
 import CashRegister from './components/CashRegister';
 import InstallmentManager from './components/InstallmentManager';
+import Settings from './components/Settings';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -47,6 +48,8 @@ function AppContent() {
         return <UserManager />;
       case 'cash-register':
         return <CashRegister />;
+      case 'settings':
+        return <Settings />;
       default:
         return <Dashboard />;
     }

@@ -65,7 +65,8 @@ const DEFAULT_PERMISSIONS = {
     'view_users',
     'create_users',
     'edit_users',
-    'delete_users'
+    'delete_users',
+    'manage_settings'
   ],
   manager: [
     'view_dashboard',
@@ -85,7 +86,8 @@ const DEFAULT_PERMISSIONS = {
     'edit_customers',
     'view_suppliers',
     'create_suppliers',
-    'edit_suppliers'
+    'edit_suppliers',
+    'manage_settings'
   ],
   employee: [
     'view_dashboard',

@@ -217,6 +217,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!employeeError && employeeData && employeeData.length > 0) {
         const authData = employeeData[0];
         
+        // Limpiar cualquier sesión de Supabase Auth existente
+        await supabase.auth.signOut();
+        
         // Guardar token de sesión
         localStorage.setItem('session_token', authData.session_token);
         
@@ -243,6 +246,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!authError && authData.user) {
+        // Limpiar cualquier token de sesión de empleado existente
+        localStorage.removeItem('session_token');
+        
         // Buscar el usuario en la tabla users
         const { data: userData, error: userError } = await supabase
           .from('users')

@@ -128,6 +128,42 @@ export default function InstallmentManager() {
 
       if (paymentError) throw paymentError;
 
+      // Register payment in current cash register if open
+      try {
+        const { data: currentRegister } = await supabase
+          .from('cash_registers')
+          .select('*')
+          .eq('status', 'open')
+          .order('opened_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (currentRegister) {
+          // Register as sale movement in cash register
+          await supabase
+            .from('cash_movements')
+            .insert([{
+              cash_register_id: currentRegister.id,
+              type: 'sale',
+              category: 'ventas_efectivo',
+              amount: amount,
+              description: `Abono venta #${selectedSale.id.slice(-8)} - ${paymentNotes}`,
+              reference_id: selectedSale.id,
+              created_by: currentRegister.user_id
+            }]);
+
+          // Update cash register total sales
+          await supabase
+            .from('cash_registers')
+            .update({
+              total_sales: (currentRegister.total_sales || 0) + amount
+            })
+            .eq('id', currentRegister.id);
+        }
+      } catch (error) {
+        console.error('Error updating cash register with installment payment:', error);
+      }
+
       // Update sale total paid
       const newTotalPaid = selectedSale.total_paid + amount;
       const { error: saleUpdateError } = await supabase

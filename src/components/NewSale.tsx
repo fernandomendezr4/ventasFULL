@@ -1043,7 +1043,32 @@ export default function NewSale() {
                   sale={completedSale}
                   settings={(() => {
                     const savedSettings = localStorage.getItem('app_settings');
-                    return savedSettings ? JSON.parse(savedSettings) : {
+                    const printSettings = localStorage.getItem('print_settings');
+                    if (savedSettings || printSettings) {
+                      const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
+                      const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                      return {
+                        print_enabled: true,
+                        auto_print: false,
+                        print_copies: 1,
+                        receipt_width: '80mm',
+                        show_logo: true,
+                        show_company_info: true,
+                        show_customer_info: true,
+                        show_payment_details: true,
+                        show_footer_message: true,
+                        footer_message: '¡Gracias por su compra!',
+                        receipt_header: '',
+                        receipt_footer: 'Conserve este comprobante',
+                        company_name: 'VentasFULL',
+                        company_address: '',
+                        company_phone: '',
+                        company_email: '',
+                        ...appSettings,
+                        ...printConfig
+                      };
+                    }
+                    return {
                       print_enabled: true,
                       auto_print: false,
                       print_copies: 1,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatCurrency } from '../lib/currency';
 import { SaleWithItems } from '../lib/types';
+import { Printer } from 'lucide-react';
 
 interface PrintServiceProps {
   sale: SaleWithItems;
@@ -72,6 +73,12 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
   const generateReceiptHTML = (sale: SaleWithItems, settings: any) => {
     let html = '';
 
+    // Aplicar configuración de fuente y espaciado
+    const fontSize = settings.font_size === 'small' ? '10px' : 
+                    settings.font_size === 'large' ? '14px' : '12px';
+    const lineHeight = settings.line_spacing === 'compact' ? '1.2' : 
+                      settings.line_spacing === 'relaxed' ? '1.6' : '1.4';
+
     // Logo
     if (settings.show_logo) {
       html += `
@@ -89,6 +96,8 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           ${settings.company_address ? `<div>${settings.company_address}</div>` : ''}
           ${settings.company_phone ? `<div>Tel: ${settings.company_phone}</div>` : ''}
           ${settings.company_email ? `<div>${settings.company_email}</div>` : ''}
+          ${settings.company_website ? `<div>${settings.company_website}</div>` : ''}
+          ${settings.tax_id ? `<div>NIT: ${settings.tax_id}</div>` : ''}
         </div>
       `;
     }
@@ -122,6 +131,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           <div>Cliente: ${sale.customer.name}</div>
           ${sale.customer.cedula ? `<div>CC: ${sale.customer.cedula}</div>` : ''}
           ${sale.customer.phone ? `<div>Tel: ${sale.customer.phone}</div>` : ''}
+          ${sale.customer.email ? `<div>Email: ${sale.customer.email}</div>` : ''}
         </div>
       `;
     }
@@ -182,6 +192,27 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       `;
     }
 
+    // Códigos de barras y QR
+    if (settings.show_barcode || settings.show_qr_code) {
+      html += '<div class="center" style="margin-top: 10px;">';
+      
+      if (settings.show_barcode) {
+        html += `
+          <div style="background: #000; height: 30px; width: 120px; margin: 5px auto;"></div>
+          <div style="font-size: 10px;">${sale.id.slice(-8)}</div>
+        `;
+      }
+      
+      if (settings.show_qr_code) {
+        html += `
+          <div style="background: #000; height: 60px; width: 60px; margin: 5px auto;"></div>
+          <div style="font-size: 10px;">Código QR</div>
+        `;
+      }
+      
+      html += '</div>';
+    }
+
     // Footer Message
     if (settings.show_footer_message && settings.footer_message) {
       html += `
@@ -200,17 +231,20 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       `;
     }
 
+    // Aplicar CSS personalizado si existe
+    if (settings.custom_css) {
+      html = `<style>${settings.custom_css}</style>` + html;
+    }
+
     return html;
   };
 
   return (
     <button
       onClick={printReceipt}
-      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center text-sm"
     >
-      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-      </svg>
+      <Printer className="h-4 w-4 mr-2" />
       Imprimir Comprobante
     </button>
   );

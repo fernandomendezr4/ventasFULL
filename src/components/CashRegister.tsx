@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart } from 'lucide-react';
+import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Plus, Minus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, User as UserType, CashMovement } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -26,6 +26,8 @@ export default function CashRegister() {
   const [showOpenForm, setShowOpenForm] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [showMovementsModal, setShowMovementsModal] = useState(false);
+  const [showIncomeForm, setShowIncomeForm] = useState(false);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
   
   const [openFormData, setOpenFormData] = useState({
     opening_amount: '',
@@ -36,6 +38,36 @@ export default function CashRegister() {
     closing_amount: '',
     notes: '',
   });
+
+  const [incomeFormData, setIncomeFormData] = useState({
+    amount: '',
+    category: 'ingresos_adicionales',
+    description: '',
+  });
+
+  const [expenseFormData, setExpenseFormData] = useState({
+    amount: '',
+    category: 'gastos_operativos',
+    description: '',
+  });
+
+  // Categorías para ingresos y egresos
+  const incomeCategories = {
+    'ingresos_adicionales': 'Ingresos Adicionales',
+    'devoluciones': 'Devoluciones de Proveedores',
+    'otros_ingresos': 'Otros Ingresos',
+  };
+
+  const expenseCategories = {
+    'gastos_operativos': 'Gastos Operativos',
+    'servicios_publicos': 'Servicios Públicos',
+    'mantenimiento': 'Mantenimiento',
+    'compras_inventario': 'Compras de Inventario',
+    'gastos_personal': 'Gastos de Personal',
+    'otros_gastos': 'Otros Gastos',
+  };
+
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
   useEffect(() => {
     loadData();
@@ -252,6 +284,92 @@ export default function CashRegister() {
     }
   };
 
+  const handleIncome = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentRegister) return;
+
+    try {
+      const amount = parseFloat(incomeFormData.amount);
+      
+      if (isNaN(amount) || amount <= 0) {
+        alert('El monto debe ser un número válido mayor a 0');
+        return;
+      }
+
+      if (!incomeFormData.description.trim()) {
+        alert('La descripción es requerida');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('cash_movements')
+        .insert([{
+          cash_register_id: currentRegister.id,
+          type: 'income',
+          category: incomeFormData.category,
+          amount: amount,
+          description: incomeFormData.description,
+          created_by: currentUser?.id
+        }]);
+
+      if (error) throw error;
+
+      setShowIncomeForm(false);
+      setIncomeFormData({ amount: '', category: 'ingresos_adicionales', description: '' });
+      await loadData();
+      alert('Ingreso registrado exitosamente');
+    } catch (error) {
+      console.error('Error registering income:', error);
+      alert('Error al registrar ingreso: ' + (error as Error).message);
+    }
+  };
+
+  const handleExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentRegister) return;
+
+    try {
+      const amount = parseFloat(expenseFormData.amount);
+      
+      if (isNaN(amount) || amount <= 0) {
+        alert('El monto debe ser un número válido mayor a 0');
+        return;
+      }
+
+      if (!expenseFormData.description.trim()) {
+        alert('La descripción es requerida');
+        return;
+      }
+
+      // Verificar que hay suficiente dinero en caja
+      if (amount > (currentRegister.current_balance || 0)) {
+        alert('No hay suficiente dinero en caja para este egreso');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('cash_movements')
+        .insert([{
+          cash_register_id: currentRegister.id,
+          type: 'expense',
+          category: expenseFormData.category,
+          amount: amount,
+          description: expenseFormData.description,
+          created_by: currentUser?.id
+        }]);
+
+      if (error) throw error;
+
+      setShowExpenseForm(false);
+      setExpenseFormData({ amount: '', category: 'gastos_operativos', description: '' });
+      await loadData();
+      alert('Egreso registrado exitosamente');
+    } catch (error) {
+      console.error('Error registering expense:', error);
+      alert('Error al registrar egreso: ' + (error as Error).message);
+    }
+  };
+
   const calculateDifference = () => {
     if (!currentRegister || !closeFormData.closing_amount) return 0;
     const expected = currentRegister.current_balance || 0;
@@ -349,6 +467,25 @@ export default function CashRegister() {
             </button>
           ) : (
             <>
+              {/* Botones para administradores */}
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={() => setShowIncomeForm(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ingreso
+                  </button>
+                  <button
+                    onClick={() => setShowExpenseForm(true)}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
+                  >
+                    <Minus className="h-4 w-4 mr-2" />
+                    Egreso
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setShowMovementsModal(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
@@ -633,6 +770,142 @@ export default function CashRegister() {
               <button
                 type="button"
                 onClick={() => setShowCloseForm(false)}
+                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Income Form - Solo para administradores */}
+      {showIncomeForm && isAdmin && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Registrar Ingreso</h3>
+          <form onSubmit={handleIncome} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Monto
+                </label>
+                <FormattedNumberInput
+                  value={incomeFormData.amount}
+                  onChange={(value) => setIncomeFormData({ ...incomeFormData, amount: value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                  min="0"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Categoría
+                </label>
+                <select
+                  value={incomeFormData.category}
+                  onChange={(e) => setIncomeFormData({ ...incomeFormData, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  {Object.entries(incomeCategories).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Descripción
+              </label>
+              <textarea
+                value={incomeFormData.description}
+                onChange={(e) => setIncomeFormData({ ...incomeFormData, description: e.target.value })}
+                rows={3}
+                required
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Describe el motivo del ingreso..."
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
+              >
+                Registrar Ingreso
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowIncomeForm(false)}
+                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Expense Form - Solo para administradores */}
+      {showExpenseForm && isAdmin && (
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Registrar Egreso</h3>
+          <form onSubmit={handleExpense} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Monto
+                </label>
+                <FormattedNumberInput
+                  value={expenseFormData.amount}
+                  onChange={(value) => setExpenseFormData({ ...expenseFormData, amount: value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  required
+                  min="0"
+                  max={(currentRegister?.current_balance || 0).toString()}
+                  placeholder="0"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Disponible en caja: {formatCurrency(currentRegister?.current_balance || 0)}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Categoría
+                </label>
+                <select
+                  value={expenseFormData.category}
+                  onChange={(e) => setExpenseFormData({ ...expenseFormData, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  {Object.entries(expenseCategories).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Descripción
+              </label>
+              <textarea
+                value={expenseFormData.description}
+                onChange={(e) => setExpenseFormData({ ...expenseFormData, description: e.target.value })}
+                rows={3}
+                required
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                placeholder="Describe el motivo del egreso..."
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200"
+              >
+                Registrar Egreso
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowExpenseForm(false)}
                 className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cancelar

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Download, Edit2, Save, Database, FileText, Package, Users, ShoppingCart, AlertCircle, CheckCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Download, Edit2, Save, Database, FileText, Package, Users, ShoppingCart, AlertCircle, CheckCircle, Sun, Moon, Monitor } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface AppSettings {
   app_name: string;
@@ -14,6 +15,7 @@ interface AppSettings {
 
 export default function Settings() {
   const { user } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [sqlExportLoading, setSqlExportLoading] = useState(false);
@@ -469,7 +471,74 @@ export default function Settings() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          {/* Configuración de Tema */}
+          <div>
+            <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+              <Sun className="h-4 w-4 mr-2 text-yellow-600" />
+              Apariencia
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <button
+                onClick={() => setTheme('light')}
+                className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+                  theme === 'light'
+                    ? 'border-blue-500 bg-blue-50 text-blue-900'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex flex-col items-center space-y-2">
+                  <Sun className="h-6 w-6" />
+                  <span className="font-medium">Claro</span>
+                  <span className="text-xs opacity-75">Tema claro</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setTheme('dark')}
+                className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+                  theme === 'dark'
+                    ? 'border-blue-500 bg-blue-50 text-blue-900'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex flex-col items-center space-y-2">
+                  <Moon className="h-6 w-6" />
+                  <span className="font-medium">Oscuro</span>
+                  <span className="text-xs opacity-75">Tema oscuro</span>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => {
+                  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  setTheme(systemTheme);
+                }}
+                className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+                  !localStorage.getItem('app_theme') || localStorage.getItem('app_theme') === 'system'
+                    ? 'border-blue-500 bg-blue-50 text-blue-900'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex flex-col items-center space-y-2">
+                  <Monitor className="h-6 w-6" />
+                  <span className="font-medium">Sistema</span>
+                  <span className="text-xs opacity-75">Automático</span>
+                </div>
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 mt-3">
+              Selecciona el tema de la aplicación. El tema del sistema se ajustará automáticamente según la configuración de tu dispositivo.
+            </p>
+          </div>
+
+          {/* Configuración de la Empresa */}
+          <div>
+            <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+              <Edit2 className="h-4 w-4 mr-2 text-blue-600" />
+              Información de la Empresa
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Nombre del Software
@@ -583,6 +652,8 @@ export default function Settings() {
               </div>
             )}
           </div>
+          </div>
+        </div>
         </div>
       </div>
 

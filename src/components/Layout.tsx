@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import UserProfile from './UserProfile';
 
 interface LayoutProps {
@@ -11,6 +12,7 @@ interface LayoutProps {
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
   const { user, hasPermission, permissions } = useAuth();
+  const { theme } = useTheme();
   const [showProfile, setShowProfile] = React.useState(false);
 
   const getRoleColor = (role: string) => {
@@ -103,11 +105,11 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex transition-colors duration-200">
       {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg border-r border-slate-200 flex flex-col">
+      <div className="w-64 bg-white dark:bg-slate-800 shadow-lg border-r border-slate-200 dark:border-slate-700 flex flex-col transition-colors duration-200">
         {/* Header */}
-        <div className="p-6 border-b border-slate-200">
+        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           {React.useEffect(() => {
             // Actualizar el título de la página con el nombre configurado
             const savedSettings = localStorage.getItem('app_settings');
@@ -117,11 +119,11 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             }
           }, [])}
           <div className="flex items-center">
-            <div className="p-2 bg-blue-600 rounded-lg">
+            <div className="p-2 bg-blue-600 dark:bg-blue-500 rounded-lg">
               <ShoppingCart className="h-6 w-6 text-white" />
             </div>
             <div className="ml-3">
-              <h1 className="text-lg font-bold text-slate-900">
+              <h1 className="text-lg font-bold text-slate-900 dark:text-white">
                 {(() => {
                   const savedSettings = localStorage.getItem('app_settings');
                   if (savedSettings) {
@@ -131,7 +133,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                   return 'VentasFULL';
                 })()}
               </h1>
-              <p className="text-xs text-slate-500">Sistema de Ventas</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Sistema de Ventas</p>
             </div>
           </div>
         </div>
@@ -154,19 +156,19 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-700">
           <div className="text-center space-y-2">
             <button
               onClick={() => setShowProfile(true)}
-              className="w-full p-2 text-left hover:bg-slate-50 rounded-lg transition-colors duration-200"
+              className="w-full p-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors duration-200"
             >
               <div className="flex items-center">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                  <User className="h-4 w-4 text-blue-600" />
+                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mr-3">
+                  <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{user?.name}</p>
-                  <p className="text-xs text-slate-500 truncate">{getRoleLabel(user?.role || '')}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user?.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{getRoleLabel(user?.role || '')}</p>
                 </div>
               </div>
             </button>
@@ -177,10 +179,10 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
-        <div className="bg-white shadow-sm border-b border-slate-200 px-6 py-4">
+        <div className="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 px-6 py-4 transition-colors duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
                 {mainTabs.find(tab => tab.id === activeTab)?.label ||
                  salesTabs.find(tab => tab.id === activeTab)?.label ||
                  inventoryTabs.find(tab => tab.id === activeTab)?.label ||
@@ -188,7 +190,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                  adminTabs.find(tab => tab.id === activeTab)?.label ||
                  'Dashboard'}
               </h2>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
                 {new Date().toLocaleDateString('es-ES', { 
                   weekday: 'long', 
                   year: 'numeric', 
@@ -199,16 +201,16 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             </div>
             <div className="flex items-center space-x-3">
               <div className="text-right">
-                <p className="text-sm font-medium text-slate-900">{user?.name}</p>
+                <p className="text-sm font-medium text-slate-900 dark:text-white">{user?.name}</p>
                 <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(user?.role || '')}`}>
                   {getRoleLabel(user?.role || '')}
                 </span>
               </div>
               <button
                 onClick={() => setShowProfile(true)}
-                className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center hover:bg-blue-200 transition-colors duration-200"
+                className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors duration-200"
               >
-                <User className="h-4 w-4 text-blue-600" />
+                <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </button>
             </div>
           </div>

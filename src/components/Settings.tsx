@@ -16,7 +16,9 @@ export default function Settings() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [sqlExportLoading, setSqlExportLoading] = useState(false);
   const [exportStatus, setExportStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [sqlExportStatus, setSqlExportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [settings, setSettings] = useState<AppSettings>({
     app_name: 'VentasFULL',
     app_version: '1.0.0',
@@ -159,6 +161,223 @@ export default function Settings() {
     }
   };
 
+  const exportDatabaseSQL = async () => {
+    try {
+      setSqlExportLoading(true);
+      setSqlExportStatus('idle');
+
+      // Obtener datos de todas las tablas principales
+      const [
+        categoriesResult,
+        suppliersResult,
+        customersResult,
+        usersResult,
+        productsResult,
+        salesResult,
+        saleItemsResult,
+        cashRegistersResult,
+        cashMovementsResult,
+        paymentsResult,
+        installmentsResult
+      ] = await Promise.all([
+        supabase.from('categories').select('*').order('created_at'),
+        supabase.from('suppliers').select('*').order('created_at'),
+        supabase.from('customers').select('*').order('created_at'),
+        supabase.from('users').select('*').order('created_at'),
+        supabase.from('products').select('*').order('created_at'),
+        supabase.from('sales').select('*').order('created_at'),
+        supabase.from('sale_items').select('*'),
+        supabase.from('cash_registers').select('*').order('created_at'),
+        supabase.from('cash_movements').select('*').order('created_at'),
+        supabase.from('payments').select('*').order('created_at'),
+        supabase.from('payment_installments').select('*').order('created_at')
+      ]);
+
+      // Verificar errores
+      const results = [
+        categoriesResult, suppliersResult, customersResult, usersResult,
+        productsResult, salesResult, saleItemsResult, cashRegistersResult,
+        cashMovementsResult, paymentsResult, installmentsResult
+      ];
+
+      for (const result of results) {
+        if (result.error) {
+          throw result.error;
+        }
+      }
+
+      // Función para escapar valores SQL
+      const escapeSqlValue = (value: any): string => {
+        if (value === null || value === undefined) {
+          return 'NULL';
+        }
+        if (typeof value === 'string') {
+          return `'${value.replace(/'/g, "''")}'`;
+        }
+        if (typeof value === 'boolean') {
+          return value ? 'true' : 'false';
+        }
+        if (value instanceof Date) {
+          return `'${value.toISOString()}'`;
+        }
+        return String(value);
+      };
+
+      // Función para generar INSERT statements
+      const generateInserts = (tableName: string, data: any[]): string => {
+        if (!data || data.length === 0) {
+          return `-- No hay datos para la tabla ${tableName}\n\n`;
+        }
+
+        const columns = Object.keys(data[0]);
+        let sql = `-- Datos para la tabla ${tableName}\n`;
+        sql += `-- Total de registros: ${data.length}\n\n`;
+
+        // Generar INSERTs en lotes de 100 para mejor rendimiento
+        const batchSize = 100;
+        for (let i = 0; i < data.length; i += batchSize) {
+          const batch = data.slice(i, i + batchSize);
+          
+          sql += `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES\n`;
+          
+          const values = batch.map(row => {
+            const rowValues = columns.map(col => escapeSqlValue(row[col]));
+            return `  (${rowValues.join(', ')})`;
+          });
+          
+          sql += values.join(',\n');
+          sql += ';\n\n';
+        }
+
+        return sql;
+      };
+
+      // Construir el archivo SQL completo
+      let sqlContent = '';
+      
+      // Header del archivo
+      sqlContent += `-- =====================================================\n`;
+      sqlContent += `-- EXPORTACIÓN COMPLETA DE BASE DE DATOS - ${settings.app_name}\n`;
+      sqlContent += `-- =====================================================\n`;
+      sqlContent += `-- Fecha de exportación: ${new Date().toLocaleString('es-ES')}\n`;
+      sqlContent += `-- Exportado por: ${user?.name || 'Usuario desconocido'}\n`;
+      sqlContent += `-- Versión del sistema: ${settings.app_version}\n`;
+      sqlContent += `-- =====================================================\n\n`;
+
+      // Configuraciones iniciales
+      sqlContent += `-- Configuraciones para la importación\n`;
+      sqlContent += `SET client_encoding = 'UTF8';\n`;
+      sqlContent += `SET standard_conforming_strings = on;\n`;
+      sqlContent += `SET check_function_bodies = false;\n`;
+      sqlContent += `SET xmloption = content;\n`;
+      sqlContent += `SET client_min_messages = warning;\n`;
+      sqlContent += `SET row_security = off;\n\n`;
+
+      // Deshabilitar triggers temporalmente
+      sqlContent += `-- Deshabilitar triggers durante la importación\n`;
+      sqlContent += `SET session_replication_role = replica;\n\n`;
+
+      // Limpiar datos existentes (comentado por seguridad)
+      sqlContent += `-- ADVERTENCIA: Descomenta las siguientes líneas solo si quieres limpiar los datos existentes\n`;
+      sqlContent += `-- TRUNCATE TABLE payment_installments CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE payments CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE cash_movements CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE sale_items CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE sales CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE cash_registers CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE products CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE customers CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE users CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE suppliers CASCADE;\n`;
+      sqlContent += `-- TRUNCATE TABLE categories CASCADE;\n\n`;
+
+      // Insertar datos en orden de dependencias
+      sqlContent += `-- =====================================================\n`;
+      sqlContent += `-- INSERCIÓN DE DATOS\n`;
+      sqlContent += `-- =====================================================\n\n`;
+
+      // 1. Categorías (sin dependencias)
+      sqlContent += generateInserts('categories', categoriesResult.data || []);
+
+      // 2. Proveedores (sin dependencias)
+      sqlContent += generateInserts('suppliers', suppliersResult.data || []);
+
+      // 3. Clientes (sin dependencias)
+      sqlContent += generateInserts('customers', customersResult.data || []);
+
+      // 4. Usuarios (sin dependencias)
+      sqlContent += generateInserts('users', usersResult.data || []);
+
+      // 5. Productos (depende de categorías y proveedores)
+      sqlContent += generateInserts('products', productsResult.data || []);
+
+      // 6. Cajas registradoras (depende de usuarios)
+      sqlContent += generateInserts('cash_registers', cashRegistersResult.data || []);
+
+      // 7. Ventas (depende de clientes y usuarios)
+      sqlContent += generateInserts('sales', salesResult.data || []);
+
+      // 8. Items de venta (depende de ventas y productos)
+      sqlContent += generateInserts('sale_items', saleItemsResult.data || []);
+
+      // 9. Movimientos de caja (depende de cajas registradoras)
+      sqlContent += generateInserts('cash_movements', cashMovementsResult.data || []);
+
+      // 10. Pagos (depende de ventas)
+      sqlContent += generateInserts('payments', paymentsResult.data || []);
+
+      // 11. Abonos (depende de ventas)
+      sqlContent += generateInserts('payment_installments', installmentsResult.data || []);
+
+      // Rehabilitar triggers
+      sqlContent += `-- Rehabilitar triggers\n`;
+      sqlContent += `SET session_replication_role = DEFAULT;\n\n`;
+
+      // Actualizar secuencias (si las hay)
+      sqlContent += `-- Actualizar secuencias de IDs (si es necesario)\n`;
+      sqlContent += `-- SELECT setval('categories_id_seq', (SELECT MAX(id) FROM categories));\n`;
+      sqlContent += `-- Repite para otras tablas con secuencias...\n\n`;
+
+      // Footer
+      sqlContent += `-- =====================================================\n`;
+      sqlContent += `-- FIN DE LA EXPORTACIÓN\n`;
+      sqlContent += `-- =====================================================\n`;
+      sqlContent += `-- Total de registros exportados:\n`;
+      sqlContent += `-- - Categorías: ${categoriesResult.data?.length || 0}\n`;
+      sqlContent += `-- - Proveedores: ${suppliersResult.data?.length || 0}\n`;
+      sqlContent += `-- - Clientes: ${customersResult.data?.length || 0}\n`;
+      sqlContent += `-- - Usuarios: ${usersResult.data?.length || 0}\n`;
+      sqlContent += `-- - Productos: ${productsResult.data?.length || 0}\n`;
+      sqlContent += `-- - Cajas registradoras: ${cashRegistersResult.data?.length || 0}\n`;
+      sqlContent += `-- - Ventas: ${salesResult.data?.length || 0}\n`;
+      sqlContent += `-- - Items de venta: ${saleItemsResult.data?.length || 0}\n`;
+      sqlContent += `-- - Movimientos de caja: ${cashMovementsResult.data?.length || 0}\n`;
+      sqlContent += `-- - Pagos: ${paymentsResult.data?.length || 0}\n`;
+      sqlContent += `-- - Abonos: ${installmentsResult.data?.length || 0}\n`;
+      sqlContent += `-- =====================================================\n`;
+
+      // Crear y descargar archivo SQL
+      const sqlBlob = new Blob([sqlContent], { type: 'application/sql; charset=utf-8' });
+      const url = URL.createObjectURL(sqlBlob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${settings.app_name.toLowerCase().replace(/\s+/g, '_')}_backup_${new Date().toISOString().split('T')[0]}.sql`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setSqlExportStatus('success');
+    } catch (error) {
+      console.error('Error exporting database to SQL:', error);
+      setSqlExportStatus('error');
+      alert('Error al exportar la base de datos a SQL: ' + (error as Error).message);
+    } finally {
+      setSqlExportLoading(false);
+    }
+  };
+
   const getExportStatusIcon = () => {
     switch (exportStatus) {
       case 'success':
@@ -178,6 +397,28 @@ export default function Settings() {
         return 'Error en la exportación';
       default:
         return 'Exportar Base de Datos';
+    }
+  };
+
+  const getSqlExportStatusIcon = () => {
+    switch (sqlExportStatus) {
+      case 'success':
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'error':
+        return <AlertCircle className="h-4 w-4 text-red-600" />;
+      default:
+        return <Database className="h-4 w-4" />;
+    }
+  };
+
+  const getSqlExportStatusText = () => {
+    switch (sqlExportStatus) {
+      case 'success':
+        return 'Exportación SQL completada';
+      case 'error':
+        return 'Error en la exportación SQL';
+      default:
+        return 'Exportar a SQL';
     }
   };
 
@@ -358,15 +599,14 @@ export default function Settings() {
             <div>
               <h4 className="font-medium text-blue-900 mb-1">Información sobre la exportación</h4>
               <p className="text-blue-800 text-sm">
-                Esta función exportará todos los datos de la base de datos en formato JSON. 
-                Incluye productos, categorías, clientes, ventas, usuarios y toda la información del sistema.
-                El archivo se descargará automáticamente a tu dispositivo.
+                Estas funciones exportarán todos los datos de la base de datos. Puedes elegir entre formato JSON (para respaldo) 
+                o formato SQL (para migración/importación). Incluye productos, categorías, clientes, ventas, usuarios y toda la información del sistema.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <h4 className="font-medium text-slate-900 mb-3">¿Qué se incluye en la exportación?</h4>
             <div className="space-y-2 text-sm text-slate-600">
@@ -394,9 +634,9 @@ export default function Settings() {
           </div>
 
           <div>
-            <h4 className="font-medium text-slate-900 mb-3">Exportar Datos</h4>
+            <h4 className="font-medium text-slate-900 mb-3">Exportar a JSON</h4>
             <p className="text-sm text-slate-600 mb-4">
-              Genera un archivo de respaldo completo de toda la información del sistema.
+              Genera un archivo JSON de respaldo completo para análisis o migración.
             </p>
             <button
               onClick={exportDatabase}
@@ -423,12 +663,52 @@ export default function Settings() {
             </button>
             {exportStatus === 'success' && (
               <p className="text-sm text-green-600 mt-2 text-center">
-                ✓ Archivo descargado exitosamente
+                ✓ Archivo JSON descargado exitosamente
               </p>
             )}
             {exportStatus === 'error' && (
               <p className="text-sm text-red-600 mt-2 text-center">
-                ✗ Error al generar el archivo
+                ✗ Error al generar el archivo JSON
+              </p>
+            )}
+          </div>
+
+          <div>
+            <h4 className="font-medium text-slate-900 mb-3">Exportar a SQL</h4>
+            <p className="text-sm text-slate-600 mb-4">
+              Genera un archivo SQL completo con INSERT statements para importación directa.
+            </p>
+            <button
+              onClick={exportDatabaseSQL}
+              disabled={sqlExportLoading}
+              className={`w-full px-4 py-3 rounded-lg font-medium transition-colors duration-200 flex items-center justify-center ${
+                sqlExportStatus === 'success'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : sqlExportStatus === 'error'
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-purple-600 hover:bg-purple-700 text-white'
+              } ${sqlExportLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {sqlExportLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Exportando SQL...
+                </>
+              ) : (
+                <>
+                  {getSqlExportStatusIcon()}
+                  <span className="ml-2">{getSqlExportStatusText()}</span>
+                </>
+              )}
+            </button>
+            {sqlExportStatus === 'success' && (
+              <p className="text-sm text-green-600 mt-2 text-center">
+                ✓ Archivo SQL descargado exitosamente
+              </p>
+            )}
+            {sqlExportStatus === 'error' && (
+              <p className="text-sm text-red-600 mt-2 text-center">
+                ✗ Error al generar el archivo SQL
               </p>
             )}
           </div>

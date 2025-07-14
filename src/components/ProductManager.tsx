@@ -4,8 +4,14 @@ import { supabase } from '../lib/supabase';
 import { ProductWithCategory, Category, Supplier } from '../lib/types';
 import { formatCurrency, calculateProfit, calculateProfitMargin } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 export default function ProductManager() {
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -113,9 +119,18 @@ export default function ProductManager() {
       setEditingProduct(null);
       setFormData({ name: '', description: '', sale_price: '', purchase_price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
       loadProducts();
+      showSuccess(
+        editingProduct ? '¡Producto Actualizado!' : '¡Producto Creado!',
+        editingProduct 
+          ? `El producto ${formData.name} ha sido actualizado exitosamente`
+          : `El producto ${formData.name} ha sido creado exitosamente`
+      );
     } catch (error) {
       console.error('Error saving product:', error);
-      alert('Error al guardar producto: ' + (error as Error).message);
+      showError(
+        'Error al Guardar Producto',
+        'No se pudo guardar el producto. ' + (error as Error).message
+      );
     }
   };
 
@@ -135,19 +150,39 @@ export default function ProductManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
-      try {
-        const { error } = await supabase
-          .from('products')
-          .delete()
-          .eq('id', id);
+    const product = products.find(p => p.id === id);
+    if (!product) return;
 
-        if (error) throw error;
-        loadProducts();
-      } catch (error) {
-        console.error('Error deleting product:', error);
+    showConfirmation(
+      'Eliminar Producto',
+      `¿Estás seguro de que quieres eliminar el producto "${product.name}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('products')
+            .delete()
+            .eq('id', id);
+
+          if (error) throw error;
+          loadProducts();
+          showSuccess(
+            '¡Producto Eliminado!',
+            `El producto "${product.name}" ha sido eliminado exitosamente`
+          );
+        } catch (error) {
+          console.error('Error deleting product:', error);
+          showError(
+            'Error al Eliminar Producto',
+            'No se pudo eliminar el producto. ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
       }
-    }
+    );
   };
 
   const filteredProducts = products.filter(product => {
@@ -487,6 +522,28 @@ export default function ProductManager() {
           ))
         )}
       </div>
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

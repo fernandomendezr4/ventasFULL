@@ -47,7 +47,6 @@ export default function CashRegister() {
   const [movementType, setMovementType] = useState<'income' | 'expense'>('income');
   
   const [openFormData, setOpenFormData] = useState({
-    user_id: '',
     opening_amount: '',
     notes: '',
   });
@@ -85,22 +84,19 @@ export default function CashRegister() {
 
   const loadCurrentRegister = async () => {
     try {
-      let query = supabase
+      if (!currentUser) return;
+
+      // Cada usuario solo ve su propia caja abierta
+      const { data, error } = await supabase
         .from('cash_registers')
         .select(`
           *,
           user:users(*)
         `)
         .eq('status', 'open')
+        .eq('user_id', currentUser.id)
         .order('opened_at', { ascending: false })
-        .limit(1);
-
-      // Si es empleado, solo mostrar su propia caja
-      if (currentUser?.role === 'employee') {
-        query = query.eq('user_id', currentUser.id);
-      }
-
-      const { data, error } = await query
+        .limit(1)
         .maybeSingle();
 
       if (error) throw error;
@@ -162,17 +158,7 @@ export default function CashRegister() {
 
   const loadMovements = async (registerId: string) => {
     try {
-      let movementsData = await getMovements(registerId);
-      
-      // Si es empleado, filtrar solo sus movimientos
-      if (currentUser?.role === 'employee') {
-        movementsData = movementsData.filter(movement => 
-          movement.created_by === currentUser.id || 
-          movement.type === 'opening' || 
-          movement.type === 'closing'
-        );
-      }
-      
+      const movementsData = await getMovements(registerId);
       setMovements(movementsData);
     } catch (error) {
       console.error('Error loading movements:', error);
@@ -182,21 +168,18 @@ export default function CashRegister() {
 
   const loadRegisters = async () => {
     try {
-      let query = supabase
+      if (!currentUser) return;
+
+      // Cada usuario solo ve sus propias cajas (historial)
+      const { data, error } = await supabase
         .from('cash_registers')
         .select(`
           *,
           user:users(*)
         `)
+        .eq('user_id', currentUser.id)
         .order('opened_at', { ascending: false })
         .limit(10);
-
-      // Si es empleado, solo mostrar sus propias cajas
-      if (currentUser?.role === 'employee') {
-        query = query.eq('user_id', currentUser.id);
-      }
-
-      const { data, error } = await query;
 
       if (error) throw error;
       setRegisters(data as CashRegisterWithUser[]);
@@ -225,11 +208,8 @@ export default function CashRegister() {
   const handleOpenRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Para empleados, asignar automáticamente su propio ID
-      const userId = currentUser?.role === 'employee' ? currentUser.id : openFormData.user_id;
-      
-      if (!userId) {
-        alert('Debe seleccionar un operador para la caja');
+      if (!currentUser) {
+        alert('Error: Usuario no identificado');
         return;
       }
 
@@ -243,19 +223,19 @@ export default function CashRegister() {
       const { data: existingRegister, error: checkError } = await supabase
         .from('cash_registers')
         .select('id')
-        .eq('user_id', userId)
+        .eq('user_id', currentUser.id)
         .eq('status', 'open')
         .maybeSingle();
 
       if (checkError) throw checkError;
 
       if (existingRegister) {
-        alert('Este usuario ya tiene una caja abierta. Debe cerrarla antes de abrir una nueva.');
+        alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
         return;
       }
 
       const registerData = {
-        user_id: userId,
+        user_id: currentUser.id,
         opening_amount: openingAmount,
         notes: openFormData.notes,
         status: 'open' as const,
@@ -272,9 +252,9 @@ export default function CashRegister() {
       if (error) throw error;
 
       setShowOpenForm(false);
-      setOpenFormData({ user_id: '', opening_amount: '', notes: '' });
+      setOpenFormData({ opening_amount: '', notes: '' });
       await loadData();
-      alert('Caja abierta exitosamente');
+      alert('Tu caja ha sido abierta exitosamente');
     } catch (error) {
       console.error('Error opening register:', error);
       alert('Error al abrir la caja: ' + (error as Error).message);
@@ -308,7 +288,7 @@ export default function CashRegister() {
       setShowCloseForm(false);
       setCloseFormData({ closing_amount: '', notes: '' });
       await loadData();
-      alert('Caja cerrada exitosamente');
+      alert('Tu caja ha sido cerrada exitosamente');
     } catch (error) {
       console.error('Error closing register:', error);
       alert('Error al cerrar la caja: ' + (error as Error).message);
@@ -336,6 +316,7 @@ export default function CashRegister() {
         alert('Debe proporcionar una descripción');
         return;
       }
+
       const { error } = await supabase
         .from('cash_movements')
         .insert([{
@@ -458,7 +439,7 @@ export default function CashRegister() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-slate-900">Caja Registradora</h2>
+        <h2 className="text-3xl font-bold text-slate-900">Mi Caja Registradora</h2>
         <div className="flex gap-2">
           {!currentRegister ? (
             <button
@@ -466,37 +447,33 @@ export default function CashRegister() {
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center text-lg font-medium shadow-lg"
             >
               <DollarSign className="h-4 w-4 mr-2" />
-              Abrir Caja
+              Abrir Mi Caja
             </button>
           ) : (
             <>
-              {/* Solo mostrar botones de ingreso/egreso para administradores */}
-              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                <>
-                  <button
-                    onClick={() => {
-                      setMovementType('income');
-                      setMovementFormData({ ...movementFormData, type: 'income' });
-                      setShowMovementForm(true);
-                    }}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Ingreso
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMovementType('expense');
-                      setMovementFormData({ ...movementFormData, type: 'expense' });
-                      setShowMovementForm(true);
-                    }}
-                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
-                  >
-                    <Minus className="h-4 w-4 mr-2" />
-                    Egreso
-                  </button>
-                </>
-              )}
+              {/* Botones de ingreso/egreso para todos los usuarios con caja abierta */}
+              <button
+                onClick={() => {
+                  setMovementType('income');
+                  setMovementFormData({ ...movementFormData, type: 'income' });
+                  setShowMovementForm(true);
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Ingreso
+              </button>
+              <button
+                onClick={() => {
+                  setMovementType('expense');
+                  setMovementFormData({ ...movementFormData, type: 'expense' });
+                  setShowMovementForm(true);
+                }}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
+              >
+                <Minus className="h-4 w-4 mr-2" />
+                Egreso
+              </button>
               <button
                 onClick={() => setShowMovementsModal(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
@@ -504,16 +481,13 @@ export default function CashRegister() {
                 <Eye className="h-4 w-4 mr-2" />
                 Ver Movimientos
               </button>
-              {/* Solo mostrar botón de cerrar caja para administradores */}
-              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                <button
-                  onClick={() => setShowCloseForm(true)}
-                  className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center"
-                >
-                  <Clock className="h-4 w-4 mr-2" />
-                  Cerrar Caja
-                </button>
-              )}
+              <button
+                onClick={() => setShowCloseForm(true)}
+                className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center"
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                Cerrar Mi Caja
+              </button>
             </>
           )}
         </div>
@@ -523,7 +497,7 @@ export default function CashRegister() {
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
           <Calculator className="h-5 w-5 mr-2 text-blue-600" />
-          {currentRegister ? 'Caja Abierta - Estado Actual' : 'Estado de la Caja'}
+          {currentRegister ? 'Mi Caja Abierta - Estado Actual' : 'Estado de Mi Caja'}
         </h3>
         
         {currentRegister ? (
@@ -644,7 +618,7 @@ export default function CashRegister() {
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <div className="flex items-center">
                   <User className="h-4 w-4 mr-2" />
-                  <span>Operador: {currentRegister.user?.name || 'Sin asignar'}</span>
+                  <span>Operador: {currentUser?.name}</span>
                 </div>
                 <span>Abierta: {new Date(currentRegister.opened_at).toLocaleString('es-ES')}</span>
               </div>
@@ -652,9 +626,9 @@ export default function CashRegister() {
           </div>
         ) : (
           <div className="text-center py-8">
-            <AlertCircle className="h-16 w-16 text-red-400 mx-auto mb-4" />
-            <p className="text-slate-700 text-lg font-medium">No hay caja abierta actualmente</p>
-            <p className="text-slate-500 mt-2">Abre una caja para comenzar las operaciones del día y habilitar las ventas</p>
+            <AlertCircle className="h-16 w-16 text-orange-400 mx-auto mb-4" />
+            <p className="text-slate-700 text-lg font-medium">No tienes una caja abierta actualmente</p>
+            <p className="text-slate-500 mt-2">Abre tu caja para comenzar las operaciones del día y habilitar las ventas</p>
           </div>
         )}
       </div>
@@ -662,41 +636,17 @@ export default function CashRegister() {
       {/* Open Register Form */}
       {showOpenForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Abrir Caja</h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Abrir Mi Caja</h3>
           <form onSubmit={handleOpenRegister} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Solo mostrar detalles financieros para administradores únicamente */}
-              {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Operador
-                  </label>
-                  <select
-                    value={openFormData.user_id}
-                    onChange={(e) => setOpenFormData({ ...openFormData, user_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  >
-                    <option value="">Seleccionar operador</option>
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </select>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Operador
+                </label>
+                <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-700">
+                  {currentUser?.name}
                 </div>
-              )}
-              {/* Para empleados, mostrar información del operador */}
-              {currentUser && currentUser.role === 'employee' && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Operador
-                  </label>
-                  <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-700">
-                    {currentUser.name}
-                  </div>
-                </div>
-              )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Monto Inicial
@@ -720,6 +670,7 @@ export default function CashRegister() {
                 onChange={(e) => setOpenFormData({ ...openFormData, notes: e.target.value })}
                 rows={3}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Observaciones sobre la apertura de caja..."
               />
             </div>
             <div className="flex gap-2">
@@ -727,7 +678,7 @@ export default function CashRegister() {
                 type="submit"
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
               >
-                Abrir Caja
+                Abrir Mi Caja
               </button>
               <button
                 type="button"
@@ -742,7 +693,7 @@ export default function CashRegister() {
       )}
 
       {/* Movement Form */}
-      {showMovementForm && currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
+      {showMovementForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
             Registrar {movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'}
@@ -818,9 +769,9 @@ export default function CashRegister() {
       )}
 
       {/* Close Register Form */}
-      {showCloseForm && currentRegister && currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
+      {showCloseForm && currentRegister && (
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Cerrar Caja</h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Cerrar Mi Caja</h3>
           <form onSubmit={handleCloseRegister} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-slate-50 p-4 rounded-lg">
@@ -888,7 +839,7 @@ export default function CashRegister() {
                 type="submit"
                 className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200"
               >
-                Cerrar Caja
+                Cerrar Mi Caja
               </button>
               <button
                 type="button"
@@ -909,7 +860,7 @@ export default function CashRegister() {
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-slate-900">
-                  Movimientos de Caja
+                  Movimientos de Mi Caja
                 </h3>
                 <button
                   onClick={() => setShowMovementsModal(false)}
@@ -954,9 +905,6 @@ export default function CashRegister() {
                             onClick={() => handleDeleteMovement(movement.id)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
                             title="Eliminar movimiento"
-                            style={{ 
-                              display: (currentUser?.role !== 'admin' && currentUser?.role !== 'manager') && movement.created_by !== currentUser.id ? 'none' : 'block' 
-                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -975,13 +923,13 @@ export default function CashRegister() {
       <div className="bg-white rounded-xl shadow-sm">
         <div className="p-6 border-b border-slate-200">
           <h3 className="text-lg font-semibold text-slate-900">
-            {currentUser?.role === 'employee' ? 'Mis Cajas' : 'Historial de Cajas'}
+            Historial de Mis Cajas
           </h3>
         </div>
         <div className="p-6">
           {registers.length === 0 ? (
             <p className="text-slate-500 text-center py-8">
-              {currentUser?.role === 'employee' ? 'No tienes cajas registradas' : 'No hay registros de caja'}
+              No tienes cajas registradas
             </p>
           ) : (
             <div className="space-y-4">
@@ -991,25 +939,20 @@ export default function CashRegister() {
                     <div className="flex items-center gap-4">
                       <div>
                         <p className="font-medium text-slate-900">
-                          {register.user?.name || 'Sin operador'}
+                          Caja del {new Date(register.opened_at).toLocaleDateString('es-ES')}
                         </p>
                         <p className="text-sm text-slate-600">
-                          {new Date(register.opened_at).toLocaleDateString('es-ES')} • 
                           {register.status === 'open' ? ' Abierta' : ` Cerrada a las ${new Date(register.closed_at!).toLocaleTimeString('es-ES')}`}
                         </p>
                       </div>
-                      {/* Solo mostrar detalles financieros para admin y manager */}
-                      {currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') && (
-                        <div className="flex items-center gap-4 text-sm">
-                          <span>Inicial: {formatCurrency(register.opening_amount || 0)}</span>
-                          {register.status === 'closed' && (
-                            <>
-                              <span>Final: {formatCurrency(register.closing_amount || 0)}</span>
-                              <span>Balance: {formatCurrency(register.current_balance || 0)}</span>
-                            </>
-                          )}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-4 text-sm">
+                        <span>Inicial: {formatCurrency(register.opening_amount || 0)}</span>
+                        {register.status === 'closed' && (
+                          <>
+                            <span>Final: {formatCurrency(register.closing_amount || 0)}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">

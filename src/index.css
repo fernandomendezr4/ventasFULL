@@ -1,3 +1,29 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+/* Animaciones para las ventanas emergentes */
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
+}
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

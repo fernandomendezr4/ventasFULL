@@ -2,8 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, User, Mail, Shield, CheckCircle, XCircle, Search, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { User as UserType } from '../lib/types';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 export default function UserManager() {
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -103,7 +109,12 @@ export default function UserManager() {
       setFormData({ name: '', email: '', password: '', role: 'employee', is_active: true });
       loadUsers();
       
-      alert(editingUser ? 'Usuario actualizado exitosamente' : 'Usuario creado exitosamente');
+      showSuccess(
+        editingUser ? '¡Usuario Actualizado!' : '¡Usuario Creado!',
+        editingUser 
+          ? `El usuario ${formData.name} ha sido actualizado exitosamente`
+          : `El usuario ${formData.name} ha sido creado exitosamente`
+      );
     } catch (error) {
       console.error('Error saving user:', error);
       
@@ -111,42 +122,71 @@ export default function UserManager() {
       
       // Handle specific error cases with user-friendly messages
       if (errorMessage.includes('Email already exists in authentication system')) {
-        alert('Este email ya está registrado en el sistema. Por favor:\n\n• Verifica si el usuario ya existe\n• Usa un email diferente\n• Contacta al administrador si necesitas vincular este email');
+        showError(
+          'Email Ya Registrado',
+          'Este email ya está registrado en el sistema. Verifica si el usuario ya existe o usa un email diferente.'
+        );
       } else if (errorMessage.includes('duplicate key value violates unique constraint')) {
-        alert('Este email ya está en uso. Por favor usa un email diferente.');
+        showError(
+          'Email Duplicado',
+          'Este email ya está en uso. Por favor usa un email diferente.'
+        );
       } else {
-        alert('Error al guardar usuario: ' + errorMessage);
+        showError(
+          'Error al Guardar Usuario',
+          'No se pudo guardar el usuario. ' + errorMessage
+        );
       }
     }
   };
 
   const handleChangePassword = async (user: UserType) => {
-    const newPassword = prompt('Ingresa la nueva contraseña (mínimo 6 caracteres):');
-    if (!newPassword) return;
-    
-    if (newPassword.length < 6) {
-      alert('La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-    
-    try {
-      const { data: result, error } = await supabase.rpc('update_user_password', {
-        p_user_id: user.id,
-        p_new_password: newPassword
-      });
-      
-      if (error) throw error;
-      
-      const passwordResult = result as { success: boolean; error?: string };
-      if (!passwordResult.success) {
-        throw new Error(passwordResult.error || 'Error al actualizar contraseña');
+    showConfirmation(
+      'Cambiar Contraseña',
+      `¿Estás seguro de que quieres cambiar la contraseña de ${user.name}?`,
+      async () => {
+        const newPassword = prompt('Ingresa la nueva contraseña (mínimo 6 caracteres):');
+        if (!newPassword) return;
+        
+        if (newPassword.length < 6) {
+          showWarning(
+            'Contraseña Muy Corta',
+            'La contraseña debe tener al menos 6 caracteres'
+          );
+          return;
+        }
+        
+        try {
+          const { data: result, error } = await supabase.rpc('update_user_password', {
+            p_user_id: user.id,
+            p_new_password: newPassword
+          });
+          
+          if (error) throw error;
+          
+          const passwordResult = result as { success: boolean; error?: string };
+          if (!passwordResult.success) {
+            throw new Error(passwordResult.error || 'Error al actualizar contraseña');
+          }
+          
+          showSuccess(
+            '¡Contraseña Actualizada!',
+            `La contraseña de ${user.name} ha sido actualizada exitosamente`
+          );
+        } catch (error) {
+          console.error('Error updating password:', error);
+          showError(
+            'Error al Actualizar Contraseña',
+            'No se pudo actualizar la contraseña. ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Continuar',
+        cancelText: 'Cancelar',
+        type: 'warning'
       }
-      
-      alert('Contraseña actualizada exitosamente');
-    } catch (error) {
-      console.error('Error updating password:', error);
-      alert('Error al actualizar contraseña: ' + (error as Error).message);
-    }
+    );
   };
 
   const handleEdit = (user: UserType) => {
@@ -162,20 +202,39 @@ export default function UserManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) {
-      try {
-        const { error } = await supabase
-          .from('users')
-          .delete()
-          .eq('id', id);
+    const user = users.find(u => u.id === id);
+    if (!user) return;
 
-        if (error) throw error;
-        loadUsers();
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        alert('Error al eliminar usuario');
+    showConfirmation(
+      'Eliminar Usuario',
+      `¿Estás seguro de que quieres eliminar al usuario "${user.name}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', id);
+
+          if (error) throw error;
+          loadUsers();
+          showSuccess(
+            '¡Usuario Eliminado!',
+            `El usuario "${user.name}" ha sido eliminado exitosamente`
+          );
+        } catch (error) {
+          console.error('Error deleting user:', error);
+          showError(
+            'Error al Eliminar Usuario',
+            'No se pudo eliminar el usuario. ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
       }
-    }
+    );
   };
 
   const toggleUserStatus = async (user: UserType) => {
@@ -560,6 +619,28 @@ export default function UserManager() {
           ))
         )}
       </div>
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

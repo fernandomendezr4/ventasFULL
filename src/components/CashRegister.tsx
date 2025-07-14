@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Plus, Minus, Eye, X, Edit2, Trash2, ArrowUpCircle, ArrowDownCircle, PieChart } from 'lucide-react';
+import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Plus, Minus, Eye, X, Edit2, Trash2, ArrowUpCircle, ArrowDownCircle, PieChart, ShoppingCart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, User as UserType, CashMovement } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -100,8 +100,7 @@ export default function CashRegister() {
         query = query.eq('user_id', currentUser.id);
       }
 
-      const { data, error } = await supabase
-        query
+      const { data, error } = await query
         .maybeSingle();
 
       if (error) throw error;
@@ -229,9 +228,35 @@ export default function CashRegister() {
       // Para empleados, asignar automáticamente su propio ID
       const userId = currentUser?.role === 'employee' ? currentUser.id : openFormData.user_id;
       
+      if (!userId) {
+        alert('Debe seleccionar un operador para la caja');
+        return;
+      }
+
+      const openingAmount = parseFloat(openFormData.opening_amount);
+      if (isNaN(openingAmount) || openingAmount < 0) {
+        alert('El monto inicial debe ser un número válido mayor o igual a 0');
+        return;
+      }
+
+      // Verificar si ya hay una caja abierta para este usuario
+      const { data: existingRegister, error: checkError } = await supabase
+        .from('cash_registers')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('status', 'open')
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingRegister) {
+        alert('Este usuario ya tiene una caja abierta. Debe cerrarla antes de abrir una nueva.');
+        return;
+      }
+
       const registerData = {
-        user_id: userId || null,
-        opening_amount: parseFloat(openFormData.opening_amount),
+        user_id: userId,
+        opening_amount: openingAmount,
         notes: openFormData.notes,
         status: 'open' as const,
         total_sales: 0,
@@ -248,7 +273,7 @@ export default function CashRegister() {
 
       setShowOpenForm(false);
       setOpenFormData({ user_id: '', opening_amount: '', notes: '' });
-      loadData();
+      await loadData();
       alert('Caja abierta exitosamente');
     } catch (error) {
       console.error('Error opening register:', error);
@@ -262,6 +287,11 @@ export default function CashRegister() {
 
     try {
       const closingAmount = parseFloat(closeFormData.closing_amount);
+      
+      if (isNaN(closingAmount) || closingAmount < 0) {
+        alert('El monto final debe ser un número válido mayor o igual a 0');
+        return;
+      }
       
       const { error } = await supabase
         .from('cash_registers')
@@ -277,7 +307,7 @@ export default function CashRegister() {
 
       setShowCloseForm(false);
       setCloseFormData({ closing_amount: '', notes: '' });
-      loadData();
+      await loadData();
       alert('Caja cerrada exitosamente');
     } catch (error) {
       console.error('Error closing register:', error);
@@ -297,6 +327,15 @@ export default function CashRegister() {
         return;
       }
 
+      if (!movementFormData.category) {
+        alert('Debe seleccionar una categoría');
+        return;
+      }
+
+      if (!movementFormData.description.trim()) {
+        alert('Debe proporcionar una descripción');
+        return;
+      }
       const { error } = await supabase
         .from('cash_movements')
         .insert([{
@@ -305,7 +344,7 @@ export default function CashRegister() {
           category: movementFormData.category,
           amount: amount,
           description: movementFormData.description,
-          created_by: currentRegister.user_id
+          created_by: currentUser?.id || currentRegister.user_id
         }]);
 
       if (error) throw error;
@@ -636,6 +675,7 @@ export default function CashRegister() {
                     value={openFormData.user_id}
                     onChange={(e) => setOpenFormData({ ...openFormData, user_id: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
                   >
                     <option value="">Seleccionar operador</option>
                     {users.map((user) => (
@@ -667,6 +707,7 @@ export default function CashRegister() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"
+                  placeholder="0"
                 />
               </div>
             </div>
@@ -736,6 +777,7 @@ export default function CashRegister() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"
+                  placeholder="0"
                 />
               </div>
             </div>
@@ -812,6 +854,7 @@ export default function CashRegister() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                   min="0"
+                  placeholder="0"
                 />
                 {closeFormData.closing_amount && (
                   <div className={`mt-2 text-sm ${

@@ -5,9 +5,15 @@ import { Product, CartItem, Customer } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import { useAuth } from '../contexts/AuthContext';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 export default function NewSale() {
   const { user: currentUser } = useAuth();
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
@@ -123,7 +129,10 @@ export default function NewSale() {
   const handleBarcodeSearch = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && barcodeSearch.trim()) {
       if (!currentCashRegister) {
-        alert('Debe haber una caja abierta para buscar productos');
+        showWarning(
+          'Caja Cerrada',
+          'Debe haber una caja abierta para buscar productos'
+        );
         return;
       }
       
@@ -134,14 +143,20 @@ export default function NewSale() {
         addToCart(product);
         setBarcodeSearch('');
       } else {
-        alert('Producto no encontrado con ese código de barras');
+        showWarning(
+          'Producto No Encontrado',
+          'No se encontró ningún producto con ese código de barras'
+        );
       }
     }
   };
 
   const addToCart = (product: Product) => {
     if (!currentCashRegister) {
-      alert('Debe haber una caja abierta para agregar productos al carrito');
+      showWarning(
+        'Caja Cerrada',
+        'Debe haber una caja abierta para agregar productos al carrito'
+      );
       return;
     }
     
@@ -155,7 +170,10 @@ export default function NewSale() {
             : item
         ));
       } else {
-        alert('No hay suficiente stock disponible');
+        showWarning(
+          'Stock Insuficiente',
+          `Solo hay ${product.stock} unidades disponibles de ${product.name}`
+        );
       }
     } else {
       setCart([...cart, { product, quantity: 1 }]);
@@ -164,7 +182,10 @@ export default function NewSale() {
 
   const updateQuantity = (productId: string, newQuantity: number) => {
     if (!currentCashRegister) {
-      alert('Debe haber una caja abierta para modificar el carrito');
+      showWarning(
+        'Caja Cerrada',
+        'Debe haber una caja abierta para modificar el carrito'
+      );
       return;
     }
     
@@ -175,7 +196,10 @@ export default function NewSale() {
 
     const product = products.find(p => p.id === productId);
     if (product && newQuantity > product.stock) {
-      alert('No hay suficiente stock disponible');
+      showWarning(
+        'Stock Insuficiente',
+        `Solo hay ${product.stock} unidades disponibles`
+      );
       return;
     }
 
@@ -188,7 +212,10 @@ export default function NewSale() {
 
   const removeFromCart = (productId: string) => {
     if (!currentCashRegister) {
-      alert('Debe haber una caja abierta para modificar el carrito');
+      showWarning(
+        'Caja Cerrada',
+        'Debe haber una caja abierta para modificar el carrito'
+      );
       return;
     }
     
@@ -220,26 +247,41 @@ export default function NewSale() {
       setSelectedCustomer(data);
       setShowCustomerForm(false);
       setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
-      alert('Cliente creado exitosamente');
+      showSuccess(
+        '¡Cliente Creado!',
+        `El cliente ${data.name} ha sido creado exitosamente`
+      );
     } catch (error) {
       console.error('Error creating customer:', error);
-      alert('Error al crear cliente: ' + (error as Error).message);
+      showError(
+        'Error al Crear Cliente',
+        'No se pudo crear el cliente. ' + (error as Error).message
+      );
     }
   };
 
   const handleSale = async () => {
     if (cart.length === 0) {
-      alert('Agrega productos al carrito');
+      showWarning(
+        'Carrito Vacío',
+        'Debes agregar productos al carrito antes de realizar la venta'
+      );
       return;
     }
 
     if (!currentCashRegister) {
-      alert('Debe haber una caja abierta para realizar ventas. Ve a la sección de Caja Registradora para abrir una caja.');
+      showWarning(
+        'Caja Cerrada',
+        'Debe haber una caja abierta para realizar ventas. Ve a la sección de Caja Registradora para abrir una caja.'
+      );
       return;
     }
 
     if (paymentType === 'installment' && !selectedCustomer) {
-      alert('Selecciona un cliente para ventas por abonos');
+      showWarning(
+        'Cliente Requerido',
+        'Debes seleccionar un cliente para realizar ventas por abonos'
+      );
       return;
     }
 
@@ -248,12 +290,18 @@ export default function NewSale() {
     const total = calculateTotal();
 
     if (discount > subtotal) {
-      alert('El descuento no puede ser mayor al subtotal');
+      showWarning(
+        'Descuento Inválido',
+        'El descuento no puede ser mayor al subtotal de la venta'
+      );
       return;
     }
 
     if (total <= 0) {
-      alert('El total de la venta debe ser mayor a 0');
+      showWarning(
+        'Total Inválido',
+        'El total de la venta debe ser mayor a 0'
+      );
       return;
     }
 
@@ -375,10 +423,18 @@ export default function NewSale() {
       // Reload cash register to update totals
       await loadCurrentCashRegister();
 
-      alert(`Venta ${paymentType === 'cash' ? 'completada' : 'registrada'} exitosamente`);
+      showSuccess(
+        paymentType === 'cash' ? '¡Venta Completada!' : '¡Venta Registrada!',
+        paymentType === 'cash' 
+          ? `Venta por ${formatCurrency(total)} completada exitosamente en efectivo`
+          : `Venta por ${formatCurrency(total)} registrada para abonos. ${parseFloat(initialPayment) > 0 ? `Abono inicial: ${formatCurrency(parseFloat(initialPayment))}` : 'Sin abono inicial'}`
+      );
     } catch (error) {
       console.error('Error processing sale:', error);
-      alert('Error al procesar la venta: ' + (error as Error).message);
+      showError(
+        'Error al Procesar Venta',
+        'No se pudo completar la venta. ' + (error as Error).message
+      );
     } finally {
       setSaving(false);
     }
@@ -926,6 +982,28 @@ export default function NewSale() {
           </div>
         </div>
       )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

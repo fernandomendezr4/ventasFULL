@@ -5,6 +5,10 @@ import { CashRegister as CashRegisterType, User as UserType, CashMovement } from
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import { useAuth } from '../contexts/AuthContext';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 interface CashRegisterWithUser extends CashRegisterType {
   user: UserType | null;
@@ -19,6 +23,8 @@ interface CashRegisterWithMovements extends CashRegisterWithUser {
 
 export default function CashRegister() {
   const { user: currentUser } = useAuth();
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [currentRegister, setCurrentRegister] = useState<CashRegisterWithMovements | null>(null);
   const [registers, setRegisters] = useState<CashRegisterWithUser[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
@@ -219,7 +225,10 @@ export default function CashRegister() {
       if (checkError) throw checkError;
 
       if (existingRegister) {
-        alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
+        showWarning(
+          'Caja Ya Abierta',
+          'Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.'
+        );
         return;
       }
 
@@ -243,10 +252,16 @@ export default function CashRegister() {
       setShowOpenForm(false);
       setOpenFormData({ opening_amount: '', notes: '' });
       await loadData();
-      alert('Tu caja ha sido abierta exitosamente');
+      showSuccess(
+        '¡Caja Abierta Exitosamente!',
+        `Tu caja ha sido abierta con un monto inicial de ${formatCurrency(openingAmount)}. Ya puedes comenzar a realizar ventas.`
+      );
     } catch (error) {
       console.error('Error opening register:', error);
-      alert('Error al abrir la caja: ' + (error as Error).message);
+      showError(
+        'Error al Abrir Caja',
+        'No se pudo abrir la caja registradora. ' + (error as Error).message
+      );
     }
   };
 
@@ -277,10 +292,16 @@ export default function CashRegister() {
       setShowCloseForm(false);
       setCloseFormData({ closing_amount: '', notes: '' });
       await loadData();
-      alert('Tu caja ha sido cerrada exitosamente');
+      showSuccess(
+        '¡Caja Cerrada Exitosamente!',
+        `Tu caja ha sido cerrada. Monto final registrado: ${formatCurrency(closingAmount)}`
+      );
     } catch (error) {
       console.error('Error closing register:', error);
-      alert('Error al cerrar la caja: ' + (error as Error).message);
+      showError(
+        'Error al Cerrar Caja',
+        'No se pudo cerrar la caja registradora. ' + (error as Error).message
+      );
     }
   };
 
@@ -292,12 +313,18 @@ export default function CashRegister() {
       const amount = parseFloat(incomeFormData.amount);
       
       if (isNaN(amount) || amount <= 0) {
-        alert('El monto debe ser un número válido mayor a 0');
+        showWarning(
+          'Monto Inválido',
+          'El monto debe ser un número válido mayor a 0'
+        );
         return;
       }
 
       if (!incomeFormData.description.trim()) {
-        alert('La descripción es requerida');
+        showWarning(
+          'Descripción Requerida',
+          'Debes proporcionar una descripción para el ingreso'
+        );
         return;
       }
 
@@ -317,10 +344,16 @@ export default function CashRegister() {
       setShowIncomeForm(false);
       setIncomeFormData({ amount: '', category: 'ingresos_adicionales', description: '' });
       await loadData();
-      alert('Ingreso registrado exitosamente');
+      showSuccess(
+        '¡Ingreso Registrado!',
+        `Se ha registrado un ingreso de ${formatCurrency(amount)} exitosamente`
+      );
     } catch (error) {
       console.error('Error registering income:', error);
-      alert('Error al registrar ingreso: ' + (error as Error).message);
+      showError(
+        'Error al Registrar Ingreso',
+        'No se pudo registrar el ingreso. ' + (error as Error).message
+      );
     }
   };
 
@@ -332,18 +365,27 @@ export default function CashRegister() {
       const amount = parseFloat(expenseFormData.amount);
       
       if (isNaN(amount) || amount <= 0) {
-        alert('El monto debe ser un número válido mayor a 0');
+        showWarning(
+          'Monto Inválido',
+          'El monto debe ser un número válido mayor a 0'
+        );
         return;
       }
 
       if (!expenseFormData.description.trim()) {
-        alert('La descripción es requerida');
+        showWarning(
+          'Descripción Requerida',
+          'Debes proporcionar una descripción para el egreso'
+        );
         return;
       }
 
       // Verificar que hay suficiente dinero en caja
       if (amount > (currentRegister.current_balance || 0)) {
-        alert('No hay suficiente dinero en caja para este egreso');
+        showWarning(
+          'Fondos Insuficientes',
+          `No hay suficiente dinero en caja para este egreso. Disponible: ${formatCurrency(currentRegister.current_balance || 0)}`
+        );
         return;
       }
 
@@ -363,10 +405,16 @@ export default function CashRegister() {
       setShowExpenseForm(false);
       setExpenseFormData({ amount: '', category: 'gastos_operativos', description: '' });
       await loadData();
-      alert('Egreso registrado exitosamente');
+      showSuccess(
+        '¡Egreso Registrado!',
+        `Se ha registrado un egreso de ${formatCurrency(amount)} exitosamente`
+      );
     } catch (error) {
       console.error('Error registering expense:', error);
-      alert('Error al registrar egreso: ' + (error as Error).message);
+      showError(
+        'Error al Registrar Egreso',
+        'No se pudo registrar el egreso. ' + (error as Error).message
+      );
     }
   };
 
@@ -971,6 +1019,28 @@ export default function CashRegister() {
           </div>
         </div>
       )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
 
       {/* Register History */}
       <div className="bg-white rounded-xl shadow-sm">

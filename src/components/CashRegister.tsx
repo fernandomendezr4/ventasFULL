@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Plus, Minus, Eye, X, Edit2, Trash2, ArrowUpCircle, ArrowDownCircle, PieChart, ShoppingCart } from 'lucide-react';
+import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, User as UserType, CashMovement } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -17,34 +17,15 @@ interface CashRegisterWithMovements extends CashRegisterWithUser {
   cash_movements: CashMovement[];
 }
 
-const INCOME_CATEGORIES = [
-  { value: 'ventas_efectivo', label: 'Ventas en Efectivo' },
-  { value: 'ingresos_adicionales', label: 'Ingresos Adicionales' },
-  { value: 'devoluciones', label: 'Devoluciones de Proveedores' },
-  { value: 'otros_ingresos', label: 'Otros Ingresos' },
-];
-
-const EXPENSE_CATEGORIES = [
-  { value: 'gastos_operativos', label: 'Gastos Operativos' },
-  { value: 'servicios_publicos', label: 'Servicios Públicos' },
-  { value: 'mantenimiento', label: 'Mantenimiento' },
-  { value: 'compras_inventario', label: 'Compras de Inventario' },
-  { value: 'gastos_personal', label: 'Gastos de Personal' },
-  { value: 'otros_gastos', label: 'Otros Gastos' },
-];
-
 export default function CashRegister() {
   const { user: currentUser } = useAuth();
   const [currentRegister, setCurrentRegister] = useState<CashRegisterWithMovements | null>(null);
   const [registers, setRegisters] = useState<CashRegisterWithUser[]>([]);
-  const [users, setUsers] = useState<UserType[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showOpenForm, setShowOpenForm] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
-  const [showMovementForm, setShowMovementForm] = useState(false);
   const [showMovementsModal, setShowMovementsModal] = useState(false);
-  const [movementType, setMovementType] = useState<'income' | 'expense'>('income');
   
   const [openFormData, setOpenFormData] = useState({
     opening_amount: '',
@@ -54,13 +35,6 @@ export default function CashRegister() {
   const [closeFormData, setCloseFormData] = useState({
     closing_amount: '',
     notes: '',
-  });
-
-  const [movementFormData, setMovementFormData] = useState({
-    type: 'income' as 'income' | 'expense',
-    category: '',
-    amount: '',
-    description: '',
   });
 
   useEffect(() => {
@@ -73,7 +47,6 @@ export default function CashRegister() {
       await Promise.all([
         loadCurrentRegister(),
         loadRegisters(),
-        loadUsers(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -189,22 +162,6 @@ export default function CashRegister() {
     }
   };
 
-  const loadUsers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-
-      if (error) throw error;
-      setUsers(data);
-    } catch (error) {
-      console.error('Error loading users:', error);
-      setUsers([]);
-    }
-  };
-
   const handleOpenRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -295,75 +252,6 @@ export default function CashRegister() {
     }
   };
 
-  const handleAddMovement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentRegister) return;
-
-    try {
-      const amount = parseFloat(movementFormData.amount);
-      
-      if (amount <= 0) {
-        alert('El monto debe ser mayor a 0');
-        return;
-      }
-
-      if (!movementFormData.category) {
-        alert('Debe seleccionar una categoría');
-        return;
-      }
-
-      if (!movementFormData.description.trim()) {
-        alert('Debe proporcionar una descripción');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('cash_movements')
-        .insert([{
-          cash_register_id: currentRegister.id,
-          type: movementFormData.type,
-          category: movementFormData.category,
-          amount: amount,
-          description: movementFormData.description,
-          created_by: currentUser?.id || currentRegister.user_id
-        }]);
-
-      if (error) throw error;
-
-      setShowMovementForm(false);
-      setMovementFormData({ type: 'income', category: '', amount: '', description: '' });
-      
-      // Recargar datos
-      await loadCurrentRegister();
-      alert('Movimiento registrado exitosamente');
-    } catch (error) {
-      console.error('Error adding movement:', error);
-      alert('Error al registrar movimiento: ' + (error as Error).message);
-    }
-  };
-
-  const handleDeleteMovement = async (movementId: string) => {
-    if (!window.confirm('¿Estás seguro de que quieres eliminar este movimiento?')) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('cash_movements')
-        .delete()
-        .eq('id', movementId);
-
-      if (error) throw error;
-
-      // Recargar datos
-      await loadCurrentRegister();
-      alert('Movimiento eliminado exitosamente');
-    } catch (error) {
-      console.error('Error deleting movement:', error);
-      alert('Error al eliminar movimiento: ' + (error as Error).message);
-    }
-  };
-
   const calculateDifference = () => {
     if (!currentRegister || !closeFormData.closing_amount) return 0;
     const expected = currentRegister.current_balance || 0;
@@ -371,10 +259,20 @@ export default function CashRegister() {
     return actual - expected;
   };
 
-  const getCategoryLabel = (category: string, type: string) => {
-    const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-    const found = categories.find(cat => cat.value === category);
-    return found ? found.label : category;
+  const getCategoryLabel = (category: string) => {
+    const categories = {
+      'ventas_efectivo': 'Ventas en Efectivo',
+      'ingresos_adicionales': 'Ingresos Adicionales',
+      'devoluciones': 'Devoluciones de Proveedores',
+      'otros_ingresos': 'Otros Ingresos',
+      'gastos_operativos': 'Gastos Operativos',
+      'servicios_publicos': 'Servicios Públicos',
+      'mantenimiento': 'Mantenimiento',
+      'compras_inventario': 'Compras de Inventario',
+      'gastos_personal': 'Gastos de Personal',
+      'otros_gastos': 'Otros Gastos',
+    };
+    return categories[category as keyof typeof categories] || category;
   };
 
   const getMovementIcon = (type: string) => {
@@ -451,29 +349,6 @@ export default function CashRegister() {
             </button>
           ) : (
             <>
-              {/* Botones de ingreso/egreso para todos los usuarios con caja abierta */}
-              <button
-                onClick={() => {
-                  setMovementType('income');
-                  setMovementFormData({ ...movementFormData, type: 'income' });
-                  setShowMovementForm(true);
-                }}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Ingreso
-              </button>
-              <button
-                onClick={() => {
-                  setMovementType('expense');
-                  setMovementFormData({ ...movementFormData, type: 'expense' });
-                  setShowMovementForm(true);
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
-              >
-                <Minus className="h-4 w-4 mr-2" />
-                Egreso
-              </button>
               <button
                 onClick={() => setShowMovementsModal(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
@@ -559,20 +434,6 @@ export default function CashRegister() {
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-red-600">Total Egresos</p>
-                    <p className="text-xl font-bold text-red-900">
-                      {formatCurrency(currentRegister.total_expenses || 0)}
-                    </p>
-                  </div>
-                  <div className="p-2 bg-red-100 rounded-full">
-                    <ArrowDownCircle className="h-6 w-6 text-red-600" />
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Recent Movements */}
@@ -596,7 +457,7 @@ export default function CashRegister() {
                         <p className="font-medium text-slate-900">{movement.description}</p>
                         <p className="text-sm text-slate-600">
                           {getMovementTypeLabel(movement.type)} • 
-                          {movement.category && getCategoryLabel(movement.category, movement.type)} • 
+                          {movement.category && getCategoryLabel(movement.category)} • 
                           {new Date(movement.created_at).toLocaleString('es-ES')}
                         </p>
                       </div>
@@ -692,82 +553,6 @@ export default function CashRegister() {
         </div>
       )}
 
-      {/* Movement Form */}
-      {showMovementForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            Registrar {movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'}
-          </h3>
-          <form onSubmit={handleAddMovement} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Categoría
-                </label>
-                <select
-                  value={movementFormData.category}
-                  onChange={(e) => setMovementFormData({ ...movementFormData, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="">Seleccionar categoría</option>
-                  {(movementFormData.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((category) => (
-                    <option key={category.value} value={category.value}>
-                      {category.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Monto
-                </label>
-                <FormattedNumberInput
-                  value={movementFormData.amount}
-                  onChange={(value) => setMovementFormData({ ...movementFormData, amount: value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                  min="0"
-                  placeholder="0"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Descripción
-              </label>
-              <textarea
-                value={movementFormData.description}
-                onChange={(e) => setMovementFormData({ ...movementFormData, description: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-                placeholder="Describe el motivo del movimiento..."
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className={`px-4 py-2 rounded-lg text-white transition-colors duration-200 ${
-                  movementFormData.type === 'income' 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-red-600 hover:bg-red-700'
-                }`}
-              >
-                Registrar {movementFormData.type === 'income' ? 'Ingreso' : 'Egreso'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowMovementForm(false)}
-                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {/* Close Register Form */}
       {showCloseForm && currentRegister && (
         <div className="bg-white rounded-xl shadow-sm p-6">
@@ -782,7 +567,11 @@ export default function CashRegister() {
                     <span>{formatCurrency(currentRegister.opening_amount || 0)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Total ingresos:</span>
+                    <span>Total ventas:</span>
+                    <span className="text-green-600">+{formatCurrency(currentRegister.total_sales_amount || 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Otros ingresos:</span>
                     <span className="text-green-600">+{formatCurrency(currentRegister.total_income || 0)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -887,7 +676,7 @@ export default function CashRegister() {
                             {movement.category && (
                               <>
                                 <span>•</span>
-                                <span>{getCategoryLabel(movement.category, movement.type)}</span>
+                                <span>{getCategoryLabel(movement.category)}</span>
                               </>
                             )}
                             <span>•</span>
@@ -900,15 +689,6 @@ export default function CashRegister() {
                           {movement.type === 'expense' || movement.type === 'closing' ? '-' : '+'}
                           {formatCurrency(movement.amount)}
                         </div>
-                        {movement.type !== 'opening' && movement.type !== 'closing' && movement.type !== 'sale' && (
-                          <button
-                            onClick={() => handleDeleteMovement(movement.id)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                            title="Eliminar movimiento"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
                       </div>
                     </div>
                   ))

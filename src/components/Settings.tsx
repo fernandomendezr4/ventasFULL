@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Download, Edit2, Save, Database, FileText, Package, Users, ShoppingCart, AlertCircle, CheckCircle, Sun, Moon, Monitor } from 'lucide-react';
+import { Settings as SettingsIcon, Download, Edit2, Save, Database, FileText, Package, Users, ShoppingCart, AlertCircle, CheckCircle, Sun, Moon, Monitor, Printer, Receipt } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -11,6 +11,19 @@ interface AppSettings {
   company_address: string;
   company_phone: string;
   company_email: string;
+  // Configuración de impresión
+  print_enabled: boolean;
+  auto_print: boolean;
+  print_copies: number;
+  receipt_width: string;
+  show_logo: boolean;
+  show_company_info: boolean;
+  show_customer_info: boolean;
+  show_payment_details: boolean;
+  show_footer_message: boolean;
+  footer_message: string;
+  receipt_header: string;
+  receipt_footer: string;
 }
 
 export default function Settings() {
@@ -27,7 +40,20 @@ export default function Settings() {
     company_name: '',
     company_address: '',
     company_phone: '',
-    company_email: ''
+    company_email: '',
+    // Configuración de impresión por defecto
+    print_enabled: true,
+    auto_print: false,
+    print_copies: 1,
+    receipt_width: '80mm',
+    show_logo: true,
+    show_company_info: true,
+    show_customer_info: true,
+    show_payment_details: true,
+    show_footer_message: true,
+    footer_message: '¡Gracias por su compra!',
+    receipt_header: '',
+    receipt_footer: 'Conserve este comprobante'
   });
   const [editingSettings, setEditingSettings] = useState(false);
 
@@ -54,15 +80,44 @@ export default function Settings() {
       // Guardar en localStorage por ahora
       localStorage.setItem('app_settings', JSON.stringify(settings));
       setEditingSettings(false);
-      alert('Configuración guardada exitosamente');
+      
+      // Mostrar notificación de éxito
+      const event = new CustomEvent('showNotification', {
+        detail: {
+          type: 'success',
+          title: '¡Configuración Guardada!',
+          message: 'Todas las configuraciones han sido guardadas exitosamente'
+        }
+      });
+      window.dispatchEvent(event);
     } catch (error) {
       console.error('Error saving settings:', error);
-      alert('Error al guardar configuración');
+      
+      // Mostrar notificación de error
+      const event = new CustomEvent('showNotification', {
+        detail: {
+          type: 'error',
+          title: 'Error al Guardar',
+          message: 'No se pudo guardar la configuración'
+        }
+      });
+      window.dispatchEvent(event);
     } finally {
       setLoading(false);
     }
   };
 
+  const testPrint = () => {
+    // Simular impresión de prueba
+    const event = new CustomEvent('showNotification', {
+      detail: {
+        type: 'info',
+        title: 'Impresión de Prueba',
+        message: 'Se ha enviado un comprobante de prueba a la impresora configurada'
+      }
+    });
+    window.dispatchEvent(event);
+  };
   const exportDatabase = async () => {
     try {
       setExportLoading(true);
@@ -784,8 +839,323 @@ export default function Settings() {
             )}
           </div>
         </div>
+        <div className="space-y-6">
+          {/* Configuración General de Impresión */}
+          <div>
+            <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+              <SettingsIcon className="h-4 w-4 mr-2 text-blue-600" />
+              Configuración General
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                  <div>
+                    <label className="font-medium text-slate-900">Habilitar Impresión</label>
+                    <p className="text-sm text-slate-600">Activar/desactivar la impresión de comprobantes</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.print_enabled}
+                      onChange={(e) => setSettings({ ...settings, print_enabled: e.target.checked })}
+                      disabled={!editingSettings}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
       </div>
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                  <div>
+                    <label className="font-medium text-slate-900">Impresión Automática</label>
+                    <p className="text-sm text-slate-600">Imprimir automáticamente al completar una venta</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.auto_print}
+                      onChange={(e) => setSettings({ ...settings, auto_print: e.target.checked })}
+                      disabled={!editingSettings || !settings.print_enabled}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
 
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Número de Copias
+                  </label>
+                  {editingSettings ? (
+                    <select
+                      value={settings.print_copies}
+                      onChange={(e) => setSettings({ ...settings, print_copies: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value={1}>1 copia</option>
+                      <option value={2}>2 copias</option>
+                      <option value={3}>3 copias</option>
+                    </select>
+                  ) : (
+                    <div className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900">
+                      {settings.print_copies} {settings.print_copies === 1 ? 'copia' : 'copias'}
+                    </div>
+                  )}
+                </div>
+      {/* Configuración de Impresión */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Ancho del Comprobante
+                  </label>
+                  {editingSettings ? (
+                    <select
+                      value={settings.receipt_width}
+                      onChange={(e) => setSettings({ ...settings, receipt_width: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="58mm">58mm (Pequeño)</option>
+                      <option value="80mm">80mm (Estándar)</option>
+                      <option value="110mm">110mm (Grande)</option>
+                    </select>
+                  ) : (
+                    <div className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900">
+                      {settings.receipt_width}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+      <div className="bg-white rounded-xl shadow-sm p-6">
+          {/* Contenido del Comprobante */}
+          <div>
+            <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+              <Receipt className="h-4 w-4 mr-2 text-purple-600" />
+              Contenido del Comprobante
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <label className="font-medium text-slate-900">Mostrar Logo</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.show_logo}
+                    onChange={(e) => setSettings({ ...settings, show_logo: e.target.checked })}
+                    disabled={!editingSettings}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </div>
+        <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <label className="font-medium text-slate-900">Información de la Empresa</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.show_company_info}
+                    onChange={(e) => setSettings({ ...settings, show_company_info: e.target.checked })}
+                    disabled={!editingSettings}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </div>
+          <h3 className="text-lg font-semibold text-slate-900 flex items-center">
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <label className="font-medium text-slate-900">Información del Cliente</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.show_customer_info}
+                    onChange={(e) => setSettings({ ...settings, show_customer_info: e.target.checked })}
+                    disabled={!editingSettings}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </div>
+            <Printer className="h-5 w-5 mr-2 text-green-600" />
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <label className="font-medium text-slate-900">Detalles de Pago</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.show_payment_details}
+                    onChange={(e) => setSettings({ ...settings, show_payment_details: e.target.checked })}
+                    disabled={!editingSettings}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </div>
+            Configuración de Impresión de Comprobantes
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <label className="font-medium text-slate-900">Mensaje de Pie</label>
+                  <input
+                    type="checkbox"
+                    checked={settings.show_footer_message}
+                    onChange={(e) => setSettings({ ...settings, show_footer_message: e.target.checked })}
+                    disabled={!editingSettings}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+          </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Encabezado Personalizado
+                  </label>
+                  {editingSettings ? (
+                    <textarea
+                      value={settings.receipt_header}
+                      onChange={(e) => setSettings({ ...settings, receipt_header: e.target.value })}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Texto adicional para el encabezado..."
+                    />
+                  ) : (
+                    <div className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 min-h-[60px]">
+                      {settings.receipt_header || 'Sin encabezado personalizado'}
+                    </div>
+                  )}
+                </div>
+          {!editingSettings ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Mensaje de Agradecimiento
+                  </label>
+                  {editingSettings ? (
+                    <input
+                      type="text"
+                      value={settings.footer_message}
+                      onChange={(e) => setSettings({ ...settings, footer_message: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="¡Gracias por su compra!"
+                    />
+                  ) : (
+                    <div className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900">
+                      {settings.footer_message}
+                    </div>
+                  )}
+                </div>
+            <div className="flex gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Pie de Página
+                  </label>
+                  {editingSettings ? (
+                    <textarea
+                      value={settings.receipt_footer}
+                      onChange={(e) => setSettings({ ...settings, receipt_footer: e.target.value })}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Información adicional del pie..."
+                    />
+                  ) : (
+                    <div className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 min-h-[60px]">
+                      {settings.receipt_footer}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+              <button
+          {/* Vista Previa del Comprobante */}
+          {settings.print_enabled && (
+            <div>
+              <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+                <FileText className="h-4 w-4 mr-2 text-orange-600" />
+                Vista Previa del Comprobante
+              </h4>
+              <div className="bg-slate-50 p-6 rounded-lg border-2 border-dashed border-slate-300">
+                <div className={`bg-white p-4 rounded-lg shadow-sm mx-auto ${
+                  settings.receipt_width === '58mm' ? 'max-w-xs' : 
+                  settings.receipt_width === '80mm' ? 'max-w-sm' : 'max-w-md'
+                }`} style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                  {/* Header */}
+                  {settings.show_logo && (
+                    <div className="text-center mb-2">
+                      <div className="w-12 h-12 bg-blue-600 rounded-full mx-auto mb-2 flex items-center justify-center">
+                        <span className="text-white font-bold">LOGO</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {settings.show_company_info && (
+                    <div className="text-center mb-3">
+                      <div className="font-bold">{settings.company_name || 'NOMBRE DE LA EMPRESA'}</div>
+                      {settings.company_address && <div className="text-xs">{settings.company_address}</div>}
+                      {settings.company_phone && <div className="text-xs">Tel: {settings.company_phone}</div>}
+                      {settings.company_email && <div className="text-xs">{settings.company_email}</div>}
+                    </div>
+                  )}
+                onClick={testPrint}
+                  {settings.receipt_header && (
+                    <div className="text-center text-xs mb-3 border-b pb-2">
+                      {settings.receipt_header}
+                    </div>
+                  )}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center text-sm"
+                  <div className="border-b pb-2 mb-2">
+                    <div className="flex justify-between text-xs">
+                      <span>COMPROBANTE DE VENTA</span>
+                      <span>#00001</span>
+                    </div>
+                    <div className="text-xs">Fecha: {new Date().toLocaleDateString('es-ES')}</div>
+                    <div className="text-xs">Hora: {new Date().toLocaleTimeString('es-ES')}</div>
+                  </div>
+              >
+                  {settings.show_customer_info && (
+                    <div className="border-b pb-2 mb-2 text-xs">
+                      <div>Cliente: Juan Pérez</div>
+                      <div>CC: 12345678</div>
+                    </div>
+                  )}
+                <Receipt className="h-4 w-4 mr-2" />
+                  <div className="border-b pb-2 mb-2">
+                    <div className="text-xs">
+                      <div className="flex justify-between">
+                        <span>Producto Ejemplo</span>
+                        <span>$10,000</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Cant: 2 x $5,000</span>
+                        <span></span>
+                      </div>
+                    </div>
+                  </div>
+                Prueba de Impresión
+                  <div className="border-b pb-2 mb-2">
+                    <div className="flex justify-between text-xs">
+                      <span>SUBTOTAL:</span>
+                      <span>$10,000</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span>TOTAL:</span>
+                      <span>$10,000</span>
+                    </div>
+                  </div>
+              </button>
+                  {settings.show_payment_details && (
+                    <div className="border-b pb-2 mb-2 text-xs">
+                      <div>Método de pago: Efectivo</div>
+                      <div>Recibido: $10,000</div>
+                      <div>Cambio: $0</div>
+                    </div>
+                  )}
+            </div>
+                  {settings.show_footer_message && settings.footer_message && (
+                    <div className="text-center text-xs mb-2">
+                      {settings.footer_message}
+                    </div>
+                  )}
+          ) : null}
+                  {settings.receipt_footer && (
+                    <div className="text-center text-xs border-t pt-2">
+                      {settings.receipt_footer}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+        </div>
       {/* Información del Sistema */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">

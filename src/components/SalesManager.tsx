@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User } from 'lucide-react';
+import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
+import PrintService from './PrintService';
 
 export default function SalesManager() {
   const { user } = useAuth();
@@ -303,6 +304,30 @@ export default function SalesManager() {
                     >
                       <Eye className="h-4 w-4" />
                     </button>
+                    <PrintService
+                      sale={sale}
+                      settings={(() => {
+                        const savedSettings = localStorage.getItem('app_settings');
+                        return savedSettings ? JSON.parse(savedSettings) : {
+                          print_enabled: true,
+                          auto_print: false,
+                          print_copies: 1,
+                          receipt_width: '80mm',
+                          show_logo: true,
+                          show_company_info: true,
+                          show_customer_info: true,
+                          show_payment_details: true,
+                          show_footer_message: true,
+                          footer_message: '¡Gracias por su compra!',
+                          receipt_header: '',
+                          receipt_footer: 'Conserve este comprobante',
+                          company_name: 'VentasFULL',
+                          company_address: '',
+                          company_phone: '',
+                          company_email: ''
+                        };
+                      })()}
+                    />
                     {/* Solo mostrar botón de eliminar para admin y manager */}
                     {user?.role !== 'employee' && (
                     <button

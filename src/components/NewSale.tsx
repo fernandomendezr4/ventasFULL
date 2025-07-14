@@ -9,6 +9,7 @@ import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
+import PrintService from './PrintService';
 
 export default function NewSale() {
   const { user: currentUser } = useAuth();
@@ -37,6 +38,8 @@ export default function NewSale() {
     address: '',
     cedula: '',
   });
+  const [completedSale, setCompletedSale] = useState<any>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -423,12 +426,38 @@ export default function NewSale() {
       // Reload cash register to update totals
       await loadCurrentCashRegister();
 
+      // Prepare sale data for printing
+      const saleForPrint = {
+        ...sale,
+        customer: selectedCustomer,
+        user: currentUser,
+        sale_items: cart.map(item => ({
+          product: item.product,
+          quantity: item.quantity,
+          unit_price: item.product.sale_price,
+          total_price: item.product.sale_price * item.quantity
+        })),
+        subtotal: subtotal,
+        discount_amount: parseFloat(discountAmount) || 0,
+        total_amount: total,
+        payment_type: paymentType,
+        total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
+        payment_status: paymentType === 'cash' ? 'paid' : 
+                       (parseFloat(initialPayment) || 0) >= total ? 'paid' :
+                       (parseFloat(initialPayment) || 0) > 0 ? 'partial' : 'pending'
+      };
+
+      setCompletedSale(saleForPrint);
+
       showSuccess(
         paymentType === 'cash' ? '¡Venta Completada!' : '¡Venta Registrada!',
         paymentType === 'cash' 
           ? `Venta por ${formatCurrency(total)} completada exitosamente en efectivo`
           : `Venta por ${formatCurrency(total)} registrada para abonos. ${parseFloat(initialPayment) > 0 ? `Abono inicial: ${formatCurrency(parseFloat(initialPayment))}` : 'Sin abono inicial'}`
       );
+
+      // Show print option
+      setShowPrintModal(true);
     } catch (error) {
       console.error('Error processing sale:', error);
       showError(
@@ -979,6 +1008,76 @@ export default function NewSale() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Print Modal */}
+      {showPrintModal && completedSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                ¡Venta Completada!
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                ¿Deseas imprimir el comprobante de venta?
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-green-900">Total de la venta:</span>
+                  <span className="text-xl font-bold text-green-900">
+                    {formatCurrency(completedSale.total_amount)}
+                  </span>
+                </div>
+                <div className="text-sm text-green-700 mt-1">
+                  Venta #{completedSale.id?.slice(-8)} • {completedSale.sale_items.length} productos
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <PrintService
+                  sale={completedSale}
+                  settings={(() => {
+                    const savedSettings = localStorage.getItem('app_settings');
+                    return savedSettings ? JSON.parse(savedSettings) : {
+                      print_enabled: true,
+                      auto_print: false,
+                      print_copies: 1,
+                      receipt_width: '80mm',
+                      show_logo: true,
+                      show_company_info: true,
+                      show_customer_info: true,
+                      show_payment_details: true,
+                      show_footer_message: true,
+                      footer_message: '¡Gracias por su compra!',
+                      receipt_header: '',
+                      receipt_footer: 'Conserve este comprobante',
+                      company_name: 'VentasFULL',
+                      company_address: '',
+                      company_phone: '',
+                      company_email: ''
+                    };
+                  })()}
+                  onPrint={() => {
+                    setShowPrintModal(false);
+                    setCompletedSale(null);
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    setShowPrintModal(false);
+                    setCompletedSale(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+                >
+                  Continuar sin Imprimir
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

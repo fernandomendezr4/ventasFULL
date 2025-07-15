@@ -31,6 +31,7 @@ export default function NewSale() {
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
   const [discountAmount, setDiscountAmount] = useState('');
   const [initialPayment, setInitialPayment] = useState('');
+  const [receivedAmount, setReceivedAmount] = useState('');
   const [customerFormData, setCustomerFormData] = useState({
     name: '',
     email: '',
@@ -235,6 +236,20 @@ export default function NewSale() {
     return Math.max(0, subtotal - discount);
   };
 
+  const calculateChange = () => {
+    if (paymentType !== 'cash' || !receivedAmount) return 0;
+    const received = parseFloat(receivedAmount) || 0;
+    const total = calculateTotal();
+    return Math.max(0, received - total);
+  };
+
+  const isValidCashPayment = () => {
+    if (paymentType !== 'cash') return true;
+    const received = parseFloat(receivedAmount) || 0;
+    const total = calculateTotal();
+    return received >= total;
+  };
+
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -386,13 +401,16 @@ export default function NewSale() {
       // Record payment for cash sales
       if (paymentType === 'cash' || (paymentType === 'installment' && parseFloat(initialPayment) > 0)) {
         const paymentAmount = paymentType === 'cash' ? total : parseFloat(initialPayment);
+        const receivedCash = paymentType === 'cash' ? (parseFloat(receivedAmount) || total) : parseFloat(initialPayment);
         const { error: paymentError } = await supabase
           .from('payments')
           .insert([{
             sale_id: sale.id,
             amount: paymentAmount,
             payment_method: 'cash',
-            notes: paymentType === 'cash' ? 'Pago completo en efectivo' : 'Abono inicial'
+            notes: paymentType === 'cash' 
+              ? `Pago completo en efectivo. Recibido: ${formatCurrency(receivedCash)}${receivedCash > total ? `, Cambio: ${formatCurrency(receivedCash - total)}` : ''}`
+              : 'Abono inicial'
           }]);
 
         if (paymentError) console.error('Error recording payment:', paymentError);
@@ -417,6 +435,7 @@ export default function NewSale() {
       setSelectedCustomer(null);
       setDiscountAmount('');
       setPaymentType('cash');
+      setReceivedAmount('');
       setInitialPayment('');
       setSearchTerm('');
       setBarcodeSearch('');
@@ -452,7 +471,7 @@ export default function NewSale() {
       showSuccess(
         paymentType === 'cash' ? '¡Venta Completada!' : '¡Venta Registrada!',
         paymentType === 'cash' 
-          ? `Venta por ${formatCurrency(total)} completada exitosamente en efectivo`
+          ? `Venta por ${formatCurrency(total)} completada exitosamente en efectivo${calculateChange() > 0 ? `. Cambio entregado: ${formatCurrency(calculateChange())}` : ''}`
           : `Venta por ${formatCurrency(total)} registrada para abonos. ${parseFloat(initialPayment) > 0 ? `Abono inicial: ${formatCurrency(parseFloat(initialPayment))}` : 'Sin abono inicial'}`
       );
 
@@ -801,6 +820,55 @@ export default function NewSale() {
             </div>
           )}
 
+          {/* Cash Payment Details */}
+          {cart.length > 0 && paymentType === 'cash' && currentCashRegister && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Dinero Recibido del Cliente
+              </label>
+              <FormattedNumberInput
+                value={receivedAmount}
+                onChange={(value) => setReceivedAmount(value)}
+                placeholder={calculateTotal().toString()}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  receivedAmount && !isValidCashPayment() 
+                    ? 'border-red-300 bg-red-50' 
+                    : 'border-slate-300'
+                }`}
+                disabled={!currentCashRegister}
+                min="0"
+              />
+              {receivedAmount && (
+                <div className="mt-2 space-y-1">
+                  {!isValidCashPayment() ? (
+                    <p className="text-xs text-red-600 flex items-center">
+                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      Dinero insuficiente. Faltan: {formatCurrency(calculateTotal() - (parseFloat(receivedAmount) || 0))}
+                    </p>
+                  ) : calculateChange() > 0 ? (
+                    <p className="text-xs text-green-600 flex items-center">
+                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Cambio a entregar: {formatCurrency(calculateChange())}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-blue-600 flex items-center">
+                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Pago exacto - Sin cambio
+                    </p>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                Total a pagar: {formatCurrency(calculateTotal())}
+              </p>
+            </div>
+          )}
           {/* Total */}
           {cart.length > 0 && currentCashRegister && (
             <div className="border-t border-slate-200 pt-4">
@@ -836,6 +904,7 @@ export default function NewSale() {
               <button
                 onClick={handleSale}
                 disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer) || cashRegisterLoading}
+                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer) || (paymentType === 'cash' && !isValidCashPayment()) || cashRegisterLoading}
                 className="w-full mt-4 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
               >
                 {saving ? 'Procesando...' : 

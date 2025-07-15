@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock, Search, Filter } from 'lucide-react';
+import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock, Search, Filter, Printer } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
+import PrintService from './PrintService';
 
 interface SaleWithInstallments {
   id: string;
@@ -38,6 +39,8 @@ export default function InstallmentManager() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState<PaymentInstallment | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [completedPayment, setCompletedPayment] = useState<any>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -187,7 +190,21 @@ export default function InstallmentManager() {
       if (updatedSale) {
         setSelectedSale(updatedSale);
       }
-      alert('Pago registrado exitosamente');
+      
+      // Preparar datos para impresión del abono
+      const paymentForPrint = {
+        id: `payment-${Date.now()}`,
+        payment_amount: amount,
+        payment_date: new Date().toISOString(),
+        payment_notes: paymentNotes,
+        sale: selectedSale,
+        customer: selectedSale.customer,
+        remaining_balance: selectedSale.total_amount - (selectedSale.total_paid + amount),
+        total_paid_after: selectedSale.total_paid + amount
+      };
+      
+      setCompletedPayment(paymentForPrint);
+      setShowPrintModal(true);
     } catch (error) {
       console.error('Error processing payment:', error);
       alert('Error al procesar el pago: ' + (error as Error).message);
@@ -260,7 +277,22 @@ export default function InstallmentManager() {
       if (updatedSale) {
         setSelectedSale(updatedSale);
       }
-      alert('Abono actualizado exitosamente');
+      
+      // Preparar datos para impresión del abono editado
+      const paymentForPrint = {
+        id: `payment-edit-${Date.now()}`,
+        payment_amount: newAmount,
+        payment_date: editingPayment.payment_date,
+        payment_notes: paymentNotes,
+        sale: selectedSale,
+        customer: selectedSale.customer,
+        remaining_balance: selectedSale.total_amount - newTotalPaid,
+        total_paid_after: newTotalPaid,
+        is_edit: true
+      };
+      
+      setCompletedPayment(paymentForPrint);
+      setShowPrintModal(true);
     } catch (error) {
       console.error('Error updating payment:', error);
       alert('Error al actualizar el abono: ' + (error as Error).message);
@@ -513,6 +545,62 @@ export default function InstallmentManager() {
                         <Plus className="h-4 w-4 mr-1" />
                         Abonar
                       </button>
+                      <PrintService
+                        sale={{
+                          ...selectedSale,
+                          payment_amount: payment.amount_paid,
+                          payment_date: payment.payment_date,
+                          payment_notes: payment.notes,
+                          remaining_balance: selectedSale.total_amount - selectedSale.total_paid,
+                          is_installment_receipt: true
+                        }}
+                        settings={(() => {
+                          const savedSettings = localStorage.getItem('app_settings');
+                          const printSettings = localStorage.getItem('print_settings');
+                          if (savedSettings || printSettings) {
+                            const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
+                            const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                            return {
+                              print_enabled: true,
+                              auto_print: false,
+                              print_copies: 1,
+                              receipt_width: '80mm',
+                              show_logo: true,
+                              show_company_info: true,
+                              show_customer_info: true,
+                              show_payment_details: true,
+                              show_footer_message: true,
+                              footer_message: '¡Gracias por su abono!',
+                              receipt_header: 'COMPROBANTE DE ABONO',
+                              receipt_footer: 'Conserve este comprobante',
+                              company_name: 'VentasFULL',
+                              company_address: '',
+                              company_phone: '',
+                              company_email: '',
+                              ...appSettings,
+                              ...printConfig
+                            };
+                          }
+                          return {
+                            print_enabled: true,
+                            auto_print: false,
+                            print_copies: 1,
+                            receipt_width: '80mm',
+                            show_logo: true,
+                            show_company_info: true,
+                            show_customer_info: true,
+                            show_payment_details: true,
+                            show_footer_message: true,
+                            footer_message: '¡Gracias por su abono!',
+                            receipt_header: 'COMPROBANTE DE ABONO',
+                            receipt_footer: 'Conserve este comprobante',
+                            company_name: 'VentasFULL',
+                            company_address: '',
+                            company_phone: '',
+                            company_email: ''
+                          };
+                        })()}
+                      />
                     )}
                     <button
                       onClick={() => setSelectedSale(sale)}
@@ -793,6 +881,116 @@ export default function InstallmentManager() {
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Modal for Payment */}
+      {showPrintModal && completedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {completedPayment.is_edit ? '¡Abono Actualizado!' : '¡Abono Registrado!'}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                ¿Deseas imprimir el comprobante de abono?
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-green-900">Abono realizado:</span>
+                    <span className="text-xl font-bold text-green-900">
+                      {formatCurrency(completedPayment.payment_amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-green-700">Cliente:</span>
+                    <span className="text-green-800">{completedPayment.customer?.name || 'Sin especificar'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-green-700">Saldo restante:</span>
+                    <span className="text-green-800">{formatCurrency(completedPayment.remaining_balance)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <PrintService
+                  sale={{
+                    ...completedPayment.sale,
+                    payment_amount: completedPayment.payment_amount,
+                    payment_date: completedPayment.payment_date,
+                    payment_notes: completedPayment.payment_notes,
+                    remaining_balance: completedPayment.remaining_balance,
+                    total_paid_after: completedPayment.total_paid_after,
+                    is_installment_receipt: true
+                  }}
+                  settings={(() => {
+                    const savedSettings = localStorage.getItem('app_settings');
+                    const printSettings = localStorage.getItem('print_settings');
+                    if (savedSettings || printSettings) {
+                      const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
+                      const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                      return {
+                        print_enabled: true,
+                        auto_print: false,
+                        print_copies: 1,
+                        receipt_width: '80mm',
+                        show_logo: true,
+                        show_company_info: true,
+                        show_customer_info: true,
+                        show_payment_details: true,
+                        show_footer_message: true,
+                        footer_message: '¡Gracias por su abono!',
+                        receipt_header: 'COMPROBANTE DE ABONO',
+                        receipt_footer: 'Conserve este comprobante',
+                        company_name: 'VentasFULL',
+                        company_address: '',
+                        company_phone: '',
+                        company_email: '',
+                        ...appSettings,
+                        ...printConfig
+                      };
+                    }
+                    return {
+                      print_enabled: true,
+                      auto_print: false,
+                      print_copies: 1,
+                      receipt_width: '80mm',
+                      show_logo: true,
+                      show_company_info: true,
+                      show_customer_info: true,
+                      show_payment_details: true,
+                      show_footer_message: true,
+                      footer_message: '¡Gracias por su abono!',
+                      receipt_header: 'COMPROBANTE DE ABONO',
+                      receipt_footer: 'Conserve este comprobante',
+                      company_name: 'VentasFULL',
+                      company_address: '',
+                      company_phone: '',
+                      company_email: ''
+                    };
+                  })()}
+                  onPrint={() => {
+                    setShowPrintModal(false);
+                    setCompletedPayment(null);
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    setShowPrintModal(false);
+                    setCompletedPayment(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+                >
+                  Continuar sin Imprimir
+                </button>
+              </div>
             </div>
           </div>
         </div>

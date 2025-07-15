@@ -72,6 +72,9 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
 
   const generateReceiptHTML = (sale: SaleWithItems, settings: any) => {
     let html = '';
+    
+    // Verificar si es un comprobante de abono
+    const isInstallmentReceipt = sale.is_installment_receipt;
 
     // Aplicar configuración de fuente y espaciado
     const fontSize = settings.font_size === 'small' ? '10px' : 
@@ -109,20 +112,41 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           ${settings.receipt_header}
         </div>
       `;
+    } else if (isInstallmentReceipt) {
+      html += `
+        <div class="center border-bottom">
+          <div class="bold">COMPROBANTE DE ABONO</div>
+        </div>
+      `;
     }
 
     // Sale Info
-    html += `
-      <div class="border-bottom">
-        <div class="flex">
-          <span>COMPROBANTE DE VENTA</span>
-          <span>#${sale.id.slice(-8)}</span>
+    if (isInstallmentReceipt) {
+      html += `
+        <div class="border-bottom">
+          <div class="flex">
+            <span>ABONO VENTA</span>
+            <span>#${sale.id.slice(-8)}</span>
+          </div>
+          <div>Fecha abono: ${new Date(sale.payment_date || sale.created_at).toLocaleDateString('es-ES')}</div>
+          <div>Hora: ${new Date(sale.payment_date || sale.created_at).toLocaleTimeString('es-ES')}</div>
+          <div>Fecha venta original: ${new Date(sale.created_at).toLocaleDateString('es-ES')}</div>
+          ${sale.user ? `<div>Vendedor: ${sale.user.name}</div>` : ''}
         </div>
-        <div>Fecha: ${new Date(sale.created_at).toLocaleDateString('es-ES')}</div>
-        <div>Hora: ${new Date(sale.created_at).toLocaleTimeString('es-ES')}</div>
-        ${sale.user ? `<div>Vendedor: ${sale.user.name}</div>` : ''}
-      </div>
-    `;
+      `;
+    } else {
+      html += `
+        <div class="border-bottom">
+          <div class="flex">
+            <span>COMPROBANTE DE VENTA</span>
+            <span>#${sale.id.slice(-8)}</span>
+          </div>
+          <div>Fecha: ${new Date(sale.created_at).toLocaleDateString('es-ES')}</div>
+          <div>Hora: ${new Date(sale.created_at).toLocaleTimeString('es-ES')}</div>
+          ${sale.user ? `<div>Vendedor: ${sale.user.name}</div>` : ''}
+        </div>
+      `;
+    }
 
     // Customer Info
     if (settings.show_customer_info && sale.customer) {
@@ -136,60 +160,95 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       `;
     }
 
-    // Products
-    html += '<div class="border-bottom">';
-    sale.sale_items.forEach(item => {
-      html += `
-        <div class="flex">
-          <span>${item.product.name}</span>
-          <span>${formatCurrency(item.total_price)}</span>
-        </div>
-        <div class="flex">
-          <span>Cant: ${item.quantity} x ${formatCurrency(item.unit_price)}</span>
-          <span></span>
-        </div>
-      `;
-    });
-    html += '</div>';
+    // Products (solo para ventas completas, no para abonos)
+    if (!isInstallmentReceipt && sale.sale_items) {
+      html += '<div class="border-bottom">';
+      sale.sale_items.forEach(item => {
+        html += `
+          <div class="flex">
+            <span>${item.product.name}</span>
+            <span>${formatCurrency(item.total_price)}</span>
+          </div>
+          <div class="flex">
+            <span>Cant: ${item.quantity} x ${formatCurrency(item.unit_price)}</span>
+            <span></span>
+          </div>
+        `;
+      });
+      html += '</div>';
+    }
 
     // Totals
-    html += `
-      <div class="border-bottom">
-        ${sale.subtotal !== sale.total_amount ? `
+    if (isInstallmentReceipt) {
+      html += `
+        <div class="border-bottom">
           <div class="flex">
-            <span>SUBTOTAL:</span>
-            <span>${formatCurrency(sale.subtotal)}</span>
+            <span>TOTAL VENTA:</span>
+            <span>${formatCurrency(sale.total_amount)}</span>
           </div>
-        ` : ''}
-        ${sale.discount_amount > 0 ? `
           <div class="flex">
-            <span>DESCUENTO:</span>
-            <span>-${formatCurrency(sale.discount_amount)}</span>
+            <span>TOTAL PAGADO:</span>
+            <span>${formatCurrency(sale.total_paid_after || sale.total_paid)}</span>
           </div>
-        ` : ''}
-        <div class="flex bold">
-          <span>TOTAL:</span>
-          <span>${formatCurrency(sale.total_amount)}</span>
+          <div class="flex bold">
+            <span>ABONO ACTUAL:</span>
+            <span>${formatCurrency(sale.payment_amount)}</span>
+          </div>
+          <div class="flex">
+            <span>SALDO RESTANTE:</span>
+            <span>${formatCurrency(sale.remaining_balance || 0)}</span>
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    } else {
+      html += `
+        <div class="border-bottom">
+          ${sale.subtotal !== sale.total_amount ? `
+            <div class="flex">
+              <span>SUBTOTAL:</span>
+              <span>${formatCurrency(sale.subtotal)}</span>
+            </div>
+          ` : ''}
+          ${sale.discount_amount > 0 ? `
+            <div class="flex">
+              <span>DESCUENTO:</span>
+              <span>-${formatCurrency(sale.discount_amount)}</span>
+            </div>
+          ` : ''}
+          <div class="flex bold">
+            <span>TOTAL:</span>
+            <span>${formatCurrency(sale.total_amount)}</span>
+          </div>
+        </div>
+      `;
+    }
 
     // Payment Details
     if (settings.show_payment_details) {
-      html += `
-        <div class="border-bottom">
-          <div>Método de pago: ${sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}</div>
-          ${sale.payment_type === 'cash' ? `
-            <div>Recibido: ${formatCurrency(sale.total_paid)}</div>
-            <div>Cambio: ${formatCurrency(Math.max(0, sale.total_paid - sale.total_amount))}</div>
-          ` : `
-            <div>Pagado: ${formatCurrency(sale.total_paid)}</div>
-            <div>Saldo: ${formatCurrency(sale.total_amount - sale.total_paid)}</div>
-            <div>Estado: ${sale.payment_status === 'paid' ? 'Pagada' : 
-                           sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}</div>
-          `}
-        </div>
-      `;
+      if (isInstallmentReceipt) {
+        html += `
+          <div class="border-bottom">
+            <div>Método de pago: Efectivo</div>
+            <div>Fecha del abono: ${new Date(sale.payment_date || sale.created_at).toLocaleDateString('es-ES')}</div>
+            ${sale.payment_notes ? `<div>Notas: ${sale.payment_notes}</div>` : ''}
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="border-bottom">
+            <div>Método de pago: ${sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}</div>
+            ${sale.payment_type === 'cash' ? `
+              <div>Recibido: ${formatCurrency(sale.total_paid)}</div>
+              <div>Cambio: ${formatCurrency(Math.max(0, sale.total_paid - sale.total_amount))}</div>
+            ` : `
+              <div>Pagado: ${formatCurrency(sale.total_paid)}</div>
+              <div>Saldo: ${formatCurrency(sale.total_amount - sale.total_paid)}</div>
+              <div>Estado: ${sale.payment_status === 'paid' ? 'Pagada' : 
+                             sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}</div>
+            `}
+          </div>
+        `;
+      }
     }
 
     // Códigos de barras y QR
@@ -217,7 +276,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     if (settings.show_footer_message && settings.footer_message) {
       html += `
         <div class="center">
-          ${settings.footer_message}
+          ${isInstallmentReceipt ? (settings.footer_message.replace('compra', 'abono') || '¡Gracias por su abono!') : settings.footer_message}
         </div>
       `;
     }

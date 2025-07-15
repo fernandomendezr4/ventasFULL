@@ -29,6 +29,7 @@ export default function SalesManager() {
         .select(`
           *,
           customer:customers (name, phone, email),
+          user:users (name, email),
           sale_items (
             *,
             product:products (*)

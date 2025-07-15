@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Printer, Save, Eye, RefreshCw, FileText, Image, Info, Type, Layout } from 'lucide-react';
+import { Settings as SettingsIcon, Printer, Save, Eye, RefreshCw, FileText, Image, Info, Type, Layout, Download, Database, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '../lib/currency';
 import PrintService from './PrintService';
 import NotificationModal from './NotificationModal';
 import { useNotification } from '../hooks/useNotification';
+import { supabase } from '../lib/supabase';
 
 interface PrintSettings {
   print_enabled: boolean;
@@ -96,7 +97,8 @@ export default function Settings() {
   const { notification, showSuccess, showError, hideNotification } = useNotification();
   const [settings, setSettings] = useState<PrintSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'company' | 'layout' | 'advanced'>('general');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'general' | 'company' | 'layout' | 'advanced' | 'database'>('general');
 
   useEffect(() => {
     loadSettings();
@@ -145,6 +147,98 @@ export default function Settings() {
   const resetSettings = () => {
     if (window.confirm('¿Estás seguro de que quieres restaurar la configuración por defecto?')) {
       setSettings(DEFAULT_SETTINGS);
+    }
+  };
+
+  const exportDatabase = async () => {
+    try {
+      setExportLoading(true);
+      
+      // Obtener todas las tablas y sus datos
+      const tables = [
+        'categories',
+        'suppliers', 
+        'customers',
+        'users',
+        'products',
+        'sales',
+        'sale_items',
+        'cash_registers',
+        'cash_movements',
+        'payment_installments',
+        'payments'
+      ];
+      
+      let sqlExport = `-- Exportación completa de la base de datos VentasFULL\n`;
+      sqlExport += `-- Fecha de exportación: ${new Date().toLocaleString('es-ES')}\n\n`;
+      
+      for (const tableName of tables) {
+        try {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select('*');
+          
+          if (error) {
+            console.warn(`Error al exportar tabla ${tableName}:`, error);
+            continue;
+          }
+          
+          if (data && data.length > 0) {
+            sqlExport += `-- Tabla: ${tableName}\n`;
+            sqlExport += `-- Registros: ${data.length}\n\n`;
+            
+            // Obtener las columnas del primer registro
+            const columns = Object.keys(data[0]);
+            
+            for (const row of data) {
+              const values = columns.map(col => {
+                const value = row[col];
+                if (value === null) return 'NULL';
+                if (typeof value === 'string') {
+                  // Escapar comillas simples
+                  return `'${value.replace(/'/g, "''")}'`;
+                }
+                if (typeof value === 'boolean') return value ? 'true' : 'false';
+                if (value instanceof Date) return `'${value.toISOString()}'`;
+                return value;
+              });
+              
+              sqlExport += `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')});\n`;
+            }
+            
+            sqlExport += `\n`;
+          }
+        } catch (tableError) {
+          console.warn(`Error procesando tabla ${tableName}:`, tableError);
+        }
+      }
+      
+      // Crear y descargar el archivo
+      const blob = new Blob([sqlExport], { type: 'text/sql;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ventasfull_backup_${new Date().toISOString().split('T')[0]}.sql`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      showSuccess(
+        '¡Exportación Completada!',
+        'La base de datos ha sido exportada exitosamente. El archivo SQL se ha descargado automáticamente.'
+      );
+      
+      // Guardar fecha de última exportación
+      localStorage.setItem('last_export_date', new Date().toLocaleString('es-ES'));
+    } catch (error) {
+      console.error('Error exporting database:', error);
+      showError(
+        'Error en la Exportación',
+        'No se pudo exportar la base de datos. ' + (error as Error).message
+      );
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -557,6 +651,127 @@ body {
     </div>
   );
 
+  const renderDatabaseTab = () => (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+          <Database className="h-5 w-5 mr-2 text-indigo-600" />
+          Gestión de Base de Datos
+        </h3>
+        
+        <div className="space-y-6">
+          {/* Exportación de Base de Datos */}
+          <div className="border border-slate-200 rounded-lg p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h4 className="text-lg font-medium text-slate-900 mb-2 flex items-center">
+                  <Download className="h-5 w-5 mr-2 text-blue-600" />
+                  Exportar Base de Datos Completa
+                </h4>
+                <p className="text-slate-600 mb-4">
+                  Descarga un archivo SQL con todos los datos de tu sistema, incluyendo productos, ventas, clientes, usuarios y configuraciones.
+                </p>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-start">
+                    <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2" />
+                    <div>
+                      <h5 className="text-sm font-medium text-blue-900">¿Qué incluye la exportación?</h5>
+                      <ul className="text-sm text-blue-800 mt-1 space-y-1">
+                        <li>• Todos los productos y categorías</li>
+                        <li>• Historial completo de ventas</li>
+                        <li>• Información de clientes y proveedores</li>
+                        <li>• Usuarios y configuraciones</li>
+                        <li>• Movimientos de caja registradora</li>
+                        <li>• Pagos e instalments</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-2" />
+                    <div>
+                      <h5 className="text-sm font-medium text-yellow-900">Recomendaciones</h5>
+                      <ul className="text-sm text-yellow-800 mt-1 space-y-1">
+                        <li>• Realiza exportaciones periódicas como respaldo</li>
+                        <li>• Guarda los archivos en un lugar seguro</li>
+                        <li>• El archivo puede ser grande si tienes muchos datos</li>
+                        <li>• La exportación puede tomar varios minutos</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={exportDatabase}
+                disabled={exportLoading}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center font-medium"
+              >
+                {exportLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Exportando...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-5 w-5 mr-2" />
+                    Exportar Base de Datos
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          
+          {/* Información del Sistema */}
+          <div className="border border-slate-200 rounded-lg p-6">
+            <h4 className="text-lg font-medium text-slate-900 mb-4 flex items-center">
+              <Info className="h-5 w-5 mr-2 text-green-600" />
+              Información del Sistema
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Versión del Sistema:</span>
+                  <span className="font-medium">VentasFULL v2.0</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Base de Datos:</span>
+                  <span className="font-medium">PostgreSQL (Supabase)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Última Exportación:</span>
+                  <span className="font-medium">
+                    {localStorage.getItem('last_export_date') || 'Nunca'}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Entorno:</span>
+                  <span className="font-medium">Producción</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Región:</span>
+                  <span className="font-medium">América del Sur</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Zona Horaria:</span>
+                  <span className="font-medium">GMT-5 (Colombia)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -600,7 +815,8 @@ body {
               { id: 'general', label: 'General', icon: Printer },
               { id: 'company', label: 'Empresa', icon: Info },
               { id: 'layout', label: 'Diseño', icon: Layout },
-              { id: 'advanced', label: 'Avanzado', icon: Type }
+              { id: 'advanced', label: 'Avanzado', icon: Type },
+              { id: 'database', label: 'Base de Datos', icon: Database }
             ].map((tab) => {
               const Icon = tab.icon;
               return (
@@ -626,6 +842,7 @@ body {
           {activeTab === 'company' && renderCompanyTab()}
           {activeTab === 'layout' && renderLayoutTab()}
           {activeTab === 'advanced' && renderAdvancedTab()}
+          {activeTab === 'database' && renderDatabaseTab()}
         </div>
       </div>
 

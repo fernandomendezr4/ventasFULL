@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer } from 'lucide-react';
+import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer, Phone } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -255,6 +255,9 @@ export default function SalesManager() {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
+                          {sale.user && (
+                            <span className="ml-2">• Vendedor: {sale.user.name}</span>
+                          )}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
@@ -287,13 +290,17 @@ export default function SalesManager() {
                           <DollarSign className="h-4 w-4 mr-1" />
                           {formatCurrency(sale.total_amount)}
                         </span>
+                        {sale.user && (
+                          <span className="flex items-center">
+                            <User className="h-4 w-4 mr-1" />
+                            {sale.user.name}
+                          </span>
+                        )}
                       </div>
-                      {sale.customer && (
+                      {sale.customer && sale.customer.phone && (
                         <div className="flex items-center text-sm text-slate-500">
-                          <User className="h-4 w-4 mr-1" />
-                          {sale.customer.phone && (
-                            <span>{sale.customer.phone}</span>
-                          )}
+                          <Phone className="h-4 w-4 mr-1" />
+                          <span>{sale.customer.phone}</span>
                         </div>
                       )}
                     </div>
@@ -387,6 +394,12 @@ export default function SalesManager() {
                   hour: '2-digit',
                   minute: '2-digit'
                 })}
+                {selectedSale.user && (
+                  <span className="ml-2">• Vendedor: {selectedSale.user.name}</span>
+                )}
+                {selectedSale.customer && (
+                  <span className="ml-2">• Cliente: {selectedSale.customer.name}</span>
+                )}
               </p>
             </div>
             

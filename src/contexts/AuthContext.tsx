@@ -115,6 +115,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
       
+      // If there's an error with the session (like invalid refresh token), clear it
+      if (error) {
+        console.warn('Session error, clearing auth state:', error.message);
+        await supabase.auth.signOut();
+        setUser(null);
+        setPermissions([]);
+        setLoading(false);
+        return;
+      }
+      
       if (!error && session?.user) {
         // Buscar el usuario en la tabla users
         const { data: userData, error: userError } = await supabase
@@ -135,6 +145,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error checking Supabase session:', error);
+      // Clear auth state on any session check error
+      await supabase.auth.signOut();
+      setUser(null);
+      setPermissions([]);
     } finally {
       setLoading(false);
     }

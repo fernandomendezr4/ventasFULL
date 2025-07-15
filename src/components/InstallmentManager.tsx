@@ -763,6 +763,9 @@ export default function InstallmentManager() {
                     min="0"
                     max={(selectedSale.total_amount - selectedSale.total_paid).toString()}
                   />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Máximo: {formatCurrency(selectedSale.total_amount - selectedSale.total_paid)}
+                  </p>
                 </div>
                 
                 <div>
@@ -783,7 +786,11 @@ export default function InstallmentManager() {
             <div className="p-6 border-t border-slate-200 flex gap-3">
               <button
                 onClick={handlePayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                disabled={
+                  !paymentAmount || 
+                  parseFloat(paymentAmount) <= 0 || 
+                  parseFloat(paymentAmount) > (selectedSale.total_amount - selectedSale.total_paid)
+                }
                 className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 Registrar Abono
@@ -839,7 +846,11 @@ export default function InstallmentManager() {
                     onChange={(value) => setPaymentAmount(value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="0"
+                    max={(selectedSale.total_amount - (selectedSale.total_paid - editingPayment.amount_paid)).toString()}
                   />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Máximo permitido: {formatCurrency(selectedSale.total_amount - (selectedSale.total_paid - editingPayment.amount_paid))}
+                  </p>
                 </div>
                 
                 <div>
@@ -860,7 +871,11 @@ export default function InstallmentManager() {
             <div className="p-6 border-t border-slate-200 flex gap-3">
               <button
                 onClick={handleEditPayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                disabled={
+                  !paymentAmount || 
+                  parseFloat(paymentAmount) <= 0 || 
+                  parseFloat(paymentAmount) > (selectedSale.total_amount - (selectedSale.total_paid - editingPayment.amount_paid))
+                }
                 className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 Actualizar Abono

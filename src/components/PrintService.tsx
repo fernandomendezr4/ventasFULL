@@ -33,7 +33,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
             }
             
             body {
-              font-family: 'Courier New', monospace;
+              font-family: 'Roboto', 'Courier New', monospace;
               font-size: ${getFontSize()};
               line-height: ${getLineHeight()};
               margin: 0;

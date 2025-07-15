@@ -58,8 +58,8 @@ export default function ConfirmationModal({
   const colors = getColors();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
-      <div className={`bg-white rounded-xl shadow-xl max-w-md w-full mx-4 border-2 ${colors.border} animate-slideIn`}>
+    <div className="modal-overlay">
+      <div className={`modal-content max-w-md w-full mx-4 border-2 ${colors.border}`}>
         <div className={`p-6 ${colors.bg} rounded-t-xl border-b ${colors.border}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -74,7 +74,7 @@ export default function ConfirmationModal({
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 transition-colors duration-200"
+              className="icon-button text-slate-400 hover:text-slate-600"
               disabled={loading}
             >
               <X className="h-5 w-5" />
@@ -91,14 +91,14 @@ export default function ConfirmationModal({
             <button
               onClick={onClose}
               disabled={loading}
-              className="px-6 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors duration-200 font-medium disabled:opacity-50"
+              className="button-secondary disabled:opacity-50"
             >
               {cancelText}
             </button>
             <button
               onClick={onConfirm}
               disabled={loading}
-              className={`px-6 py-2 text-white rounded-lg transition-colors duration-200 font-medium disabled:opacity-50 ${colors.button} flex items-center`}
+              className={`button-primary disabled:opacity-50 ${colors.button} flex items-center`}
             >
               {loading ? (
                 <>

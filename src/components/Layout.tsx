@@ -88,10 +88,10 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`w-full flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`sidebar-item ${
                 activeTab === tab.id
-                  ? `${bgColor} text-white shadow-sm`
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? `${bgColor} sidebar-item-active`
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Icon className="h-4 w-4 mr-3" />
@@ -105,9 +105,9 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex transition-colors duration-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex transition-all duration-300 ease-smooth page-transition">
       {/* Sidebar */}
-      <div className="w-64 bg-white dark:bg-slate-800 shadow-lg border-r border-slate-200 dark:border-slate-700 flex flex-col transition-colors duration-200">
+      <div className="w-64 bg-white dark:bg-slate-800 shadow-lg border-r border-slate-200 dark:border-slate-700 flex flex-col transition-all duration-300 ease-smooth animate-slide-in-left">
         {/* Header */}
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           {React.useEffect(() => {
@@ -118,7 +118,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               document.title = settings.app_name || 'VentasFULL';
             }
           }, [])}
-          <div className="flex items-center">
+          <div className="flex items-center animate-fade-in">
             <div className="p-2 bg-blue-600 dark:bg-blue-500 rounded-lg">
               <ShoppingCart className="h-6 w-6 text-white" />
             </div>
@@ -139,7 +139,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 p-4 overflow-y-auto scrollbar-hide">
           {/* Debug info - solo para desarrollo */}
           {process.env.NODE_ENV === 'development' && (
             <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
@@ -148,11 +148,11 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               <p>Permisos: {permissions.length}</p>
             </div>
           )}
-          {renderTabGroup('Principal', mainTabs, 'bg-blue-600')}
-          {renderTabGroup('Ventas', salesTabs, 'bg-green-600')}
-          {renderTabGroup('Inventario', inventoryTabs, 'bg-purple-600')}
-          {renderTabGroup('Contactos', contactsTabs, 'bg-orange-600')}
-          {renderTabGroup('Administración', adminTabs, 'bg-red-600')}
+          <div className="space-y-6 stagger-item">{renderTabGroup('Principal', mainTabs, 'bg-blue-600')}</div>
+          <div className="space-y-6 stagger-item">{renderTabGroup('Ventas', salesTabs, 'bg-green-600')}</div>
+          <div className="space-y-6 stagger-item">{renderTabGroup('Inventario', inventoryTabs, 'bg-purple-600')}</div>
+          <div className="space-y-6 stagger-item">{renderTabGroup('Contactos', contactsTabs, 'bg-orange-600')}</div>
+          <div className="space-y-6 stagger-item">{renderTabGroup('Administración', adminTabs, 'bg-red-600')}</div>
         </div>
 
         {/* Footer */}
@@ -160,7 +160,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
           <div className="text-center space-y-2">
             <button
               onClick={() => setShowProfile(true)}
-              className="w-full p-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors duration-200"
+              className="w-full p-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all duration-200 ease-smooth hover:scale-105"
             >
               <div className="flex items-center">
                 <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mr-3">
@@ -179,7 +179,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
-        <div className="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 px-6 py-4 transition-colors duration-200">
+        <div className="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 px-6 py-4 transition-all duration-300 ease-smooth animate-slide-in-down">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
@@ -208,7 +208,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               </div>
               <button
                 onClick={() => setShowProfile(true)}
-                className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors duration-200"
+                className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-800 transition-all duration-200 ease-smooth hover:scale-110 active:scale-95"
               >
                 <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </button>
@@ -217,7 +217,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
         </div>
         
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto animate-fade-in">
           {children}
         </main>
       </div>

@@ -139,18 +139,18 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-transition">
       {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-sm p-6 text-white">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-sm p-6 text-white animate-scale-in">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold mb-2">¡Bienvenido a VentasFULL!</h1>
+            <h1 className="text-2xl font-bold mb-2 text-shadow">¡Bienvenido a VentasFULL!</h1>
             <p className="text-blue-100">
               Gestiona tu negocio de manera eficiente y organizada
             </p>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
+            <p className="text-3xl font-bold text-shadow-lg animate-bounce-in">{formatCurrency(stats.totalRevenue)}</p>
             <p className="text-blue-100">Ingresos Totales</p>
           </div>
         </div>
@@ -163,7 +163,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
           return (
             <div
               key={card.title}
-              className={`bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-all duration-200 border ${card.border}`}
+              className={`stat-card ${card.border} stagger-item`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -181,7 +181,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Sales */}
-        <div className="bg-white rounded-xl shadow-sm border">
+        <div className="bg-white rounded-xl shadow-sm border animate-slide-in-left">
           <div className="p-6 border-b border-slate-200">
             <h3 className="text-lg font-semibold text-slate-900 flex items-center">
               <TrendingUp className="h-5 w-5 mr-2 text-green-600" />
@@ -197,7 +197,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
             ) : (
               <div className="space-y-4">
                 {recentSales.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors duration-200">
+                  <div key={sale.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg card-hover">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-green-100 rounded-lg">
@@ -228,7 +228,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
         </div>
 
         {/* Low Stock Alert */}
-        <div className="bg-white rounded-xl shadow-sm border">
+        <div className="bg-white rounded-xl shadow-sm border animate-slide-in-right">
           <div className="p-6 border-b border-slate-200">
             <h3 className="text-lg font-semibold text-slate-900 flex items-center">
               <AlertTriangle className="h-5 w-5 mr-2 text-orange-600" />
@@ -244,7 +244,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
             ) : (
               <div className="space-y-4">
                 {lowStockProducts.map((product) => (
-                  <div key={product.id} className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <div key={product.id} className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200 card-hover">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-orange-100 rounded-lg">
@@ -280,28 +280,28 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
 
       {/* Quick Actions */}
       {user?.role === 'admin' && onTabChange && (
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-white rounded-xl shadow-sm border p-6 animate-slide-in-up">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Acciones Rápidas</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => onTabChange('new-sale')}
-              className="flex items-center justify-center p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors duration-200 group"
+              className="flex items-center justify-center p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-all duration-200 ease-bounce group card-hover"
             >
-              <Plus className="h-5 w-5 text-green-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+              <Plus className="h-5 w-5 text-green-600 mr-2 group-hover:scale-110 transition-all duration-200 ease-bounce" />
               <span className="font-medium text-green-700">Nueva Venta</span>
             </button>
             <button
               onClick={() => onTabChange('products')}
-              className="flex items-center justify-center p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors duration-200 group"
+              className="flex items-center justify-center p-4 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-all duration-200 ease-bounce group card-hover"
             >
-              <Package className="h-5 w-5 text-purple-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+              <Package className="h-5 w-5 text-purple-600 mr-2 group-hover:scale-110 transition-all duration-200 ease-bounce" />
               <span className="font-medium text-purple-700">Gestionar Productos</span>
             </button>
             <button
               onClick={() => onTabChange('cash-register')}
-              className="flex items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200 group"
+              className="flex items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all duration-200 ease-bounce group card-hover"
             >
-              <Calculator className="h-5 w-5 text-blue-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+              <Calculator className="h-5 w-5 text-blue-600 mr-2 group-hover:scale-110 transition-all duration-200 ease-bounce" />
               <span className="font-medium text-blue-700">Abrir Caja</span>
             </button>
           </div>

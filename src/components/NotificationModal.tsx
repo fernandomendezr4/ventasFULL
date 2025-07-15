@@ -80,8 +80,8 @@ export default function NotificationModal({
   const colors = getColors();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
-      <div className={`bg-white rounded-xl shadow-xl max-w-md w-full mx-4 border-2 ${colors.border} animate-slideIn`}>
+    <div className="modal-overlay">
+      <div className={`modal-content max-w-md w-full mx-4 border-2 ${colors.border}`}>
         <div className={`p-6 ${colors.bg} rounded-t-xl border-b ${colors.border}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -92,7 +92,7 @@ export default function NotificationModal({
             </div>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 transition-colors duration-200"
+              className="icon-button text-slate-400 hover:text-slate-600"
             >
               <X className="h-5 w-5" />
             </button>
@@ -107,7 +107,7 @@ export default function NotificationModal({
           <div className="mt-6 flex justify-end">
             <button
               onClick={onClose}
-              className={`px-6 py-2 text-white rounded-lg transition-colors duration-200 font-medium ${colors.button}`}
+              className={`button-primary ${colors.button.replace('bg-', '').replace('hover:bg-', 'hover:bg-')}`}
             >
               Entendido
             </button>

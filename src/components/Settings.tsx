@@ -12,6 +12,8 @@ interface PrintSettings {
   print_copies: number;
   receipt_width: '58mm' | '80mm' | '110mm';
   show_logo: boolean;
+  logo_url: string;
+  logo_size: 'small' | 'medium' | 'large';
   show_company_info: boolean;
   show_customer_info: boolean;
   show_payment_details: boolean;
@@ -29,6 +31,8 @@ interface PrintSettings {
   line_spacing: 'compact' | 'normal' | 'relaxed';
   show_barcode: boolean;
   show_qr_code: boolean;
+  qr_content: 'sale_id' | 'company_info' | 'custom';
+  qr_custom_text: string;
   custom_css: string;
 }
 
@@ -38,6 +42,8 @@ const DEFAULT_SETTINGS: PrintSettings = {
   print_copies: 1,
   receipt_width: '80mm',
   show_logo: true,
+  logo_url: '',
+  logo_size: 'medium',
   show_company_info: true,
   show_customer_info: true,
   show_payment_details: true,
@@ -54,6 +60,8 @@ const DEFAULT_SETTINGS: PrintSettings = {
   font_size: 'medium',
   line_spacing: 'normal',
   show_barcode: false,
+  qr_content: 'sale_id',
+  qr_custom_text: '',
   show_qr_code: false,
   custom_css: ''
 };
@@ -106,38 +114,67 @@ export default function Settings() {
 
   const loadSettings = () => {
     try {
-      const savedSettings = localStorage.getItem('print_settings');
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+      // Cargar configuración de impresión
+      const printSettings = localStorage.getItem('print_settings');
+      const appSettings = localStorage.getItem('app_settings');
+      
+      let mergedSettings = { ...DEFAULT_SETTINGS };
+      
+      if (appSettings) {
+        const appConfig = JSON.parse(appSettings);
+        mergedSettings = { ...mergedSettings, ...appConfig };
       }
+      
+      if (printSettings) {
+        const printConfig = JSON.parse(printSettings);
+        mergedSettings = { ...mergedSettings, ...printConfig };
+      }
+      
+      setSettings(mergedSettings);
     } catch (error) {
       console.error('Error loading print settings:', error);
+      setSettings(DEFAULT_SETTINGS);
     }
   };
 
   const saveSettings = async () => {
     try {
       setLoading(true);
+      
+      // Guardar en configuración de impresión
       localStorage.setItem('print_settings', JSON.stringify(settings));
       
-      // También guardar en configuración general de la app
-      const appSettings = localStorage.getItem('app_settings');
-      const currentAppSettings = appSettings ? JSON.parse(appSettings) : {};
-      localStorage.setItem('app_settings', JSON.stringify({
-        ...currentAppSettings,
-        ...settings
-      }));
+      // Guardar también en configuración general para compatibilidad
+      const currentAppSettings = localStorage.getItem('app_settings');
+      const appConfig = currentAppSettings ? JSON.parse(currentAppSettings) : {};
+      
+      const updatedAppSettings = {
+        ...appConfig,
+        // Solo guardar configuraciones relevantes para la app
+        company_name: settings.company_name,
+        company_address: settings.company_address,
+        company_phone: settings.company_phone,
+        company_email: settings.company_email,
+        company_website: settings.company_website,
+        tax_id: settings.tax_id,
+        logo_url: settings.logo_url,
+        app_name: settings.company_name || 'VentasFULL'
+      };
+      
+      localStorage.setItem('app_settings', JSON.stringify(updatedAppSettings));
+      
+      // Actualizar título de la página
+      document.title = settings.company_name || 'VentasFULL';
 
       showSuccess(
         '¡Configuración Guardada!',
-        'La configuración de impresión ha sido guardada exitosamente'
+        'La configuración de impresión ha sido guardada exitosamente. Los cambios se aplicarán en las próximas impresiones.'
       );
     } catch (error) {
       console.error('Error saving settings:', error);
       showError(
         'Error al Guardar',
-        'No se pudo guardar la configuración de impresión'
+        'No se pudo guardar la configuración de impresión. ' + (error as Error).message
       );
     } finally {
       setLoading(false);
@@ -371,6 +408,34 @@ export default function Settings() {
                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
               />
             </div>
+            
+            {settings.show_qr_code && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Contenido del código QR
+                </label>
+                <select
+                  value={settings.qr_content}
+                  onChange={(e) => handleSettingChange('qr_content', e.target.value)}
+                  disabled={!settings.print_enabled}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                >
+                  <option value="sale_id">ID de la venta</option>
+                  <option value="company_info">Información de la empresa</option>
+                  <option value="custom">Texto personalizado</option>
+                </select>
+                
+                {settings.qr_content === 'custom' && (
+                  <input
+                    type="text"
+                    value={settings.qr_custom_text}
+                    onChange={(e) => handleSettingChange('qr_custom_text', e.target.value)}
+                    placeholder="Texto para el código QR"
+                    className="w-full mt-2 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -496,6 +561,60 @@ export default function Settings() {
                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
               </div>
+              
+              {settings.show_logo && (
+                <div className="ml-6 space-y-3 border-l-2 border-blue-200 pl-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      URL del logo
+                    </label>
+                    <input
+                      type="url"
+                      value={settings.logo_url}
+                      onChange={(e) => handleSettingChange('logo_url', e.target.value)}
+                      placeholder="https://ejemplo.com/logo.png"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Recomendado: imagen cuadrada, máximo 200x200px, formato PNG o JPG
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Tamaño del logo
+                    </label>
+                    <select
+                      value={settings.logo_size}
+                      onChange={(e) => handleSettingChange('logo_size', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="small">Pequeño (30px)</option>
+                      <option value="medium">Mediano (50px)</option>
+                      <option value="large">Grande (70px)</option>
+                    </select>
+                  </div>
+                  
+                  {settings.logo_url && (
+                    <div className="bg-slate-50 p-3 rounded-lg border">
+                      <p className="text-xs text-slate-600 mb-2">Vista previa:</p>
+                      <img 
+                        src={settings.logo_url} 
+                        alt="Logo preview"
+                        className={`mx-auto ${
+                          settings.logo_size === 'small' ? 'w-8 h-8' :
+                          settings.logo_size === 'large' ? 'w-16 h-16' : 'w-12 h-12'
+                        } object-contain`}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling!.textContent = 'Error al cargar la imagen';
+                        }}
+                      />
+                      <p className="text-xs text-red-500 text-center mt-1 hidden">Error al cargar la imagen</p>
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-slate-700">
@@ -858,7 +977,26 @@ body {
             <div className="font-mono text-xs space-y-1">
               {settings.show_logo && (
                 <div className="text-center mb-2">
-                  <div className="w-8 h-8 bg-slate-300 rounded-full mx-auto mb-1"></div>
+                  {settings.logo_url ? (
+                    <img 
+                      src={settings.logo_url} 
+                      alt="Logo"
+                      className={`mx-auto mb-1 object-contain ${
+                        settings.logo_size === 'small' ? 'w-6 h-6' :
+                        settings.logo_size === 'large' ? 'w-10 h-10' : 'w-8 h-8'
+                      }`}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className={`bg-slate-300 rounded-full mx-auto mb-1 flex items-center justify-center text-slate-600 text-xs ${
+                      settings.logo_size === 'small' ? 'w-6 h-6' :
+                      settings.logo_size === 'large' ? 'w-10 h-10' : 'w-8 h-8'
+                    }`}>
+                      LOGO
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -945,10 +1083,24 @@ body {
               {(settings.show_barcode || settings.show_qr_code) && (
                 <div className="text-center mt-2">
                   {settings.show_barcode && (
-                    <div className="bg-slate-800 h-8 w-24 mx-auto mb-1"></div>
+                    <div>
+                      <div className="bg-slate-800 h-6 w-20 mx-auto mb-1 flex items-center justify-center">
+                        <div className="text-white text-xs">|||||||</div>
+                      </div>
+                      <div className="text-xs text-slate-600">12345678</div>
+                    </div>
                   )}
                   {settings.show_qr_code && (
-                    <div className="bg-slate-800 h-12 w-12 mx-auto"></div>
+                    <div className="mt-2">
+                      <div className="bg-slate-800 h-10 w-10 mx-auto mb-1 flex items-center justify-center">
+                        <div className="text-white text-xs">QR</div>
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        {settings.qr_content === 'sale_id' ? 'ID Venta' :
+                         settings.qr_content === 'company_info' ? 'Info Empresa' :
+                         'Personalizado'}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

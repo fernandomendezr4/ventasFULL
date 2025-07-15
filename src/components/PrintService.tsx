@@ -24,8 +24,8 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           <style>
             body {
               font-family: 'Courier New', monospace;
-              font-size: 12px;
-              line-height: 1.4;
+              font-size: ${fontSize};
+              line-height: ${lineHeight};
               margin: 0;
               padding: 10px;
               width: ${settings.receipt_width === '58mm' ? '200px' : 
@@ -35,7 +35,19 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
             .bold { font-weight: bold; }
             .border-bottom { border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px; }
             .flex { display: flex; justify-content: space-between; }
-            .logo { width: 40px; height: 40px; background: #333; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
+            .logo { 
+              width: ${settings.logo_size === 'small' ? '30px' : settings.logo_size === 'large' ? '70px' : '50px'}; 
+              height: ${settings.logo_size === 'small' ? '30px' : settings.logo_size === 'large' ? '70px' : '50px'}; 
+              background: #333; 
+              color: white; 
+              border-radius: 50%; 
+              display: flex; 
+              align-items: center; 
+              justify-content: center; 
+              margin: 0 auto 10px;
+              font-weight: bold;
+              font-size: ${settings.logo_size === 'small' ? '12px' : settings.logo_size === 'large' ? '20px' : '16px'};
+            }
             @media print {
               body { width: auto; }
               .no-print { display: none; }
@@ -82,13 +94,28 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     const lineHeight = settings.line_spacing === 'compact' ? '1.2' : 
                       settings.line_spacing === 'relaxed' ? '1.6' : '1.4';
 
+    // Aplicar estilos CSS personalizados
+    if (settings.custom_css) {
+      html += `<style>${settings.custom_css}</style>`;
+    }
+
     // Logo
     if (settings.show_logo) {
-      html += `
-        <div class="center">
-          <div class="logo">LOGO</div>
-        </div>
-      `;
+      if (settings.logo_url) {
+        const logoSize = settings.logo_size === 'small' ? '30px' :
+                        settings.logo_size === 'large' ? '70px' : '50px';
+        html += `
+          <div class="center">
+            <img src="${settings.logo_url}" alt="Logo" style="width: ${logoSize}; height: ${logoSize}; object-fit: contain; margin: 0 auto 10px;" />
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="center">
+            <div class="logo">${settings.company_name?.charAt(0) || 'L'}</div>
+          </div>
+        `;
+      }
     }
 
     // Company Info
@@ -256,16 +283,46 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       html += '<div class="center" style="margin-top: 10px;">';
       
       if (settings.show_barcode) {
+        const barcodeValue = sale.id.slice(-8);
         html += `
-          <div style="background: #000; height: 30px; width: 120px; margin: 5px auto;"></div>
-          <div style="font-size: 10px;">${sale.id.slice(-8)}</div>
+          <div style="margin: 5px auto;">
+            <svg width="120" height="30" style="margin: 0 auto; display: block;">
+              <g>
+                ${generateBarcode(barcodeValue)}
+              </g>
+            </svg>
+            <div style="font-size: 10px; margin-top: 2px;">${barcodeValue}</div>
+          </div>
         `;
       }
       
       if (settings.show_qr_code) {
+        let qrContent = '';
+        switch (settings.qr_content) {
+          case 'sale_id':
+            qrContent = `Venta: ${sale.id}`;
+            break;
+          case 'company_info':
+            qrContent = `${settings.company_name || 'VentasFULL'}${settings.company_phone ? ` - Tel: ${settings.company_phone}` : ''}${settings.company_website ? ` - ${settings.company_website}` : ''}`;
+            break;
+          case 'custom':
+            qrContent = settings.qr_custom_text || 'VentasFULL';
+            break;
+          default:
+            qrContent = sale.id;
+        }
+        
         html += `
-          <div style="background: #000; height: 60px; width: 60px; margin: 5px auto;"></div>
-          <div style="font-size: 10px;">Código QR</div>
+          <div style="margin: 5px auto;">
+            <div id="qr-code-${Date.now()}" style="margin: 0 auto; display: flex; justify-content: center;">
+              ${generateQRCode(qrContent)}
+            </div>
+            <div style="font-size: 10px; margin-top: 2px;">
+              ${settings.qr_content === 'sale_id' ? 'ID de Venta' :
+                settings.qr_content === 'company_info' ? 'Información' :
+                'Código QR'}
+            </div>
+          </div>
         `;
       }
       
@@ -298,6 +355,68 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     return html;
   };
 
+  // Función para generar código de barras simple
+  const generateBarcode = (value: string) => {
+    const bars = [];
+    const barWidth = 2;
+    let x = 0;
+    
+    // Patrón simple de barras basado en el valor
+    for (let i = 0; i < value.length; i++) {
+      const digit = parseInt(value[i]) || 0;
+      const pattern = digit % 2 === 0 ? [1, 0, 1, 0] : [0, 1, 0, 1];
+      
+      pattern.forEach((bar, j) => {
+        if (bar) {
+          bars.push(`<rect x="${x}" y="0" width="${barWidth}" height="30" fill="black"/>`);
+        }
+        x += barWidth;
+      });
+    }
+    
+    return bars.join('');
+  };
+
+  // Función para generar código QR simple (representación visual)
+  const generateQRCode = (content: string) => {
+    // Generar un patrón QR simple basado en el contenido
+    const size = 60;
+    const moduleSize = 3;
+    const modules = Math.floor(size / moduleSize);
+    
+    let qrPattern = '';
+    const hash = content.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    for (let y = 0; y < modules; y++) {
+      for (let x = 0; x < modules; x++) {
+        const shouldFill = ((x + y + Math.abs(hash)) % 3) === 0;
+        if (shouldFill) {
+          qrPattern += `<rect x="${x * moduleSize}" y="${y * moduleSize}" width="${moduleSize}" height="${moduleSize}" fill="black"/>`;
+        }
+      }
+    }
+    
+    return `
+      <svg width="${size}" height="${size}" style="border: 1px solid #ccc;">
+        ${qrPattern}
+        <!-- Esquinas del QR -->
+        <rect x="0" y="0" width="21" height="21" fill="black"/>
+        <rect x="3" y="3" width="15" height="15" fill="white"/>
+        <rect x="6" y="6" width="9" height="9" fill="black"/>
+        
+        <rect x="${size-21}" y="0" width="21" height="21" fill="black"/>
+        <rect x="${size-18}" y="3" width="15" height="15" fill="white"/>
+        <rect x="${size-15}" y="6" width="9" height="9" fill="black"/>
+        
+        <rect x="0" y="${size-21}" width="21" height="21" fill="black"/>
+        <rect x="3" y="${size-18}" width="15" height="15" fill="white"/>
+        <rect x="6" y="${size-15}" width="9" height="9" fill="black"/>
+      </svg>
+    `;
+  };
   return (
     <button
       onClick={printReceipt}

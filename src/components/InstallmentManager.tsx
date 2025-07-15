@@ -534,32 +534,47 @@ export default function InstallmentManager() {
                        sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
                     </span>
                     {sale.payment_status !== 'paid' && (
-                      <button
-                        onClick={() => {
-                          setSelectedSale(sale);
-                          setPaymentAmount((sale.total_amount - sale.total_paid).toString());
-                          setShowPaymentModal(true);
-                        }}
-                        className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Abonar
-                      </button>
-                      <PrintService
-                        sale={{
-                          ...selectedSale,
-                          payment_amount: payment.amount_paid,
-                          payment_date: payment.payment_date,
-                          payment_notes: payment.notes,
-                          remaining_balance: selectedSale.total_amount - selectedSale.total_paid,
-                          is_installment_receipt: true
-                        }}
-                        settings={(() => {
-                          const savedSettings = localStorage.getItem('app_settings');
-                          const printSettings = localStorage.getItem('print_settings');
-                          if (savedSettings || printSettings) {
-                            const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
-                            const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                      <>
+                        <button
+                          onClick={() => {
+                            setSelectedSale(sale);
+                            setPaymentAmount((sale.total_amount - sale.total_paid).toString());
+                            setShowPaymentModal(true);
+                          }}
+                          className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Abonar
+                        </button>
+                        <PrintService
+                          sale={sale}
+                          settings={(() => {
+                            const savedSettings = localStorage.getItem('app_settings');
+                            const printSettings = localStorage.getItem('print_settings');
+                            if (savedSettings || printSettings) {
+                              const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
+                              const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                              return {
+                                print_enabled: true,
+                                auto_print: false,
+                                print_copies: 1,
+                                receipt_width: '80mm',
+                                show_logo: true,
+                                show_company_info: true,
+                                show_customer_info: true,
+                                show_payment_details: true,
+                                show_footer_message: true,
+                                footer_message: '¡Gracias por su compra!',
+                                receipt_header: 'FACTURA DE VENTA',
+                                receipt_footer: 'Conserve este comprobante',
+                                company_name: 'VentasFULL',
+                                company_address: '',
+                                company_phone: '',
+                                company_email: '',
+                                ...appSettings,
+                                ...printConfig
+                              };
+                            }
                             return {
                               print_enabled: true,
                               auto_print: false,
@@ -570,37 +585,17 @@ export default function InstallmentManager() {
                               show_customer_info: true,
                               show_payment_details: true,
                               show_footer_message: true,
-                              footer_message: '¡Gracias por su abono!',
-                              receipt_header: 'COMPROBANTE DE ABONO',
+                              footer_message: '¡Gracias por su compra!',
+                              receipt_header: 'FACTURA DE VENTA',
                               receipt_footer: 'Conserve este comprobante',
                               company_name: 'VentasFULL',
                               company_address: '',
                               company_phone: '',
-                              company_email: '',
-                              ...appSettings,
-                              ...printConfig
+                              company_email: ''
                             };
-                          }
-                          return {
-                            print_enabled: true,
-                            auto_print: false,
-                            print_copies: 1,
-                            receipt_width: '80mm',
-                            show_logo: true,
-                            show_company_info: true,
-                            show_customer_info: true,
-                            show_payment_details: true,
-                            show_footer_message: true,
-                            footer_message: '¡Gracias por su abono!',
-                            receipt_header: 'COMPROBANTE DE ABONO',
-                            receipt_footer: 'Conserve este comprobante',
-                            company_name: 'VentasFULL',
-                            company_address: '',
-                            company_phone: '',
-                            company_email: ''
-                          };
-                        })()}
-                      />
+                          })()}
+                        />
+                      </>
                     )}
                     <button
                       onClick={() => setSelectedSale(sale)}

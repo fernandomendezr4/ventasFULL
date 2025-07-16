@@ -1084,20 +1084,25 @@ body {
                 <div className="text-center mt-2">
                   {settings.show_barcode && (
                     <div>
-                      <div className="bg-slate-800 h-6 w-20 mx-auto mb-1 flex items-center justify-center">
-                        <div className="text-white text-xs">|||||||</div>
+                      <div className="bg-slate-100 p-2 rounded border mx-auto mb-1 inline-block">
+                        <div className="text-slate-600 text-xs font-mono">SALE12345678901</div>
+                        <div className="text-slate-800 text-xs">|||||| |||| |||||| ||||</div>
                       </div>
-                      <div className="text-xs text-slate-600">12345678</div>
+                      <div className="text-xs text-slate-600">Código de Barras</div>
                     </div>
                   )}
                   {settings.show_qr_code && (
                     <div className="mt-2">
-                      <div className="bg-slate-800 h-10 w-10 mx-auto mb-1 flex items-center justify-center">
-                        <div className="text-white text-xs">QR</div>
+                <option value="sale_details">Detalles completos de la venta</option>
+                <option value="verification_url">URL de verificación</option>
+                      <div className="bg-slate-100 h-12 w-12 mx-auto mb-1 flex items-center justify-center border rounded">
+                        <div className="text-slate-600 text-xs">QR</div>
                       </div>
                       <div className="text-xs text-slate-600">
                         {settings.qr_content === 'sale_id' ? 'ID Venta' :
                          settings.qr_content === 'company_info' ? 'Info Empresa' :
+                         settings.qr_content === 'sale_details' ? 'Detalles' :
+                         settings.qr_content === 'verification_url' ? 'Verificación' :
                          'Personalizado'}
                       </div>
                     </div>

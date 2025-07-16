@@ -2,6 +2,7 @@ import React from 'react';
 import { formatCurrency } from '../lib/currency';
 import { SaleWithItems } from '../lib/types';
 import { Printer } from 'lucide-react';
+import { generateBarcode, generateQRCode, generateSaleBarcode, generateQRContent } from '../lib/barcodeGenerator';
 
 interface PrintServiceProps {
   sale: SaleWithItems;
@@ -25,6 +26,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
         <head>
           <title>Comprobante de Venta #${sale.id.slice(-8)}</title>
           <meta charset="UTF-8">
+          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
           <style>
             * {
               margin: 0;
@@ -105,6 +107,26 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
               border-top: 1px dashed #000;
             }
             
+            .barcode-container {
+              text-align: center;
+              margin: 10px 0;
+            }
+            
+            .qr-container {
+              text-align: center;
+              margin: 10px 0;
+            }
+            
+            .qr-container img {
+              max-width: 80px;
+              max-height: 80px;
+            }
+            
+            .barcode-container svg {
+              max-width: 200px;
+              height: auto;
+            }
+            
             @media print {
               body { 
                 width: auto; 
@@ -134,6 +156,26 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
               ❌ Cerrar
             </button>
           </div>
+          <script>
+            // Generar código de barras después de cargar la página
+            window.onload = function() {
+              ${settings.show_barcode ? `
+                if (typeof JsBarcode !== 'undefined') {
+                  const barcodeElement = document.getElementById('sale-barcode');
+                  if (barcodeElement) {
+                    JsBarcode(barcodeElement, '${generateSaleBarcode(sale.id)}', {
+                      format: "CODE128",
+                      width: 1.5,
+                      height: 30,
+                      displayValue: true,
+                      fontSize: 10,
+                      margin: 2
+                    });
+                  }
+                }
+              ` : ''}
+            };
+          </script>
         </body>
       </html>
     `);
@@ -419,6 +461,42 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
               sale.payment_status === 'paid' ? 'Pagada' : 
               sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'
             }</div>
+          `;
+        }
+      }
+      
+      html += '</div>';
+    }
+
+    // Códigos de barras y QR
+    if (settings.show_barcode || settings.show_qr_code) {
+      html += '<div class="border-t border-slate-300 pt-2 mt-2">';
+      
+      if (settings.show_barcode) {
+        const barcodeData = generateSaleBarcode(sale.id);
+        html += `
+          <div class="barcode-container">
+            <svg id="sale-barcode"></svg>
+            <div class="text-xs text-slate-600 mt-1">${barcodeData}</div>
+          </div>
+        `;
+      }
+      
+      if (settings.show_qr_code) {
+        const qrContent = generateQRContent(sale, settings);
+        const qrImage = generateQRCode(qrContent, 80);
+        if (qrImage) {
+          html += `
+            <div class="qr-container">
+              <img src="${qrImage}" alt="Código QR" />
+              <div class="text-xs text-slate-600 mt-1">
+                ${settings.qr_content === 'sale_id' ? 'Información de Venta' :
+                  settings.qr_content === 'company_info' ? 'Datos de la Empresa' :
+                  settings.qr_content === 'sale_details' ? 'Detalles Completos' :
+                  settings.qr_content === 'verification_url' ? 'Verificar Venta' :
+                  'Información Personalizada'}
+              </div>
+            </div>
           `;
         }
       }

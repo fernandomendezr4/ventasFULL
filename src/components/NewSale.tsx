@@ -335,8 +335,6 @@ export default function NewSale() {
         user_id: currentCashRegister.user_id,
         payment_type: paymentType,
         total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
-        received_amount: paymentType === 'cash' ? (parseFloat(receivedAmount) || total) : undefined,
-        change_amount: paymentType === 'cash' ? calculateChange() : undefined,
         payment_status: paymentType === 'cash' ? 'paid' : 
                        (parseFloat(initialPayment) || 0) >= total ? 'paid' :
                        (parseFloat(initialPayment) || 0) > 0 ? 'partial' : 'pending'

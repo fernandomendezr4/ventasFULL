@@ -2,7 +2,7 @@ import React from 'react';
 import { formatCurrency } from '../lib/currency';
 import { SaleWithItems } from '../lib/types';
 import { Printer } from 'lucide-react';
-import { generateBarcode, generateQRCode, generateSaleBarcode, generateQRContent } from '../lib/barcodeGenerator';
+import { generateSaleBarcode, generateQRContent, generateQRCode } from '../lib/barcodeGenerator';
 
 interface PrintServiceProps {
   sale: SaleWithItems;
@@ -120,6 +120,8 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
             .qr-container img {
               max-width: 80px;
               max-height: 80px;
+              image-rendering: -webkit-optimize-contrast;
+              image-rendering: crisp-edges;
             }
             
             .barcode-container svg {
@@ -165,13 +167,15 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
                   if (barcodeElement) {
                     try {
                       JsBarcode(barcodeElement, '${generateSaleBarcode(sale.id)}', {
-                      format: "CODE128",
-                      width: 1.5,
-                      height: 30,
-                      displayValue: true,
-                      fontSize: 10,
-                      margin: 2
-                    });
+                        format: "CODE128",
+                        width: 1.5,
+                        height: 30,
+                        displayValue: true,
+                        fontSize: 10,
+                        margin: 2,
+                        background: "#ffffff",
+                        lineColor: "#000000"
+                      });
                     } catch (error) {
                       console.error('Error generating barcode:', error);
                       barcodeElement.innerHTML = '<div style="text-align: center; padding: 10px; border: 1px solid #ccc;">${generateSaleBarcode(sale.id)}</div>';
@@ -488,22 +492,18 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       }
       
       if (settings.show_qr_code) {
-        const qrContent = generateQRContent(sale, settings);
-        const qrImage = generateQRCode(qrContent, 80);
-        if (qrImage) {
-          html += `
-            <div class="qr-container">
-              <img src="${qrImage}" alt="Código QR" />
-              <div class="text-xs text-slate-600 mt-1">
-                ${settings.qr_content === 'sale_id' ? 'Información de Venta' :
-                  settings.qr_content === 'company_info' ? 'Datos de la Empresa' :
-                  settings.qr_content === 'sale_details' ? 'Detalles Completos' :
-                  settings.qr_content === 'verification_url' ? 'Verificar Venta' :
-                  'Información Personalizada'}
-              </div>
+        html += `
+          <div class="qr-container">
+            <div id="qr-code-container"></div>
+            <div class="text-xs text-slate-600 mt-1">
+              ${settings.qr_content === 'sale_id' ? 'Información de Venta' :
+                settings.qr_content === 'company_info' ? 'Datos de la Empresa' :
+                settings.qr_content === 'sale_details' ? 'Detalles Completos' :
+                settings.qr_content === 'verification_url' ? 'Verificar Venta' :
+                'Información Personalizada'}
             </div>
-          `;
-        }
+          </div>
+        `;
       }
       
       html += '</div>';

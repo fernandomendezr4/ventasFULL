@@ -5,6 +5,7 @@ import PrintService from './PrintService';
 import NotificationModal from './NotificationModal';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../lib/supabase';
+import { TabTransition } from './ViewTransition';
 
 interface PrintSettings {
   print_enabled: boolean;
@@ -959,11 +960,21 @@ body {
         </div>
         
         <div className="p-6">
-          {activeTab === 'general' && renderGeneralTab()}
-          {activeTab === 'company' && renderCompanyTab()}
-          {activeTab === 'layout' && renderLayoutTab()}
-          {activeTab === 'advanced' && renderAdvancedTab()}
-          {activeTab === 'database' && renderDatabaseTab()}
+          <TabTransition activeTab={activeTab} tabKey="general">
+            {renderGeneralTab()}
+          </TabTransition>
+          <TabTransition activeTab={activeTab} tabKey="company">
+            {renderCompanyTab()}
+          </TabTransition>
+          <TabTransition activeTab={activeTab} tabKey="layout">
+            {renderLayoutTab()}
+          </TabTransition>
+          <TabTransition activeTab={activeTab} tabKey="advanced">
+            {renderAdvancedTab()}
+          </TabTransition>
+          <TabTransition activeTab={activeTab} tabKey="database">
+            {renderDatabaseTab()}
+          </TabTransition>
         </div>
       </div>
 

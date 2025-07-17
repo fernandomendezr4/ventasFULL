@@ -4,6 +4,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import ViewTransition from './components/ViewTransition';
 import Dashboard from './components/Dashboard';
 import ProductManager from './components/ProductManager';
 import CategoryManager from './components/CategoryManager';
@@ -30,29 +31,77 @@ function AppContent() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard onTabChange={setActiveTab} />;
+        return (
+          <ViewTransition transitionKey="dashboard" type="dashboard">
+            <Dashboard onTabChange={setActiveTab} />
+          </ViewTransition>
+        );
       case 'products':
-        return <ProductManager />;
+        return (
+          <ViewTransition transitionKey="products" type="slide-left">
+            <ProductManager />
+          </ViewTransition>
+        );
       case 'categories':
-        return <CategoryManager />;
+        return (
+          <ViewTransition transitionKey="categories" type="slide-left">
+            <CategoryManager />
+          </ViewTransition>
+        );
       case 'sales':
-        return <SalesManager />;
+        return (
+          <ViewTransition transitionKey="sales" type="slide-left">
+            <SalesManager />
+          </ViewTransition>
+        );
       case 'new-sale':
-        return <NewSale />;
+        return (
+          <ViewTransition transitionKey="new-sale" type="form">
+            <NewSale />
+          </ViewTransition>
+        );
       case 'installments':
-        return <InstallmentManager />;
+        return (
+          <ViewTransition transitionKey="installments" type="slide-left">
+            <InstallmentManager />
+          </ViewTransition>
+        );
       case 'suppliers':
-        return <SupplierManager />;
+        return (
+          <ViewTransition transitionKey="suppliers" type="slide-left">
+            <SupplierManager />
+          </ViewTransition>
+        );
       case 'customers':
-        return <CustomerManager />;
+        return (
+          <ViewTransition transitionKey="customers" type="slide-left">
+            <CustomerManager />
+          </ViewTransition>
+        );
       case 'users':
-        return <UserManager />;
+        return (
+          <ViewTransition transitionKey="users" type="slide-left">
+            <UserManager />
+          </ViewTransition>
+        );
       case 'cash-register':
-        return <CashRegister />;
+        return (
+          <ViewTransition transitionKey="cash-register" type="slide-up">
+            <CashRegister />
+          </ViewTransition>
+        );
       case 'settings':
-        return <Settings />;
+        return (
+          <ViewTransition transitionKey="settings" type="fade">
+            <Settings />
+          </ViewTransition>
+        );
       default:
-        return <Dashboard />;
+        return (
+          <ViewTransition transitionKey="dashboard" type="dashboard">
+            <Dashboard onTabChange={setActiveTab} />
+          </ViewTransition>
+        );
     }
   };
 

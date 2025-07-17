@@ -217,7 +217,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
         </div>
         
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-y-auto animate-fade-in">
+        <main className="flex-1 p-6 overflow-y-auto view-container">
           {children}
         </main>
       </div>

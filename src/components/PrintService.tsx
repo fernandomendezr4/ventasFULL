@@ -163,7 +163,8 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
                 if (typeof JsBarcode !== 'undefined') {
                   const barcodeElement = document.getElementById('sale-barcode');
                   if (barcodeElement) {
-                    JsBarcode(barcodeElement, '${generateSaleBarcode(sale.id)}', {
+                    try {
+                      JsBarcode(barcodeElement, '${generateSaleBarcode(sale.id)}', {
                       format: "CODE128",
                       width: 1.5,
                       height: 30,
@@ -171,6 +172,10 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
                       fontSize: 10,
                       margin: 2
                     });
+                    } catch (error) {
+                      console.error('Error generating barcode:', error);
+                      barcodeElement.innerHTML = '<div style="text-align: center; padding: 10px; border: 1px solid #ccc;">${generateSaleBarcode(sale.id)}</div>';
+                    }
                   }
                 }
               ` : ''}
@@ -502,12 +507,13 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       }
       
       html += '</div>';
-    }
-
-    // Footer Message
-    if (settings.show_footer_message && settings.footer_message) {
-      html += `
-        <div class="center footer-section">
+          const qrImage = generateQRCode(qrContent, 100);
+                  ${settings.qr_content === 'sale_id' ? 'Info de Venta' :
+                    settings.qr_content === 'company_info' ? 'Datos Empresa' :
+                    settings.qr_content === 'sale_details' ? 'Detalles' :
+                    settings.qr_content === 'verification_url' ? 'Verificación' :
+                    settings.qr_content === 'custom' ? 'Personalizado' :
+                    'Código QR'}
           ${isInstallmentReceipt ? 
             (settings.footer_message.replace('compra', 'abono') || '¡Gracias por su abono!') : 
             settings.footer_message

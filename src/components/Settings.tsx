@@ -1084,26 +1084,27 @@ body {
                 <div className="text-center mt-2">
                   {settings.show_barcode && (
                     <div>
-                      <div className="bg-slate-100 p-2 rounded border mx-auto mb-1 inline-block">
+                      <div className="bg-slate-100 p-3 rounded border mx-auto mb-2 inline-block">
+                        <div className="text-slate-800 text-xs font-mono mb-1">|||||| |||| |||||| ||||</div>
                         <div className="text-slate-600 text-xs font-mono">SALE12345678901</div>
-                        <div className="text-slate-800 text-xs">|||||| |||| |||||| ||||</div>
                       </div>
                       <div className="text-xs text-slate-600">Código de Barras</div>
                     </div>
                   )}
                   {settings.show_qr_code && (
                     <div className="mt-2">
-                <option value="sale_details">Detalles completos de la venta</option>
-                <option value="verification_url">URL de verificación</option>
-                      <div className="bg-slate-100 h-12 w-12 mx-auto mb-1 flex items-center justify-center border rounded">
-                        <div className="text-slate-600 text-xs">QR</div>
+                      <div className="bg-slate-100 h-16 w-16 mx-auto mb-2 flex items-center justify-center border rounded relative">
+                        <div className="absolute inset-1 border-2 border-slate-400"></div>
+                        <div className="absolute top-1 left-1 w-2 h-2 bg-slate-600"></div>
+                        <div className="absolute top-1 right-1 w-2 h-2 bg-slate-600"></div>
+                        <div className="absolute bottom-1 left-1 w-2 h-2 bg-slate-600"></div>
+                        <div className="text-slate-600 text-xs font-bold">QR</div>
                       </div>
                       <div className="text-xs text-slate-600">
                         {settings.qr_content === 'sale_id' ? 'ID Venta' :
                          settings.qr_content === 'company_info' ? 'Info Empresa' :
-                         settings.qr_content === 'sale_details' ? 'Detalles' :
-                         settings.qr_content === 'verification_url' ? 'Verificación' :
-                         'Personalizado'}
+                         settings.qr_content === 'custom' ? 'Personalizado' :
+                         'Código QR'}
                       </div>
                     </div>
                   )}

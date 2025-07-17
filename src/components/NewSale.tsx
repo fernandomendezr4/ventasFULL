@@ -28,6 +28,7 @@ export default function NewSale() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showCustomerList, setShowCustomerList] = useState(false);
+  const [showCustomerConfirmModal, setShowCustomerConfirmModal] = useState(false);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
   const [discountAmount, setDiscountAmount] = useState('');
   const [initialPayment, setInitialPayment] = useState('');
@@ -41,6 +42,17 @@ export default function NewSale() {
   });
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
+
+  // Cliente genérico por defecto
+  const GENERIC_CUSTOMER = {
+    id: 'generic',
+    name: 'Cliente General',
+    email: '',
+    phone: '',
+    address: '',
+    cedula: '',
+    created_at: new Date().toISOString()
+  };
 
   useEffect(() => {
     loadData();
@@ -278,6 +290,21 @@ export default function NewSale() {
     }
   };
 
+  const handleProceedWithGenericCustomer = () => {
+    setSelectedCustomer(GENERIC_CUSTOMER);
+    setShowCustomerConfirmModal(false);
+  };
+
+  const handleSelectExistingCustomer = () => {
+    setShowCustomerConfirmModal(false);
+    setShowCustomerList(true);
+  };
+
+  const handleCreateNewCustomer = () => {
+    setShowCustomerConfirmModal(false);
+    setShowCustomerForm(true);
+  };
+
   const handleSale = async () => {
     if (cart.length === 0) {
       showWarning(
@@ -295,10 +322,26 @@ export default function NewSale() {
       return;
     }
 
+    // Si no hay cliente seleccionado, mostrar modal de confirmación
+    if (!selectedCustomer) {
+      setShowCustomerConfirmModal(true);
+      return;
+    }
+
+    // Proceder con la venta
     if (paymentType === 'installment' && !selectedCustomer) {
       showWarning(
         'Cliente Requerido',
         'Debes seleccionar un cliente para realizar ventas por abonos'
+      );
+      return;
+    }
+
+    // Si es cliente genérico para ventas por abonos, no permitir
+    if (paymentType === 'installment' && selectedCustomer?.id === 'generic') {
+      showWarning(
+        'Cliente Específico Requerido',
+        'Para ventas por abonos debes seleccionar un cliente específico, no se puede usar el cliente genérico.'
       );
       return;
     }
@@ -331,7 +374,7 @@ export default function NewSale() {
         subtotal: subtotal,
         discount_amount: discount,
         total_amount: total,
-        customer_id: selectedCustomer?.id || null,
+        customer_id: selectedCustomer?.id === 'generic' ? null : selectedCustomer?.id || null,
         user_id: currentCashRegister.user_id,
         payment_type: paymentType,
         total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
@@ -448,7 +491,7 @@ export default function NewSale() {
       // Prepare sale data for printing
       const saleForPrint = {
         ...sale,
-        customer: selectedCustomer,
+        customer: selectedCustomer?.id === 'generic' ? null : selectedCustomer,
         user: currentUser,
         sale_items: cart.map(item => ({
           product: item.product,
@@ -908,8 +951,7 @@ export default function NewSale() {
               
               <button
                 onClick={handleSale}
-                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer) || cashRegisterLoading}
-                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && !selectedCustomer) || (paymentType === 'cash' && !isValidCashPayment()) || cashRegisterLoading}
+                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && (!selectedCustomer || selectedCustomer?.id === 'generic')) || (paymentType === 'cash' && !isValidCashPayment()) || cashRegisterLoading}
                 className="w-full mt-4 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
               >
                 {saving ? 'Procesando...' : 
@@ -930,6 +972,92 @@ export default function NewSale() {
           </div>
         )}
       </div>
+
+      {/* Customer Confirmation Modal */}
+      {showCustomerConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                ¿Cómo deseas proceder con el cliente?
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                No has seleccionado un cliente para esta venta
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-3">
+                <button
+                  onClick={handleProceedWithGenericCustomer}
+                  disabled={paymentType === 'installment'}
+                  className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${
+                    paymentType === 'installment'
+                      ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                      : 'border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className={`w-4 h-4 rounded-full mr-3 ${
+                      paymentType === 'installment' ? 'bg-slate-300' : 'bg-green-500'
+                    }`}></div>
+                    <div>
+                      <h4 className={`font-medium ${
+                        paymentType === 'installment' ? 'text-slate-400' : 'text-green-900'
+                      }`}>
+                        Continuar con Cliente General
+                      </h4>
+                      <p className={`text-sm ${
+                        paymentType === 'installment' ? 'text-slate-400' : 'text-green-700'
+                      }`}>
+                        {paymentType === 'installment' 
+                          ? 'No disponible para ventas por abonos'
+                          : 'Realizar la venta sin cliente específico'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={handleSelectExistingCustomer}
+                  className="w-full p-4 text-left border-2 border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all duration-200"
+                >
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-blue-500 rounded-full mr-3"></div>
+                    <div>
+                      <h4 className="font-medium text-blue-900">Seleccionar Cliente Existente</h4>
+                      <p className="text-sm text-blue-700">Elegir de la lista de clientes registrados</p>
+                    </div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={handleCreateNewCustomer}
+                  className="w-full p-4 text-left border-2 border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200"
+                >
+                  <div className="flex items-center">
+                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-3"></div>
+                    <div>
+                      <h4 className="font-medium text-purple-900">Crear Nuevo Cliente</h4>
+                      <p className="text-sm text-purple-700">Registrar un cliente nuevo en el sistema</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+              
+              <div className="mt-6 pt-4 border-t border-slate-200">
+                <button
+                  onClick={() => setShowCustomerConfirmModal(false)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Customer List Modal */}
       {showCustomerList && (

@@ -507,13 +507,12 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       }
       
       html += '</div>';
-          const qrImage = generateQRCode(qrContent, 100);
-                  ${settings.qr_content === 'sale_id' ? 'Info de Venta' :
-                    settings.qr_content === 'company_info' ? 'Datos Empresa' :
-                    settings.qr_content === 'sale_details' ? 'Detalles' :
-                    settings.qr_content === 'verification_url' ? 'Verificación' :
-                    settings.qr_content === 'custom' ? 'Personalizado' :
-                    'Código QR'}
+    }
+
+    // Footer Message
+    if (settings.footer_message) {
+      html += `
+        <div class="center footer-section">
           ${isInstallmentReceipt ? 
             (settings.footer_message.replace('compra', 'abono') || '¡Gracias por su abono!') : 
             settings.footer_message

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2 } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Product, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -30,6 +30,8 @@ export default function NewSale() {
   const [searchTerm, setSearchTerm] = useState('');
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showCustomerSelectionModal, setShowCustomerSelectionModal] = useState(false);
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(DEFAULT_PAYMENT_METHODS);
@@ -38,6 +40,15 @@ export default function NewSale() {
   const [loading, setLoading] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
+  
+  // New customer form data
+  const [newCustomerData, setNewCustomerData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    cedula: ''
+  });
 
   useEffect(() => {
     loadProducts();
@@ -151,9 +162,57 @@ export default function NewSale() {
     return Math.max(0, received - total);
   };
 
+  const handleCustomerSelection = (type: 'generic' | 'existing' | 'new') => {
+    setShowCustomerSelectionModal(false);
+    
+    if (type === 'generic') {
+      // Cliente genérico - no seleccionar ningún cliente específico
+      setSelectedCustomer(null);
+    } else if (type === 'existing') {
+      // Mostrar modal para seleccionar cliente existente
+      setShowCustomerModal(true);
+    } else if (type === 'new') {
+      // Mostrar formulario para crear nuevo cliente
+      setShowNewCustomerForm(true);
+    }
+  };
+
+  const handleCreateNewCustomer = async () => {
+    if (!newCustomerData.name.trim()) {
+      alert('El nombre del cliente es requerido');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .insert([newCustomerData])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setSelectedCustomer(data);
+      setShowNewCustomerForm(false);
+      setNewCustomerData({ name: '', email: '', phone: '', address: '', cedula: '' });
+      
+      // Recargar la lista de clientes
+      loadCustomers();
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      alert('Error al crear cliente: ' + (error as Error).message);
+    }
+  };
+
   const processSale = async () => {
     if (cart.length === 0) {
       alert('Agrega productos al carrito');
+      return;
+    }
+
+    // Validar que si es venta por abonos, debe tener cliente seleccionado
+    if (paymentType === 'installment' && !selectedCustomer) {
+      alert('Para ventas por abonos debe seleccionar un cliente');
       return;
     }
 
@@ -413,11 +472,11 @@ export default function NewSale() {
               </div>
             ) : (
               <button
-                onClick={() => setShowCustomerModal(true)}
+                onClick={() => setShowCustomerSelectionModal(true)}
                 className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors duration-200 flex items-center justify-center"
               >
                 <User className="h-4 w-4 mr-2" />
-                Seleccionar Cliente (Opcional)
+                {paymentType === 'installment' ? 'Seleccionar Cliente (Requerido)' : 'Seleccionar Cliente (Opcional)'}
               </button>
             )}
           </div>
@@ -491,7 +550,12 @@ export default function NewSale() {
                       </div>
                     </button>
                     <button
-                      onClick={() => setPaymentType('installment')}
+                      onClick={() => {
+                        setPaymentType('installment');
+                        if (!selectedCustomer) {
+                          setShowCustomerSelectionModal(true);
+                        }
+                      }}
                       className={`p-3 rounded-lg border-2 transition-all duration-200 ${
                         paymentType === 'installment'
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -504,6 +568,11 @@ export default function NewSale() {
                       </div>
                     </button>
                   </div>
+                  {paymentType === 'installment' && !selectedCustomer && (
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                      ⚠️ Para ventas por abonos debe seleccionar un cliente
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Method Selection */}
@@ -615,11 +684,80 @@ export default function NewSale() {
       </div>
 
       {/* Customer Selection Modal */}
+      {showCustomerSelectionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Seleccionar Tipo de Cliente</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                {paymentType === 'installment' 
+                  ? 'Para ventas por abonos debe seleccionar un cliente específico'
+                  : 'Elige el tipo de cliente para esta venta'
+                }
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-3">
+              {paymentType === 'cash' && (
+                <button
+                  onClick={() => handleCustomerSelection('generic')}
+                  className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 text-left"
+                >
+                  <div className="flex items-center">
+                    <User className="h-6 w-6 text-slate-600 mr-3" />
+                    <div>
+                      <h4 className="font-medium text-slate-900">Cliente Genérico</h4>
+                      <p className="text-sm text-slate-600">Venta sin datos específicos del cliente</p>
+                    </div>
+                  </div>
+                </button>
+              )}
+              
+              <button
+                onClick={() => handleCustomerSelection('existing')}
+                className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-green-300 hover:bg-green-50 transition-all duration-200 text-left"
+              >
+                <div className="flex items-center">
+                  <Search className="h-6 w-6 text-slate-600 mr-3" />
+                  <div>
+                    <h4 className="font-medium text-slate-900">Cliente Existente</h4>
+                    <p className="text-sm text-slate-600">Seleccionar de la lista de clientes registrados</p>
+                  </div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => handleCustomerSelection('new')}
+                className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-all duration-200 text-left"
+              >
+                <div className="flex items-center">
+                  <UserPlus className="h-6 w-6 text-slate-600 mr-3" />
+                  <div>
+                    <h4 className="font-medium text-slate-900">Nuevo Cliente</h4>
+                    <p className="text-sm text-slate-600">Crear un nuevo cliente y asignarlo a esta venta</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200">
+              <button
+                onClick={() => setShowCustomerSelectionModal(false)}
+                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Selection Modal */}
       {showCustomerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Seleccionar Cliente</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Seleccionar Cliente Existente</h3>
               <div className="mt-4 relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <input
@@ -668,6 +806,107 @@ export default function NewSale() {
                 className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Customer Form Modal */}
+      {showNewCustomerForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Crear Nuevo Cliente</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Ingresa los datos del nuevo cliente
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Nombre Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomerData.name}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Cédula
+                </label>
+                <input
+                  type="text"
+                  value={newCustomerData.cedula}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, cedula: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Número de cédula"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Teléfono
+                </label>
+                <input
+                  type="tel"
+                  value={newCustomerData.phone}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Número de teléfono"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={newCustomerData.email}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Correo electrónico"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Dirección
+                </label>
+                <textarea
+                  value={newCustomerData.address}
+                  onChange={(e) => setNewCustomerData({ ...newCustomerData, address: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Dirección del cliente"
+                />
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleCreateNewCustomer}
+                disabled={!newCustomerData.name.trim()}
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              >
+                Crear Cliente
+              </button>
+              <button
+                onClick={() => {
+                  setShowNewCustomerForm(false);
+                  setNewCustomerData({ name: '', email: '', phone: '', address: '', cedula: '' });
+                }}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              >
+                Cancelar
               </button>
             </div>
           </div>

@@ -1,113 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, X, Search, Package, User, UserPlus, Scan, AlertCircle } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Product, CartItem, Customer } from '../lib/types';
+import { Product, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
-import FormattedNumberInput from './FormattedNumberInput';
 import { useAuth } from '../contexts/AuthContext';
-import NotificationModal from './NotificationModal';
-import ConfirmationModal from './ConfirmationModal';
-import { useNotification } from '../hooks/useNotification';
-import { useConfirmation } from '../hooks/useConfirmation';
+import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
 
+interface PaymentMethod {
+  id: string;
+  name: string;
+  icon: string;
+  image_url?: string;
+}
+
+const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
+  { id: 'cash', name: 'Efectivo', icon: 'Banknote' },
+  { id: 'card', name: 'Tarjeta', icon: 'CreditCard' },
+  { id: 'transfer', name: 'Transferencia Bancaria', icon: 'Building2' },
+  { id: 'nequi', name: 'NEQUI', icon: 'Smartphone' }
+];
+
 export default function NewSale() {
-  const { user: currentUser } = useAuth();
-  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
-  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [cashRegisterLoading, setCashRegisterLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [barcodeSearch, setBarcodeSearch] = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [showCustomerList, setShowCustomerList] = useState(false);
-  const [showCustomerConfirmModal, setShowCustomerConfirmModal] = useState(false);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
-  const [discountAmount, setDiscountAmount] = useState('');
-  const [initialPayment, setInitialPayment] = useState('');
-  const [receivedAmount, setReceivedAmount] = useState('');
-  const [customerFormData, setCustomerFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    cedula: '',
-  });
-  const [completedSale, setCompletedSale] = useState<any>(null);
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(DEFAULT_PAYMENT_METHODS);
+  const [amountReceived, setAmountReceived] = useState('');
+  const [discount, setDiscount] = useState('');
+  const [loading, setLoading] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
-
-  // Cliente genérico por defecto
-  const GENERIC_CUSTOMER = {
-    id: 'generic',
-    name: 'Cliente General',
-    email: '',
-    phone: '',
-    address: '',
-    cedula: '',
-    created_at: new Date().toISOString()
-  };
+  const [completedSale, setCompletedSale] = useState<any>(null);
 
   useEffect(() => {
-    loadData();
+    loadProducts();
+    loadCustomers();
+    loadPaymentMethods();
   }, []);
 
-  const loadData = async () => {
+  const loadPaymentMethods = () => {
     try {
-      setLoading(true);
-      await Promise.all([
-        loadProducts(),
-        loadCustomers(),
-        loadCurrentCashRegister()
-      ]);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadCurrentCashRegister = async () => {
-    try {
-      setCashRegisterLoading(true);
-      let query = supabase
-        .from('cash_registers')
-        .select(`
-          *,
-          user:users(*)
-        `)
-        .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1);
-
-      // Si es empleado, solo mostrar su propia caja
-      if (currentUser?.role === 'employee') {
-        query = query.eq('user_id', currentUser.id);
-      }
-
-      const { data, error } = await query.maybeSingle();
-
-      if (error) throw error;
-      setCurrentCashRegister(data);
-      
-      // Si no hay caja abierta, limpiar el carrito por seguridad
-      if (!data) {
-        setCart([]);
-        setSelectedCustomer(null);
+      const savedMethods = localStorage.getItem('payment_methods');
+      if (savedMethods) {
+        const methods = JSON.parse(savedMethods);
+        setPaymentMethods(methods);
+      } else {
+        setPaymentMethods(DEFAULT_PAYMENT_METHODS);
       }
     } catch (error) {
-      console.error('Error loading current cash register:', error);
-      setCurrentCashRegister(null);
-      setCart([]);
-      setSelectedCustomer(null);
-    } finally {
-      setCashRegisterLoading(false);
+      console.error('Error loading payment methods:', error);
+      setPaymentMethods(DEFAULT_PAYMENT_METHODS);
     }
   };
 
@@ -120,10 +69,9 @@ export default function NewSale() {
         .order('name');
 
       if (error) throw error;
-      setProducts(data || []);
+      setProducts(data);
     } catch (error) {
       console.error('Error loading products:', error);
-      setProducts([]);
     }
   };
 
@@ -135,47 +83,13 @@ export default function NewSale() {
         .order('name');
 
       if (error) throw error;
-      setCustomers(data || []);
+      setCustomers(data);
     } catch (error) {
       console.error('Error loading customers:', error);
-      setCustomers([]);
-    }
-  };
-
-  const handleBarcodeSearch = async (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && barcodeSearch.trim()) {
-      if (!currentCashRegister) {
-        showWarning(
-          'Caja Cerrada',
-          'Debe haber una caja abierta para buscar productos'
-        );
-        return;
-      }
-      
-      const product = products.find(p => 
-        p.barcode && p.barcode.toLowerCase() === barcodeSearch.trim().toLowerCase()
-      );
-      if (product) {
-        addToCart(product);
-        setBarcodeSearch('');
-      } else {
-        showWarning(
-          'Producto No Encontrado',
-          'No se encontró ningún producto con ese código de barras'
-        );
-      }
     }
   };
 
   const addToCart = (product: Product) => {
-    if (!currentCashRegister) {
-      showWarning(
-        'Caja Cerrada',
-        'Debe haber una caja abierta para agregar productos al carrito'
-      );
-      return;
-    }
-    
     const existingItem = cart.find(item => item.product.id === product.id);
     
     if (existingItem) {
@@ -186,10 +100,7 @@ export default function NewSale() {
             : item
         ));
       } else {
-        showWarning(
-          'Stock Insuficiente',
-          `Solo hay ${product.stock} unidades disponibles de ${product.name}`
-        );
+        alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
       }
     } else {
       setCart([...cart, { product, quantity: 1 }]);
@@ -197,25 +108,16 @@ export default function NewSale() {
   };
 
   const updateQuantity = (productId: string, newQuantity: number) => {
-    if (!currentCashRegister) {
-      showWarning(
-        'Caja Cerrada',
-        'Debe haber una caja abierta para modificar el carrito'
-      );
-      return;
-    }
-    
-    if (newQuantity === 0) {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    if (newQuantity <= 0) {
       removeFromCart(productId);
       return;
     }
 
-    const product = products.find(p => p.id === productId);
-    if (product && newQuantity > product.stock) {
-      showWarning(
-        'Stock Insuficiente',
-        `Solo hay ${product.stock} unidades disponibles`
-      );
+    if (newQuantity > product.stock) {
+      alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
       return;
     }
 
@@ -227,14 +129,6 @@ export default function NewSale() {
   };
 
   const removeFromCart = (productId: string) => {
-    if (!currentCashRegister) {
-      showWarning(
-        'Caja Cerrada',
-        'Debe haber una caja abierta para modificar el carrito'
-      );
-      return;
-    }
-    
     setCart(cart.filter(item => item.product.id !== productId));
   };
 
@@ -242,145 +136,54 @@ export default function NewSale() {
     return cart.reduce((sum, item) => sum + (item.product.sale_price * item.quantity), 0);
   };
 
+  const calculateDiscount = () => {
+    return parseFloat(discount) || 0;
+  };
+
   const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
-    const discount = parseFloat(discountAmount) || 0;
-    return Math.max(0, subtotal - discount);
+    return calculateSubtotal() - calculateDiscount();
   };
 
   const calculateChange = () => {
-    if (paymentType !== 'cash' || !receivedAmount) return 0;
-    const received = parseFloat(receivedAmount) || 0;
+    if (paymentType !== 'cash') return 0;
+    const received = parseFloat(amountReceived) || 0;
     const total = calculateTotal();
     return Math.max(0, received - total);
   };
 
-  const isValidCashPayment = () => {
-    if (paymentType !== 'cash') return true;
-    const received = parseFloat(receivedAmount) || 0;
-    const total = calculateTotal();
-    return received >= total;
-  };
-
-  const handleCreateCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .insert([customerFormData])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setCustomers([...customers, data]);
-      setSelectedCustomer(data);
-      setShowCustomerForm(false);
-      setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
-      showSuccess(
-        '¡Cliente Creado!',
-        `El cliente ${data.name} ha sido creado exitosamente`
-      );
-    } catch (error) {
-      console.error('Error creating customer:', error);
-      showError(
-        'Error al Crear Cliente',
-        'No se pudo crear el cliente. ' + (error as Error).message
-      );
-    }
-  };
-
-  const handleProceedWithGenericCustomer = () => {
-    setSelectedCustomer(GENERIC_CUSTOMER);
-    setShowCustomerConfirmModal(false);
-  };
-
-  const handleSelectExistingCustomer = () => {
-    setShowCustomerConfirmModal(false);
-    setShowCustomerList(true);
-  };
-
-  const handleCreateNewCustomer = () => {
-    setShowCustomerConfirmModal(false);
-    setShowCustomerForm(true);
-  };
-
-  const handleSale = async () => {
+  const processSale = async () => {
     if (cart.length === 0) {
-      showWarning(
-        'Carrito Vacío',
-        'Debes agregar productos al carrito antes de realizar la venta'
-      );
+      alert('Agrega productos al carrito');
       return;
     }
 
-    if (!currentCashRegister) {
-      showWarning(
-        'Caja Cerrada',
-        'Debe haber una caja abierta para realizar ventas. Ve a la sección de Caja Registradora para abrir una caja.'
-      );
-      return;
-    }
-
-    // Si no hay cliente seleccionado, mostrar modal de confirmación
-    if (!selectedCustomer) {
-      setShowCustomerConfirmModal(true);
-      return;
-    }
-
-    // Proceder con la venta
-    if (paymentType === 'installment' && !selectedCustomer) {
-      showWarning(
-        'Cliente Requerido',
-        'Debes seleccionar un cliente para realizar ventas por abonos'
-      );
-      return;
-    }
-
-    // Si es cliente genérico para ventas por abonos, no permitir
-    if (paymentType === 'installment' && selectedCustomer?.id === 'generic') {
-      showWarning(
-        'Cliente Específico Requerido',
-        'Para ventas por abonos debes seleccionar un cliente específico, no se puede usar el cliente genérico.'
-      );
-      return;
-    }
-
-    const subtotal = calculateSubtotal();
-    const discount = parseFloat(discountAmount) || 0;
-    const total = calculateTotal();
-
-    if (discount > subtotal) {
-      showWarning(
-        'Descuento Inválido',
-        'El descuento no puede ser mayor al subtotal de la venta'
-      );
-      return;
-    }
-
-    if (total <= 0) {
-      showWarning(
-        'Total Inválido',
-        'El total de la venta debe ser mayor a 0'
-      );
-      return;
+    if (paymentType === 'cash') {
+      const received = parseFloat(amountReceived) || 0;
+      const total = calculateTotal();
+      
+      if (received < total) {
+        alert('El monto recibido debe ser mayor o igual al total');
+        return;
+      }
     }
 
     try {
-      setSaving(true);
+      setLoading(true);
+
+      const subtotal = calculateSubtotal();
+      const discountAmount = calculateDiscount();
+      const total = calculateTotal();
 
       // Create sale
       const saleData = {
-        subtotal: subtotal,
-        discount_amount: discount,
         total_amount: total,
-        customer_id: selectedCustomer?.id === 'generic' ? null : selectedCustomer?.id || null,
-        user_id: currentCashRegister.user_id,
+        subtotal: subtotal,
+        discount_amount: discountAmount,
+        customer_id: selectedCustomer?.id || null,
+        user_id: user?.id || null,
         payment_type: paymentType,
-        total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
-        payment_status: paymentType === 'cash' ? 'paid' : 
-                       (parseFloat(initialPayment) || 0) >= total ? 'paid' :
-                       (parseFloat(initialPayment) || 0) > 0 ? 'partial' : 'pending'
+        total_paid: paymentType === 'cash' ? total : 0,
+        payment_status: paymentType === 'cash' ? 'paid' : 'pending',
       };
 
       const { data: sale, error: saleError } = await supabase
@@ -397,7 +200,7 @@ export default function NewSale() {
         product_id: item.product.id,
         quantity: item.quantity,
         unit_price: item.product.sale_price,
-        total_price: item.product.sale_price * item.quantity
+        total_price: item.product.sale_price * item.quantity,
       }));
 
       const { error: itemsError } = await supabase
@@ -416,800 +219,457 @@ export default function NewSale() {
         if (stockError) throw stockError;
       }
 
-      // Register sale movement in cash register
-      const { error: movementError } = await supabase
-        .from('cash_movements')
-        .insert([{
-          cash_register_id: currentCashRegister.id,
-          type: 'sale',
-          category: 'ventas_efectivo',
-          amount: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
-          description: `Venta #${sale.id.slice(-8)} - ${cart.length} productos`,
-          reference_id: sale.id,
-          created_by: currentCashRegister.user_id
-        }]);
-
-      if (movementError) console.error('Error registering sale movement:', movementError);
-
-      // Update cash register total sales
-      const { error: registerUpdateError } = await supabase
-        .from('cash_registers')
-        .update({
-          total_sales: (currentCashRegister.total_sales || 0) + (paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0))
-        })
-        .eq('id', currentCashRegister.id);
-
-      if (registerUpdateError) console.error('Error updating cash register:', registerUpdateError);
-
-      // Record payment for cash sales
-      if (paymentType === 'cash' || (paymentType === 'installment' && parseFloat(initialPayment) > 0)) {
-        const paymentAmount = paymentType === 'cash' ? total : parseFloat(initialPayment);
-        const receivedCash = paymentType === 'cash' ? (parseFloat(receivedAmount) || total) : parseFloat(initialPayment);
+      // Record payment if cash
+      if (paymentType === 'cash') {
         const { error: paymentError } = await supabase
           .from('payments')
           .insert([{
             sale_id: sale.id,
-            amount: paymentAmount,
-            payment_method: 'cash',
-            notes: paymentType === 'cash' 
-              ? `Pago completo en efectivo. Recibido: ${formatCurrency(receivedCash)}${receivedCash > total ? `, Cambio: ${formatCurrency(receivedCash - total)}` : ''}`
-              : 'Abono inicial'
+            amount: total,
+            payment_method: paymentMethod,
+            notes: `Pago completo - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`
           }]);
 
-        if (paymentError) console.error('Error recording payment:', paymentError);
-        
-        // Record initial payment as installment if it's an installment sale
-        if (paymentType === 'installment' && parseFloat(initialPayment) > 0) {
-          const { error: installmentError } = await supabase
-            .from('payment_installments')
-            .insert([{
-              sale_id: sale.id,
-              amount_paid: parseFloat(initialPayment),
-              payment_method: 'cash',
-              notes: 'Abono inicial'
-            }]);
+        if (paymentError) throw paymentError;
 
-          if (installmentError) console.error('Error recording initial installment:', installmentError);
+        // Register in cash register if open
+        try {
+          const { data: currentRegister } = await supabase
+            .from('cash_registers')
+            .select('*')
+            .eq('status', 'open')
+            .eq('user_id', user?.id)
+            .order('opened_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (currentRegister) {
+            await supabase
+              .from('cash_movements')
+              .insert([{
+                cash_register_id: currentRegister.id,
+                type: 'sale',
+                category: 'ventas_efectivo',
+                amount: total,
+                description: `Venta #${sale.id.slice(-8)} - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`,
+                reference_id: sale.id,
+                created_by: user?.id
+              }]);
+
+            await supabase
+              .from('cash_registers')
+              .update({
+                total_sales: (currentRegister.total_sales || 0) + total
+              })
+              .eq('id', currentRegister.id);
+          }
+        } catch (error) {
+          console.error('Error updating cash register:', error);
         }
       }
-
-      // Reset form
-      setCart([]);
-      setSelectedCustomer(null);
-      setDiscountAmount('');
-      setPaymentType('cash');
-      setReceivedAmount('');
-      setInitialPayment('');
-      setSearchTerm('');
-      setBarcodeSearch('');
-      
-      // Reload products to update stock
-      await loadProducts();
-      // Reload cash register to update totals
-      await loadCurrentCashRegister();
 
       // Prepare sale data for printing
       const saleForPrint = {
         ...sale,
-        customer: selectedCustomer?.id === 'generic' ? null : selectedCustomer,
-        user: currentUser,
+        customer: selectedCustomer,
+        user: user,
         sale_items: cart.map(item => ({
           product: item.product,
           quantity: item.quantity,
           unit_price: item.product.sale_price,
           total_price: item.product.sale_price * item.quantity
         })),
-        subtotal: subtotal,
-        discount_amount: parseFloat(discountAmount) || 0,
-        total_amount: total,
-        payment_type: paymentType,
-        total_paid: paymentType === 'cash' ? total : (parseFloat(initialPayment) || 0),
-        payment_status: paymentType === 'cash' ? 'paid' : 
-                       (parseFloat(initialPayment) || 0) >= total ? 'paid' :
-                       (parseFloat(initialPayment) || 0) > 0 ? 'partial' : 'pending'
+        payment_method_name: paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod
       };
 
       setCompletedSale(saleForPrint);
-
-      showSuccess(
-        paymentType === 'cash' ? '¡Venta Completada!' : '¡Venta Registrada!',
-        paymentType === 'cash' 
-          ? `Venta por ${formatCurrency(total)} completada exitosamente en efectivo${calculateChange() > 0 ? `. Cambio entregado: ${formatCurrency(calculateChange())}` : ''}`
-          : `Venta por ${formatCurrency(total)} registrada para abonos. ${parseFloat(initialPayment) > 0 ? `Abono inicial: ${formatCurrency(parseFloat(initialPayment))}` : 'Sin abono inicial'}`
-      );
-
-      // Show print option
       setShowPrintModal(true);
+
+      // Reset form
+      setCart([]);
+      setSelectedCustomer(null);
+      setAmountReceived('');
+      setDiscount('');
+      setPaymentType('cash');
+      setPaymentMethod('cash');
+      loadProducts();
     } catch (error) {
       console.error('Error processing sale:', error);
-      showError(
-        'Error al Procesar Venta',
-        'No se pudo completar la venta. ' + (error as Error).message
-      );
+      alert('Error al procesar la venta: ' + (error as Error).message);
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   };
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
+    product.barcode.includes(searchTerm)
   );
 
   const filteredCustomers = customers.filter(customer =>
-    customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    (customer.cedula && customer.cedula.includes(customerSearch)) ||
-    (customer.email && customer.email.toLowerCase().includes(customerSearch.toLowerCase())) ||
-    (customer.phone && customer.phone.includes(customerSearch))
+    customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+    customer.phone.includes(customerSearchTerm) ||
+    customer.cedula.includes(customerSearchTerm)
   );
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-slate-200 rounded w-1/4 mb-6"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="h-4 bg-slate-200 rounded w-3/4 mb-4"></div>
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-3 bg-slate-200 rounded"></div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="h-4 bg-slate-200 rounded w-3/4 mb-4"></div>
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-3 bg-slate-200 rounded"></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const getPaymentMethodIcon = (methodId: string) => {
+    const method = paymentMethods.find(m => m.id === methodId);
+    if (!method) return <CreditCard className="h-5 w-5" />;
+
+    // If there's a custom image, use it
+    if (method.image_url) {
+      return (
+        <img 
+          src={method.image_url} 
+          alt={method.name}
+          className="h-5 w-5 object-contain"
+          onError={(e) => {
+            // Fallback to icon if image fails to load
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      );
+    }
+
+    // Default icons
+    switch (method.icon) {
+      case 'Banknote':
+        return <Banknote className="h-5 w-5" />;
+      case 'CreditCard':
+        return <CreditCard className="h-5 w-5" />;
+      case 'Building2':
+        return <Building2 className="h-5 w-5" />;
+      case 'Smartphone':
+        return <Smartphone className="h-5 w-5" />;
+      default:
+        return <CreditCard className="h-5 w-5" />;
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
-        <div className="flex items-center gap-4">
-          {/* Cash Register Status */}
-          <div className={`px-3 py-1 rounded-lg text-sm font-medium ${
-            currentCashRegister 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-red-100 text-red-800'
-          }`}>
-            {currentCashRegister 
-              ? `Caja Abierta - ${currentCashRegister.user?.name || 'Sin operador'}` 
-              : 'Sin Caja Abierta'}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700">Tipo de pago:</label>
-            <select
-              value={paymentType}
-              onChange={(e) => setPaymentType(e.target.value as 'cash' | 'installment')}
-              disabled={!currentCashRegister}
-              className="px-3 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="cash">Efectivo</option>
-              <option value="installment">Abono</option>
-            </select>
-          </div>
-        </div>
       </div>
 
-      {/* Cash Register Warning */}
-      {!currentCashRegister && (
-        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6 mb-6">
-          <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-red-600 mr-3" />
-            <div>
-              <h3 className="text-red-800 font-bold text-lg">⚠️ Caja Registradora Cerrada</h3>
-              <p className="text-red-700 mt-2">
-                <strong>No se pueden realizar ventas sin una caja abierta.</strong>
-              </p>
-              <p className="text-red-600 text-sm mt-1">
-                {currentUser?.role === 'employee' 
-                  ? 'Contacta a tu supervisor para abrir la caja registradora.' 
-                  : 'Ve a la sección "Caja" en el menú lateral para abrir una caja registradora.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Products Section - Disabled if no cash register */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Productos</h3>
-          
-          {/* Barcode Scanner */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Código de Barras
-            </label>
-            <div className="relative">
-              <Scan className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Escanea o escribe el código y presiona Enter"
-                value={barcodeSearch}
-                onChange={(e) => setBarcodeSearch(e.target.value)}
-                onKeyDown={handleBarcodeSearch}
-                disabled={!currentCashRegister}
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Products Section */}
+        <div className="lg:col-span-2 space-y-6">
           {/* Product Search */}
-          <div className="mb-4">
+          <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar productos por nombre o código..."
+                placeholder="Buscar productos por nombre o código de barras..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={!currentCashRegister}
               />
             </div>
           </div>
 
-          {/* Products List */}
-          <div className="max-h-96 overflow-y-auto space-y-2">
-            {filteredProducts.length === 0 ? (
-              <div className="text-center py-8">
-                <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-500">
-                  {!currentCashRegister 
-                    ? 'Abre una caja registradora para ver los productos' 
-                    : products.length === 0 
-                      ? 'No hay productos con stock disponible' 
-                      : 'No se encontraron productos'
-                  }
-                </p>
-              </div>
-            ) : (
-              filteredProducts.map((product) => (
+          {/* Products Grid */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Productos Disponibles</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+              {filteredProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors duration-200"
-                  onClick={() => currentCashRegister && addToCart(product)}
-                  style={{ opacity: currentCashRegister ? 1 : 0.5, cursor: currentCashRegister ? 'pointer' : 'not-allowed' }}
+                  onClick={() => addToCart(product)}
+                  className="p-4 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all duration-200"
                 >
-                  <div className="flex-1">
-                    <h4 className="font-medium text-slate-900">{product.name}</h4>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="font-semibold text-green-600">{formatCurrency(product.sale_price)}</span>
-                      <span>•</span>
-                      <span className={`${product.stock <= 5 ? 'text-orange-600 font-medium' : ''}`}>
-                        Stock: {product.stock}
-                      </span>
-                      {product.barcode && (
-                        <>
-                          <span>•</span>
-                          <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">
-                            {product.barcode}
-                          </span>
-                        </>
-                      )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-slate-900">{product.name}</h4>
+                      <p className="text-sm text-slate-600">{formatCurrency(product.sale_price)}</p>
+                      <p className="text-xs text-slate-500">Stock: {product.stock}</p>
                     </div>
+                    <Plus className="h-5 w-5 text-blue-600" />
                   </div>
-                  <button 
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                    disabled={!currentCashRegister}
-                    onClick={(e) => { e.stopPropagation(); currentCashRegister && addToCart(product); }}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Cart Section - Disabled if no cash register */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          {/* Customer Selection - Always visible */}
-          <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <h4 className="font-medium text-slate-900 mb-3 flex items-center">
-              <User className="h-5 w-5 mr-2 text-blue-600" />
-              Cliente para la Venta
-            </h4>
+        {/* Cart and Checkout Section */}
+        <div className="space-y-6">
+          {/* Customer Selection */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Cliente</h3>
             {selectedCustomer ? (
-              <div className="flex items-center justify-between bg-white p-3 rounded-lg border">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <div>
-                  <p className="font-medium text-slate-900">{selectedCustomer.name}</p>
-                  <div className="text-sm text-slate-600 space-y-1">
-                    {selectedCustomer.phone && <div>Tel: {selectedCustomer.phone}</div>}
-                    {selectedCustomer.cedula && <div>CC: {selectedCustomer.cedula}</div>}
-                    {selectedCustomer.email && <div>Email: {selectedCustomer.email}</div>}
-                  </div>
+                  <p className="font-medium text-blue-900">{selectedCustomer.name}</p>
+                  <p className="text-sm text-blue-700">{selectedCustomer.phone}</p>
                 </div>
                 <button
                   onClick={() => setSelectedCustomer(null)}
-                  className="text-red-600 hover:text-red-800 p-1"
-                  title="Quitar cliente"
+                  className="p-1 text-blue-600 hover:text-blue-800"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowCustomerList(true)}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm flex items-center justify-center"
-                  >
-                    <User className="h-4 w-4 mr-2" />
-                    Seleccionar Cliente
-                  </button>
-                  <button
-                    onClick={() => setShowCustomerForm(true)}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
-                  >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Nuevo Cliente
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 text-center">
-                  {paymentType === 'installment' 
-                    ? '⚠️ Cliente requerido para ventas por abonos' 
-                    : 'Cliente opcional para ventas en efectivo'}
-                </p>
-              </div>
+              <button
+                onClick={() => setShowCustomerModal(true)}
+                className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors duration-200 flex items-center justify-center"
+              >
+                <User className="h-4 w-4 mr-2" />
+                Seleccionar Cliente (Opcional)
+              </button>
             )}
           </div>
 
-          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
-            <ShoppingCart className="h-5 w-5 mr-2" />
-            Carrito ({cart.length} productos)
-          </h3>
-
-
-          {/* Cart Items */}
-          <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+          {/* Cart */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Carrito de Compras</h3>
             {cart.length === 0 ? (
               <div className="text-center py-8">
                 <ShoppingCart className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                <p className="text-slate-500">
-                  {!currentCashRegister ? 'Caja cerrada - No se pueden agregar productos' : 'El carrito está vacío'}
-                </p>
-                <p className="text-sm text-slate-400 mt-1">
-                  {!currentCashRegister 
-                    ? 'Abre una caja registradora para comenzar a vender' 
-                    : 'Agrega productos haciendo clic en ellos'}
-                </p>
+                <p className="text-slate-500">El carrito está vacío</p>
               </div>
             ) : (
-              cart.map((item) => (
-                <div key={item.product.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
-                  <div className="flex-1">
-                    <h4 className="font-medium text-slate-900">{item.product.name}</h4>
-                    <p className="text-sm text-slate-600">{formatCurrency(item.product.sale_price)} c/u</p>
-                    {item.product.barcode && (
-                      <p className="text-xs text-slate-500 font-mono">{item.product.barcode}</p>
-                    )}
+              <div className="space-y-3">
+                {cart.map((item) => (
+                  <div key={item.product.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-slate-900">{item.product.name}</h4>
+                      <p className="text-sm text-slate-600">{formatCurrency(item.product.sale_price)}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </button>
+                      <span className="w-8 text-center font-medium">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => removeFromCart(item.product.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded ml-2"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                      disabled={!currentCashRegister}
-                      className="p-1 text-slate-600 hover:bg-slate-200 rounded transition-colors duration-200"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <span className="w-8 text-center font-medium">{item.quantity}</span>
-                    <button
-                      onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                      disabled={!currentCashRegister}
-                      className="p-1 text-slate-600 hover:bg-slate-200 rounded transition-colors duration-200"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => removeFromCart(item.product.id)}
-                      disabled={!currentCashRegister}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded ml-2 transition-colors duration-200"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="ml-4 font-semibold text-slate-900 min-w-[80px] text-right">
-                    {formatCurrency(item.product.sale_price * item.quantity)}
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
 
-          {/* Discount */}
-          {cart.length > 0 && currentCashRegister && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Descuento (en pesos)
-              </label>
-              <FormattedNumberInput
-                value={discountAmount}
-                onChange={(value) => setDiscountAmount(value)}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={!currentCashRegister}
-                min="0"
-                max={calculateSubtotal().toString()}
-              />
-            </div>
-          )}
+          {/* Payment Section */}
+          {cart.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Pago</h3>
+              
+              {/* Payment Type */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Tipo de Pago
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setPaymentType('cash')}
+                      className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                        paymentType === 'cash'
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-slate-300 hover:border-slate-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <Banknote className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-sm font-medium">Efectivo</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setPaymentType('installment')}
+                      className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                        paymentType === 'installment'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-slate-300 hover:border-slate-400'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <CreditCard className="h-5 w-5 mx-auto mb-1" />
+                        <span className="text-sm font-medium">Abonos</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
-          {/* Initial Payment for Installments */}
-          {cart.length > 0 && paymentType === 'installment' && currentCashRegister && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Abono Inicial (opcional)
-              </label>
-              <FormattedNumberInput
-                value={initialPayment}
-                onChange={(value) => setInitialPayment(value)}
-                placeholder="0"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={!currentCashRegister}
-                min="0"
-                max={calculateTotal().toString()}
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Monto que el cliente paga ahora. El resto quedará pendiente para futuros abonos.
-              </p>
-            </div>
-          )}
+                {/* Payment Method Selection */}
+                {paymentType === 'cash' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Método de Pago *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {paymentMethods.map((method) => (
+                        <button
+                          key={method.id}
+                          onClick={() => setPaymentMethod(method.id)}
+                          className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                            paymentMethod === method.id
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-slate-300 hover:border-slate-400'
+                          }`}
+                        >
+                          <div className="text-center">
+                            <div className="flex justify-center mb-1">
+                              {getPaymentMethodIcon(method.id)}
+                            </div>
+                            <span className="text-xs font-medium">{method.name}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-          {/* Cash Payment Details */}
-          {cart.length > 0 && paymentType === 'cash' && currentCashRegister && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Dinero Recibido del Cliente
-              </label>
-              <FormattedNumberInput
-                value={receivedAmount}
-                onChange={(value) => setReceivedAmount(value)}
-                placeholder={calculateTotal().toString()}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  receivedAmount && !isValidCashPayment() 
-                    ? 'border-red-300 bg-red-50' 
-                    : 'border-slate-300'
-                }`}
-                disabled={!currentCashRegister}
-                min="0"
-              />
-              {receivedAmount && (
-                <div className="mt-2 space-y-1">
-                  {!isValidCashPayment() ? (
-                    <p className="text-xs text-red-600 flex items-center">
-                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-                      </svg>
-                      Dinero insuficiente. Faltan: {formatCurrency(calculateTotal() - (parseFloat(receivedAmount) || 0))}
-                    </p>
-                  ) : calculateChange() > 0 ? (
-                    <p className="text-xs text-green-600 flex items-center">
-                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Cambio a entregar: {formatCurrency(calculateChange())}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-blue-600 flex items-center">
-                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Pago exacto - Sin cambio
-                    </p>
+                {/* Discount */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Descuento (opcional)
+                  </label>
+                  <FormattedNumberInput
+                    value={discount}
+                    onChange={(value) => setDiscount(value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0"
+                    min="0"
+                    max={calculateSubtotal().toString()}
+                  />
+                </div>
+
+                {/* Amount Received (only for cash) */}
+                {paymentType === 'cash' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Monto Recibido
+                    </label>
+                    <FormattedNumberInput
+                      value={amountReceived}
+                      onChange={(value) => setAmountReceived(value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder={calculateTotal().toString()}
+                      min={calculateTotal().toString()}
+                    />
+                  </div>
+                )}
+
+                {/* Totals */}
+                <div className="space-y-2 pt-4 border-t border-slate-200">
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal:</span>
+                    <span>{formatCurrency(calculateSubtotal())}</span>
+                  </div>
+                  {calculateDiscount() > 0 && (
+                    <div className="flex justify-between text-sm text-red-600">
+                      <span>Descuento:</span>
+                      <span>-{formatCurrency(calculateDiscount())}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total:</span>
+                    <span>{formatCurrency(calculateTotal())}</span>
+                  </div>
+                  {paymentType === 'cash' && amountReceived && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Cambio:</span>
+                      <span>{formatCurrency(calculateChange())}</span>
+                    </div>
                   )}
                 </div>
-              )}
-              <p className="text-xs text-slate-500 mt-1">
-                Total a pagar: {formatCurrency(calculateTotal())}
-              </p>
-            </div>
-          )}
-          {/* Total */}
-          {cart.length > 0 && currentCashRegister && (
-            <div className="border-t border-slate-200 pt-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>{formatCurrency(calculateSubtotal())}</span>
-                </div>
-                {parseFloat(discountAmount) > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span>Descuento:</span>
-                    <span>-{formatCurrency(parseFloat(discountAmount))}</span>
-                  </div>
-                )}
-                {paymentType === 'installment' && parseFloat(initialPayment) > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Abono inicial:</span>
-                    <span>{formatCurrency(parseFloat(initialPayment))}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Total:</span>
-                  <span className="text-green-600">{formatCurrency(calculateTotal())}</span>
-                </div>
-                {paymentType === 'installment' && (
-                  <div className="flex justify-between text-sm text-orange-600">
-                    <span>Saldo pendiente:</span>
-                    <span>{formatCurrency(calculateTotal() - (parseFloat(initialPayment) || 0))}</span>
-                  </div>
-                )}
+
+                {/* Process Sale Button */}
+                <button
+                  onClick={processSale}
+                  disabled={loading || cart.length === 0}
+                  className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center font-medium"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      {paymentType === 'cash' ? 'Procesar Venta' : 'Crear Venta a Crédito'}
+                    </>
+                  )}
+                </button>
               </div>
-              
-              <button
-                onClick={handleSale}
-                disabled={saving || cart.length === 0 || !currentCashRegister || (paymentType === 'installment' && (!selectedCustomer || selectedCustomer?.id === 'generic')) || (paymentType === 'cash' && !isValidCashPayment()) || cashRegisterLoading}
-                className="w-full mt-4 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 font-medium"
-              >
-                {saving ? 'Procesando...' : 
-                 paymentType === 'cash' ? 'Completar Venta en Efectivo' : 'Registrar Venta por Abonos'}
-              </button>
             </div>
           )}
         </div>
-        
-        {/* Message when no cash register */}
-        {!currentCashRegister && !loading && (
-          <div className="lg:col-span-2 bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
-            <AlertCircle className="h-16 w-16 text-yellow-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-yellow-800 mb-2">Sistema de Ventas Deshabilitado</h3>
-            <p className="text-yellow-700 mb-4">
-              Para realizar ventas, primero debe abrir una caja registradora.
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Customer Confirmation Modal */}
-      {showCustomerConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">
-                ¿Cómo deseas proceder con el cliente?
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                No has seleccionado un cliente para esta venta
-              </p>
-            </div>
-            
-            <div className="p-6">
-              <div className="space-y-3">
-                <button
-                  onClick={handleProceedWithGenericCustomer}
-                  disabled={paymentType === 'installment'}
-                  className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${
-                    paymentType === 'installment'
-                      ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
-                      : 'border-green-200 bg-green-50 hover:bg-green-100 hover:border-green-300'
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <div className={`w-4 h-4 rounded-full mr-3 ${
-                      paymentType === 'installment' ? 'bg-slate-300' : 'bg-green-500'
-                    }`}></div>
-                    <div>
-                      <h4 className={`font-medium ${
-                        paymentType === 'installment' ? 'text-slate-400' : 'text-green-900'
-                      }`}>
-                        Continuar con Cliente General
-                      </h4>
-                      <p className={`text-sm ${
-                        paymentType === 'installment' ? 'text-slate-400' : 'text-green-700'
-                      }`}>
-                        {paymentType === 'installment' 
-                          ? 'No disponible para ventas por abonos'
-                          : 'Realizar la venta sin cliente específico'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={handleSelectExistingCustomer}
-                  className="w-full p-4 text-left border-2 border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all duration-200"
-                >
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-blue-500 rounded-full mr-3"></div>
-                    <div>
-                      <h4 className="font-medium text-blue-900">Seleccionar Cliente Existente</h4>
-                      <p className="text-sm text-blue-700">Elegir de la lista de clientes registrados</p>
-                    </div>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={handleCreateNewCustomer}
-                  className="w-full p-4 text-left border-2 border-purple-200 bg-purple-50 rounded-lg hover:bg-purple-100 hover:border-purple-300 transition-all duration-200"
-                >
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-purple-500 rounded-full mr-3"></div>
-                    <div>
-                      <h4 className="font-medium text-purple-900">Crear Nuevo Cliente</h4>
-                      <p className="text-sm text-purple-700">Registrar un cliente nuevo en el sistema</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-              
-              <div className="mt-6 pt-4 border-t border-slate-200">
-                <button
-                  onClick={() => setShowCustomerConfirmModal(false)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Customer List Modal */}
-      {showCustomerList && (
+      {/* Customer Selection Modal */}
+      {showCustomerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Seleccionar Cliente</h3>
-                <button
-                  onClick={() => {
-                    setShowCustomerList(false);
-                    setCustomerSearch('');
-                  }}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="mt-4">
+              <h3 className="text-lg font-semibold text-slate-900">Seleccionar Cliente</h3>
+              <div className="mt-4 relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Buscar por nombre, cédula, teléfono..."
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Buscar por nombre, teléfono o cédula..."
+                  value={customerSearchTerm}
+                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
+            
             <div className="p-6">
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {filteredCustomers.length === 0 ? (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {filteredCustomers.map((customer) => (
+                  <button
+                    key={customer.id}
+                    onClick={() => {
+                      setSelectedCustomer(customer);
+                      setShowCustomerModal(false);
+                      setCustomerSearchTerm('');
+                    }}
+                    className="w-full text-left p-3 hover:bg-slate-50 rounded-lg transition-colors duration-200"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900">{customer.name}</p>
+                      <p className="text-sm text-slate-600">{customer.phone}</p>
+                      {customer.cedula && (
+                        <p className="text-xs text-slate-500">CC: {customer.cedula}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+                {filteredCustomers.length === 0 && (
                   <p className="text-slate-500 text-center py-4">No se encontraron clientes</p>
-                ) : (
-                  filteredCustomers.map((customer) => (
-                    <button
-                      key={customer.id}
-                      onClick={() => {
-                        setSelectedCustomer(customer);
-                        setShowCustomerList(false);
-                        setCustomerSearch('');
-                      }}
-                      className="w-full text-left p-3 hover:bg-slate-50 rounded-lg transition-colors duration-200 border border-slate-200"
-                    >
-                      <div className="font-medium text-slate-900">{customer.name}</div>
-                      <div className="text-sm text-slate-600 space-y-1">
-                        {customer.cedula && <div>CC: {customer.cedula}</div>}
-                        {customer.phone && <div>Tel: {customer.phone}</div>}
-                        {customer.email && <div>Email: {customer.email}</div>}
-                      </div>
-                    </button>
-                  ))
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Customer Form Modal */}
-      {showCustomerForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Nuevo Cliente</h3>
-                <button
-                  onClick={() => {
-                    setShowCustomerForm(false);
-                    setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
-                  }}
-                  className="text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+            
+            <div className="p-6 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  setShowCustomerModal(false);
+                  setCustomerSearchTerm('');
+                }}
+                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cerrar
+              </button>
             </div>
-            <form onSubmit={handleCreateCustomer} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nombre Completo *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={customerFormData.name}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Cédula
-                </label>
-                <input
-                  type="text"
-                  value={customerFormData.cedula}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, cedula: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Teléfono
-                </label>
-                <input
-                  type="tel"
-                  value={customerFormData.phone}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={customerFormData.email}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Dirección
-                </label>
-                <textarea
-                  value={customerFormData.address}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex gap-2 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
-                >
-                  Crear Cliente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCustomerForm(false);
-                    setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
-                  }}
-                  className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
@@ -1223,20 +683,29 @@ export default function NewSale() {
                 ¡Venta Completada!
               </h3>
               <p className="text-sm text-slate-600 mt-1">
-                ¿Deseas imprimir el comprobante de venta?
+                ¿Deseas imprimir el comprobante?
               </p>
             </div>
             
             <div className="p-6">
               <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-green-900">Total de la venta:</span>
-                  <span className="text-xl font-bold text-green-900">
-                    {formatCurrency(completedSale.total_amount)}
-                  </span>
-                </div>
-                <div className="text-sm text-green-700 mt-1">
-                  Venta #{completedSale.id?.slice(-8)} • {completedSale.sale_items.length} productos
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-green-900">Total de la venta:</span>
+                    <span className="text-xl font-bold text-green-900">
+                      {formatCurrency(completedSale.total_amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-green-700">Método de pago:</span>
+                    <span className="text-green-800">{completedSale.payment_method_name}</span>
+                  </div>
+                  {completedSale.customer && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-green-700">Cliente:</span>
+                      <span className="text-green-800">{completedSale.customer.name}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -1308,28 +777,6 @@ export default function NewSale() {
           </div>
         </div>
       )}
-
-      {/* Notification Modal */}
-      <NotificationModal
-        isOpen={notification.isOpen}
-        onClose={hideNotification}
-        type={notification.type}
-        title={notification.title}
-        message={notification.message}
-      />
-
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={confirmation.isOpen}
-        onClose={hideConfirmation}
-        onConfirm={handleConfirm}
-        title={confirmation.title}
-        message={confirmation.message}
-        confirmText={confirmation.confirmText}
-        cancelText={confirmation.cancelText}
-        type={confirmation.type}
-        loading={confirmation.loading}
-      />
     </div>
   );
 }

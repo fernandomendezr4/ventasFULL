@@ -241,11 +241,6 @@ export default function SalesManager() {
                       <div>
                         <h3 className="font-semibold text-slate-900">
                           Venta #{sale.id.slice(-8)} 
-                          {sale.customer && (
-                            <span className="text-sm font-normal text-slate-600 ml-2">
-                              • {sale.customer.name}
-                            </span>
-                          )}
                         </h3>
                         <p className="text-sm text-slate-600">
                           {new Date(sale.created_at).toLocaleDateString('es-ES', {
@@ -255,10 +250,21 @@ export default function SalesManager() {
                             hour: '2-digit',
                             minute: '2-digit'
                           })}
-                          {sale.user && (
-                            <span className="ml-2">• Vendedor: {sale.user.name}</span>
-                          )}
                         </p>
+                        <div className="flex items-center gap-4 mt-1 text-sm text-slate-600">
+                          {sale.customer && (
+                            <span className="flex items-center">
+                              <User className="h-4 w-4 mr-1 text-blue-600" />
+                              Cliente: {sale.customer.name}
+                            </span>
+                          )}
+                          {sale.user && (
+                            <span className="flex items-center">
+                              <User className="h-4 w-4 mr-1 text-green-600" />
+                              Vendedor: {sale.user.name}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                             sale.payment_type === 'cash' 
@@ -290,12 +296,6 @@ export default function SalesManager() {
                           <DollarSign className="h-4 w-4 mr-1" />
                           {formatCurrency(sale.total_amount)}
                         </span>
-                        {sale.user && (
-                          <span className="flex items-center">
-                            <User className="h-4 w-4 mr-1" />
-                            {sale.user.name}
-                          </span>
-                        )}
                       </div>
                       {sale.customer && sale.customer.phone && (
                         <div className="flex items-center text-sm text-slate-500">
@@ -394,13 +394,23 @@ export default function SalesManager() {
                   hour: '2-digit',
                   minute: '2-digit'
                 })}
-                {selectedSale.user && (
-                  <span className="ml-2">• Vendedor: {selectedSale.user.name}</span>
-                )}
-                {selectedSale.customer && (
-                  <span className="ml-2">• Cliente: {selectedSale.customer.name}</span>
-                )}
               </p>
+              <div className="flex items-center gap-6 mt-3 text-sm">
+                {selectedSale.customer && (
+                  <div className="flex items-center text-blue-600">
+                    <User className="h-4 w-4 mr-2" />
+                    <span className="font-medium">Cliente:</span>
+                    <span className="ml-1">{selectedSale.customer.name}</span>
+                  </div>
+                )}
+                {selectedSale.user && (
+                  <div className="flex items-center text-green-600">
+                    <User className="h-4 w-4 mr-2" />
+                    <span className="font-medium">Vendedor:</span>
+                    <span className="ml-1">{selectedSale.user.name}</span>
+                  </div>
+                )}
+              </div>
             </div>
             
             <div className="p-6">

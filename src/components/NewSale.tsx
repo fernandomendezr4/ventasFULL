@@ -673,57 +673,62 @@ export default function NewSale() {
 
         {/* Cart Section - Disabled if no cash register */}
         <div className="bg-white rounded-xl shadow-sm p-6">
+          {/* Customer Selection - Always visible */}
+          <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h4 className="font-medium text-slate-900 mb-3 flex items-center">
+              <User className="h-5 w-5 mr-2 text-blue-600" />
+              Cliente para la Venta
+            </h4>
+            {selectedCustomer ? (
+              <div className="flex items-center justify-between bg-white p-3 rounded-lg border">
+                <div>
+                  <p className="font-medium text-slate-900">{selectedCustomer.name}</p>
+                  <div className="text-sm text-slate-600 space-y-1">
+                    {selectedCustomer.phone && <div>Tel: {selectedCustomer.phone}</div>}
+                    {selectedCustomer.cedula && <div>CC: {selectedCustomer.cedula}</div>}
+                    {selectedCustomer.email && <div>Email: {selectedCustomer.email}</div>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedCustomer(null)}
+                  className="text-red-600 hover:text-red-800 p-1"
+                  title="Quitar cliente"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowCustomerList(true)}
+                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm flex items-center justify-center"
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    Seleccionar Cliente
+                  </button>
+                  <button
+                    onClick={() => setShowCustomerForm(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Nuevo Cliente
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 text-center">
+                  {paymentType === 'installment' 
+                    ? '⚠️ Cliente requerido para ventas por abonos' 
+                    : 'Cliente opcional para ventas en efectivo'}
+                </p>
+              </div>
+            )}
+          </div>
+
           <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
             <ShoppingCart className="h-5 w-5 mr-2" />
             Carrito ({cart.length} productos)
           </h3>
 
-          {/* Customer Selection for Installments */}
-          {paymentType === 'installment' && currentCashRegister && (
-            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h4 className="font-medium text-blue-900 mb-2">Cliente (requerido para abonos)</h4>
-              {selectedCustomer ? (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-blue-900">{selectedCustomer.name}</p>
-                    {selectedCustomer.phone && (
-                      <p className="text-sm text-blue-700">{selectedCustomer.phone}</p>
-                    )}
-                    {selectedCustomer.cedula && (
-                      <p className="text-sm text-blue-700">CC: {selectedCustomer.cedula}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setSelectedCustomer(null)}
-                    className="text-blue-600 hover:text-blue-800 p-1"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowCustomerList(true)}
-                      className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm flex items-center justify-center"
-                      disabled={!currentCashRegister}
-                    >
-                      <User className="h-4 w-4 mr-1" />
-                      Seleccionar Cliente
-                    </button>
-                    <button
-                      onClick={() => setShowCustomerForm(true)}
-                      className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
-                      disabled={!currentCashRegister}
-                    >
-                      <UserPlus className="h-4 w-4 mr-1" />
-                      Nuevo
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Cart Items */}
           <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">

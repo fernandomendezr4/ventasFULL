@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock, Search, Filter, Printer } from 'lucide-react';
+import { DollarSign, User, Calendar, Plus, Eye, X, Edit2, Trash2, Clock, Search, Filter, Printer, Phone, Mail } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
@@ -17,6 +17,12 @@ interface SaleWithInstallments {
     id: string;
     name: string;
     phone: string;
+    email: string;
+    cedula: string;
+  } | null;
+  user: {
+    id: string;
+    name: string;
     email: string;
   } | null;
   payment_installments: PaymentInstallment[];
@@ -63,6 +69,12 @@ export default function InstallmentManager() {
             id,
             name,
             phone,
+            email,
+            cedula
+          ),
+          user:users (
+            id,
+            name,
             email
           ),
           payment_installments (*)
@@ -511,6 +523,21 @@ export default function InstallmentManager() {
                         <p className="text-sm text-slate-600">
                           Venta #{sale.id.slice(-8)} • {new Date(sale.created_at).toLocaleDateString('es-ES')}
                         </p>
+                        {/* Información adicional del cliente y vendedor */}
+                        <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                          {sale.customer?.phone && (
+                            <span className="flex items-center">
+                              <Phone className="h-3 w-3 mr-1" />
+                              {sale.customer.phone}
+                            </span>
+                          )}
+                          {sale.customer?.email && (
+                            <span className="flex items-center">
+                              <Mail className="h-3 w-3 mr-1" />
+                              {sale.customer.email}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-4 mt-2 text-sm text-slate-600">
                           <span className="flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />

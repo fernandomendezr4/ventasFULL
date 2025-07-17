@@ -139,7 +139,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 p-4 overflow-y-auto scrollbar-hide">
+        <div className="flex-1 p-4 overflow-y-auto scrollbar-hide space-y-6">
           {/* Debug info - solo para desarrollo */}
           {process.env.NODE_ENV === 'development' && (
             <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
@@ -148,11 +148,11 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               <p>Permisos: {permissions.length}</p>
             </div>
           )}
-          <div className="space-y-6 stagger-item">{renderTabGroup('Principal', mainTabs, 'bg-blue-600')}</div>
-          <div className="space-y-6 stagger-item">{renderTabGroup('Ventas', salesTabs, 'bg-green-600')}</div>
-          <div className="space-y-6 stagger-item">{renderTabGroup('Inventario', inventoryTabs, 'bg-purple-600')}</div>
-          <div className="space-y-6 stagger-item">{renderTabGroup('Contactos', contactsTabs, 'bg-orange-600')}</div>
-          <div className="space-y-6 stagger-item">{renderTabGroup('Administración', adminTabs, 'bg-red-600')}</div>
+          {renderTabGroup('Principal', mainTabs, 'bg-blue-600')}
+          {renderTabGroup('Ventas', salesTabs, 'bg-green-600')}
+          {renderTabGroup('Inventario', inventoryTabs, 'bg-purple-600')}
+          {renderTabGroup('Contactos', contactsTabs, 'bg-orange-600')}
+          {renderTabGroup('Administración', adminTabs, 'bg-red-600')}
         </div>
 
         {/* Footer */}

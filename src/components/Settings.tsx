@@ -421,7 +421,9 @@ export default function Settings() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 >
                   <option value="sale_id">ID de la venta</option>
+                  <option value="sale_details">Detalles completos de la venta</option>
                   <option value="company_info">Información de la empresa</option>
+                  <option value="verification_url">URL de verificación</option>
                   <option value="custom">Texto personalizado</option>
                 </select>
                 
@@ -1093,16 +1095,29 @@ body {
                   )}
                   {settings.show_qr_code && (
                     <div className="mt-2">
-                      <div className="bg-slate-100 h-16 w-16 mx-auto mb-2 flex items-center justify-center border rounded relative">
-                        <div className="absolute inset-1 border-2 border-slate-400"></div>
-                        <div className="absolute top-1 left-1 w-2 h-2 bg-slate-600"></div>
-                        <div className="absolute top-1 right-1 w-2 h-2 bg-slate-600"></div>
-                        <div className="absolute bottom-1 left-1 w-2 h-2 bg-slate-600"></div>
-                        <div className="text-slate-600 text-xs font-bold">QR</div>
+                      <div className="bg-slate-100 h-16 w-16 mx-auto mb-2 flex items-center justify-center border rounded">
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(
+                            settings.qr_content === 'sale_id' ? `Venta #12345678 - ${settings.company_name || 'VentasFULL'} - Total: $45,000` :
+                            settings.qr_content === 'company_info' ? `${settings.company_name || 'VentasFULL'}${settings.company_phone ? ` - Tel: ${settings.company_phone}` : ''}` :
+                            settings.qr_content === 'sale_details' ? `${settings.company_name || 'VentasFULL'}\nVenta #12345678\nFecha: ${new Date().toLocaleDateString('es-ES')}\nTotal: $45,000` :
+                            settings.qr_content === 'verification_url' ? `${settings.company_website || 'https://ventasfull.com'}/verify/sample-sale` :
+                            settings.qr_content === 'custom' ? (settings.qr_custom_text || 'Venta #12345678') :
+                            `${settings.company_name || 'VentasFULL'} - Venta #12345678`
+                          )}`}
+                          alt="Vista previa QR"
+                          className="max-w-full max-h-full"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-slate-600 text-xs font-bold">QR</div>';
+                          }}
+                        />
                       </div>
                       <div className="text-xs text-slate-600">
                         {settings.qr_content === 'sale_id' ? 'ID Venta' :
                          settings.qr_content === 'company_info' ? 'Info Empresa' :
+                         settings.qr_content === 'sale_details' ? 'Detalles Venta' :
+                         settings.qr_content === 'verification_url' ? 'URL Verificación' :
                          settings.qr_content === 'custom' ? 'Personalizado' :
                          'Código QR'}
                       </div>

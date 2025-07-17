@@ -226,7 +226,7 @@ export default function NewSale() {
           .insert([{
             sale_id: sale.id,
             amount: total,
-            payment_method: paymentMethod,
+            payment_method: paymentMethod === 'nequi' ? 'other' : paymentMethod,
             notes: `Pago completo - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`
           }]);
 

@@ -168,6 +168,10 @@ export default function NewSale() {
     if (type === 'generic') {
       // Cliente genérico - no seleccionar ningún cliente específico
       setSelectedCustomer(null);
+      // Procesar la venta inmediatamente después de seleccionar cliente genérico
+      setTimeout(() => {
+        processActualSale();
+      }, 100);
     } else if (type === 'existing') {
       // Mostrar modal para seleccionar cliente existente
       setShowCustomerModal(true);
@@ -198,6 +202,11 @@ export default function NewSale() {
       
       // Recargar la lista de clientes
       loadCustomers();
+      
+      // Procesar la venta después de crear el cliente
+      setTimeout(() => {
+        processActualSale();
+      }, 100);
     } catch (error) {
       console.error('Error creating customer:', error);
       alert('Error al crear cliente: ' + (error as Error).message);
@@ -210,9 +219,9 @@ export default function NewSale() {
       return;
     }
 
-    // Validar que si es venta por abonos, debe tener cliente seleccionado
-    if (paymentType === 'installment' && !selectedCustomer) {
-      alert('Para ventas por abonos debe seleccionar un cliente');
+    // Si no hay cliente seleccionado, mostrar modal de selección
+    if (!selectedCustomer) {
+      setShowCustomerSelectionModal(true);
       return;
     }
 
@@ -224,6 +233,16 @@ export default function NewSale() {
         alert('El monto recibido debe ser mayor o igual al total');
         return;
       }
+    }
+
+    await processActualSale();
+  };
+
+  const processActualSale = async () => {
+    // Validar que si es venta por abonos, debe tener cliente seleccionado
+    if (paymentType === 'installment' && !selectedCustomer) {
+      alert('Para ventas por abonos debe seleccionar un cliente');
+      return;
     }
 
     try {
@@ -690,28 +709,28 @@ export default function NewSale() {
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Seleccionar Tipo de Cliente</h3>
               <p className="text-sm text-slate-600 mt-1">
-                {paymentType === 'installment' 
-                  ? 'Para ventas por abonos debe seleccionar un cliente específico'
-                  : 'Elige el tipo de cliente para esta venta'
-                }
+                Elige el tipo de cliente para esta venta
               </p>
             </div>
             
             <div className="p-6 space-y-3">
-              {paymentType === 'cash' && (
-                <button
-                  onClick={() => handleCustomerSelection('generic')}
-                  className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 text-left"
-                >
-                  <div className="flex items-center">
-                    <User className="h-6 w-6 text-slate-600 mr-3" />
-                    <div>
-                      <h4 className="font-medium text-slate-900">Cliente Genérico</h4>
-                      <p className="text-sm text-slate-600">Venta sin datos específicos del cliente</p>
-                    </div>
+              <button
+                onClick={() => handleCustomerSelection('generic')}
+                className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 text-left"
+              >
+                <div className="flex items-center">
+                  <User className="h-6 w-6 text-slate-600 mr-3" />
+                  <div>
+                    <h4 className="font-medium text-slate-900">Cliente Genérico</h4>
+                    <p className="text-sm text-slate-600">
+                      {paymentType === 'installment' 
+                        ? 'No recomendado para ventas por abonos' 
+                        : 'Venta sin datos específicos del cliente'
+                      }
+                    </p>
                   </div>
-                </button>
-              )}
+                </div>
+              </button>
               
               <button
                 onClick={() => handleCustomerSelection('existing')}
@@ -779,6 +798,10 @@ export default function NewSale() {
                       setSelectedCustomer(customer);
                       setShowCustomerModal(false);
                       setCustomerSearchTerm('');
+                      // Procesar la venta después de seleccionar el cliente
+                      setTimeout(() => {
+                        processActualSale();
+                      }, 100);
                     }}
                     className="w-full text-left p-3 hover:bg-slate-50 rounded-lg transition-colors duration-200"
                   >

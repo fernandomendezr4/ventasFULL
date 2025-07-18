@@ -58,8 +58,8 @@ export default function ConfirmationModal({
   const colors = getColors();
 
   return (
-    <div className="modal-overlay">
-      <div className={`modal-content max-w-md w-full mx-4 border-2 ${colors.border}`}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className={`bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto border-2 ${colors.border} animate-scale-in`}>
         <div className={`p-6 ${colors.bg} rounded-t-xl border-b ${colors.border}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">

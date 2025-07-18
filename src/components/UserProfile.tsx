@@ -48,8 +48,8 @@ export default function UserProfile({ onClose }: UserProfileProps) {
   if (!user) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full mx-4 transition-colors duration-200">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg mx-auto transition-colors duration-200 animate-scale-in">
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center">

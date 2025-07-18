@@ -742,8 +742,8 @@ export default function NewSale() {
 
       {/* Customer Selection Modal */}
       {showCustomerSelectionModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Seleccionar Tipo de Cliente</h3>
               <p className="text-sm text-slate-600 mt-1">
@@ -811,8 +811,8 @@ export default function NewSale() {
 
       {/* Customer Selection Modal */}
       {showCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[85vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Seleccionar Cliente Existente</h3>
               <div className="mt-4 relative">
@@ -827,8 +827,8 @@ export default function NewSale() {
               </div>
             </div>
             
-            <div className="p-6">
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="space-y-2">
                 {filteredCustomers.map((customer) => (
                   <button
                     key={customer.id}
@@ -858,7 +858,7 @@ export default function NewSale() {
               </div>
             </div>
             
-            <div className="p-6 border-t border-slate-200">
+            <div className="p-6 border-t border-slate-200 flex-shrink-0">
               <button
                 onClick={() => {
                   setShowCustomerModal(false);
@@ -875,8 +875,8 @@ export default function NewSale() {
 
       {/* New Customer Form Modal */}
       {showNewCustomerForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Crear Nuevo Cliente</h3>
               <p className="text-sm text-slate-600 mt-1">
@@ -884,7 +884,7 @@ export default function NewSale() {
               </p>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Nombre Completo *
@@ -952,7 +952,7 @@ export default function NewSale() {
               </div>
             </div>
             
-            <div className="p-6 border-t border-slate-200 flex gap-3">
+            <div className="p-6 border-t border-slate-200 flex gap-3 flex-shrink-0">
               <button
                 onClick={handleCreateNewCustomer}
                 disabled={!newCustomerData.name.trim()}
@@ -976,8 +976,8 @@ export default function NewSale() {
 
       {/* Print Modal */}
       {showPrintModal && completedSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">
                 ¡Venta Completada!

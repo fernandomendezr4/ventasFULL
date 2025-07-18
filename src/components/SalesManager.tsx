@@ -463,8 +463,8 @@ export default function SalesManager() {
 
       {/* Sale Detail Modal */}
       {selectedSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-auto max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-xl font-semibold text-slate-900">
                 Detalle de Venta #{selectedSale.id.slice(-8)}
@@ -496,7 +496,7 @@ export default function SalesManager() {
               </div>
             </div>
             
-            <div className="p-6">
+            <div className="p-6 flex-1 overflow-y-auto">
               <h4 className="font-medium text-slate-900 mb-4">Productos</h4>
               <div className="space-y-3">
                 {selectedSale.sale_items.map((item, index) => (
@@ -557,7 +557,7 @@ export default function SalesManager() {
               </div>
             </div>
             
-            <div className="p-6 border-t border-slate-200">
+            <div className="p-6 border-t border-slate-200 flex-shrink-0">
               <button
                 onClick={() => setSelectedSale(null)}
                 className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"

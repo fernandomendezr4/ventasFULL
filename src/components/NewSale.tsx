@@ -219,20 +219,26 @@ export default function NewSale() {
       return;
     }
 
-    // Si no hay cliente seleccionado, mostrar modal de selección
-    if (!selectedCustomer) {
-      setShowCustomerSelectionModal(true);
-      return;
-    }
-
+    // Validar monto recibido para ventas en efectivo
     if (paymentType === 'cash') {
+      if (!amountReceived || amountReceived.trim() === '') {
+        alert('Debes ingresar el monto recibido para procesar la venta en efectivo');
+        return;
+      }
+      
       const received = parseFloat(amountReceived) || 0;
       const total = calculateTotal();
       
       if (received < total) {
-        alert('El monto recibido debe ser mayor o igual al total');
+        alert('El monto recibido debe ser mayor o igual al total de la venta');
         return;
       }
+    }
+
+    // Si no hay cliente seleccionado, mostrar modal de selección
+    if (!selectedCustomer) {
+      setShowCustomerSelectionModal(true);
+      return;
     }
 
     await processActualSale();
@@ -243,6 +249,22 @@ export default function NewSale() {
     if (paymentType === 'installment' && !selectedCustomer) {
       alert('Para ventas por abonos debe seleccionar un cliente');
       return;
+    }
+
+    // Validación adicional para ventas en efectivo
+    if (paymentType === 'cash') {
+      if (!amountReceived || amountReceived.trim() === '') {
+        alert('Debes ingresar el monto recibido para procesar la venta en efectivo');
+        return;
+      }
+      
+      const received = parseFloat(amountReceived) || 0;
+      const total = calculateTotal();
+      
+      if (received < total) {
+        alert('El monto recibido debe ser mayor o igual al total de la venta');
+        return;
+      }
     }
 
     try {
@@ -681,7 +703,11 @@ export default function NewSale() {
                 {/* Process Sale Button */}
                 <button
                   onClick={processSale}
-                  disabled={loading || cart.length === 0}
+                  disabled={
+                    loading || 
+                    cart.length === 0 || 
+                    (paymentType === 'cash' && (!amountReceived || amountReceived.trim() === '' || parseFloat(amountReceived) < calculateTotal()))
+                  }
                   className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center font-medium"
                 >
                   {loading ? (
@@ -696,6 +722,18 @@ export default function NewSale() {
                     </>
                   )}
                 </button>
+                
+                {/* Mensaje de ayuda cuando el botón está deshabilitado */}
+                {paymentType === 'cash' && cart.length > 0 && (!amountReceived || amountReceived.trim() === '' || parseFloat(amountReceived) < calculateTotal()) && (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    {!amountReceived || amountReceived.trim() === '' 
+                      ? '⚠️ Ingresa el monto recibido para procesar la venta'
+                      : parseFloat(amountReceived) < calculateTotal()
+                        ? '⚠️ El monto recibido debe ser mayor o igual al total'
+                        : ''
+                    }
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -4,6 +4,10 @@ import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 interface SaleWithInstallments {
   id: string;
@@ -39,6 +43,8 @@ interface PaymentInstallment {
 }
 
 export default function InstallmentManager() {
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [installmentSales, setInstallmentSales] = useState<SaleWithInstallments[]>([]);
   const [selectedSale, setSelectedSale] = useState<SaleWithInstallments | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,21 +90,91 @@ export default function InstallmentManager() {
 
       if (error) throw error;
       
-      // Sort payment installments by date
-      const salesWithSortedPayments = data.map(sale => ({
-        ...sale,
-        payment_installments: sale.payment_installments.sort((a: PaymentInstallment, b: PaymentInstallment) => 
+      // Sort payment installments by date and recalculate totals
+      const salesWithCalculatedTotals = data.map(sale => {
+        const sortedPayments = sale.payment_installments.sort((a: PaymentInstallment, b: PaymentInstallment) => 
           new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
-        )
-      }));
+        );
+        
+        // Recalcular total pagado basado en los abonos
+        const calculatedTotalPaid = sortedPayments.reduce((sum: number, payment: PaymentInstallment) => 
+          sum + payment.amount_paid, 0
+        );
+        
+        // Determinar estado de pago correcto
+        let paymentStatus = 'pending';
+        if (calculatedTotalPaid >= sale.total_amount) {
+          paymentStatus = 'paid';
+        } else if (calculatedTotalPaid > 0) {
+          paymentStatus = 'partial';
+        }
+        
+        return {
+          ...sale,
+          payment_installments: sortedPayments,
+          total_paid: calculatedTotalPaid,
+          payment_status: paymentStatus
+        };
+      });
       
-      setInstallmentSales(salesWithSortedPayments as SaleWithInstallments[]);
-      return salesWithSortedPayments as SaleWithInstallments[];
+      setInstallmentSales(salesWithCalculatedTotals as SaleWithInstallments[]);
+      return salesWithCalculatedTotals as SaleWithInstallments[];
     } catch (error) {
       console.error('Error loading installment sales:', error);
+      showError(
+        'Error al Cargar Ventas',
+        'No se pudieron cargar las ventas por abonos. ' + (error as Error).message
+      );
       return [];
     } finally {
       setLoading(false);
+    }
+  };
+
+  const recalculateSaleTotal = async (saleId: string) => {
+    try {
+      // Obtener todos los abonos de la venta
+      const { data: payments, error } = await supabase
+        .from('payment_installments')
+        .select('amount_paid')
+        .eq('sale_id', saleId);
+
+      if (error) throw error;
+
+      const totalPaid = payments.reduce((sum, payment) => sum + payment.amount_paid, 0);
+      
+      // Obtener el total de la venta
+      const { data: sale, error: saleError } = await supabase
+        .from('sales')
+        .select('total_amount')
+        .eq('id', saleId)
+        .single();
+
+      if (saleError) throw saleError;
+
+      // Determinar estado de pago
+      let paymentStatus = 'pending';
+      if (totalPaid >= sale.total_amount) {
+        paymentStatus = 'paid';
+      } else if (totalPaid > 0) {
+        paymentStatus = 'partial';
+      }
+
+      // Actualizar la venta
+      const { error: updateError } = await supabase
+        .from('sales')
+        .update({
+          total_paid: totalPaid,
+          payment_status: paymentStatus
+        })
+        .eq('id', saleId);
+
+      if (updateError) throw updateError;
+
+      return { totalPaid, paymentStatus };
+    } catch (error) {
+      console.error('Error recalculating sale total:', error);
+      throw error;
     }
   };
 
@@ -109,13 +185,19 @@ export default function InstallmentManager() {
       const amount = parseFloat(paymentAmount);
       
       if (amount <= 0) {
-        alert('El monto debe ser mayor a 0');
+        showWarning(
+          'Monto Inválido',
+          'El monto debe ser mayor a 0'
+        );
         return;
       }
 
       const remainingBalance = selectedSale.total_amount - selectedSale.total_paid;
       if (amount > remainingBalance) {
-        alert(`El monto no puede ser mayor al saldo pendiente: ${formatCurrency(remainingBalance)}`);
+        showWarning(
+          'Monto Excesivo',
+          `El monto no puede ser mayor al saldo pendiente: ${formatCurrency(remainingBalance)}`
+        );
         return;
       }
 
@@ -126,7 +208,7 @@ export default function InstallmentManager() {
           sale_id: selectedSale.id,
           amount_paid: amount,
           payment_method: 'cash',
-          notes: paymentNotes
+          notes: paymentNotes || 'Abono en efectivo'
         }]);
 
       if (installmentError) throw installmentError;
@@ -138,10 +220,13 @@ export default function InstallmentManager() {
           sale_id: selectedSale.id,
           amount: amount,
           payment_method: 'cash',
-          notes: `Abono - ${paymentNotes}`
+          notes: `Abono - ${paymentNotes || 'Pago en efectivo'}`
         }]);
 
       if (paymentError) throw paymentError;
+
+      // Recalcular totales de la venta
+      await recalculateSaleTotal(selectedSale.id);
 
       // Register payment in current cash register if open
       try {
@@ -162,7 +247,7 @@ export default function InstallmentManager() {
               type: 'sale',
               category: 'ventas_efectivo',
               amount: amount,
-              description: `Abono venta #${selectedSale.id.slice(-8)} - ${paymentNotes}`,
+              description: `Abono venta #${selectedSale.id.slice(-8)} - ${selectedSale.customer?.name || 'Cliente'} - ${paymentNotes || 'Pago en efectivo'}`,
               reference_id: selectedSale.id,
               created_by: currentRegister.user_id
             }]);
@@ -179,24 +264,11 @@ export default function InstallmentManager() {
         console.error('Error updating cash register with installment payment:', error);
       }
 
-      // Update sale total paid
-      const newTotalPaid = selectedSale.total_paid + amount;
-      const { error: saleUpdateError } = await supabase
-        .from('sales')
-        .update({
-          total_paid: newTotalPaid,
-          payment_status: newTotalPaid >= selectedSale.total_amount ? 'paid' : 'partial'
-        })
-        .eq('id', selectedSale.id);
-
-      if (saleUpdateError) throw saleUpdateError;
-
       setShowPaymentModal(false);
       setPaymentAmount('');
       setPaymentNotes('');
       
-      await loadInstallmentSales();
-      // Update the selected sale with fresh data
+      // Recargar datos y actualizar venta seleccionada
       const updatedSales = await loadInstallmentSales();
       const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
       if (updatedSale) {
@@ -208,7 +280,7 @@ export default function InstallmentManager() {
         id: `payment-${Date.now()}`,
         payment_amount: amount,
         payment_date: new Date().toISOString(),
-        payment_notes: paymentNotes,
+        payment_notes: paymentNotes || 'Abono en efectivo',
         sale: selectedSale,
         customer: selectedSale.customer,
         remaining_balance: selectedSale.total_amount - (selectedSale.total_paid + amount),
@@ -217,9 +289,17 @@ export default function InstallmentManager() {
       
       setCompletedPayment(paymentForPrint);
       setShowPrintModal(true);
+      
+      showSuccess(
+        '¡Abono Registrado!',
+        `Se ha registrado un abono de ${formatCurrency(amount)} exitosamente`
+      );
     } catch (error) {
       console.error('Error processing payment:', error);
-      alert('Error al procesar el pago: ' + (error as Error).message);
+      showError(
+        'Error al Procesar Abono',
+        'No se pudo procesar el abono. ' + (error as Error).message
+      );
     }
   };
 
@@ -230,7 +310,10 @@ export default function InstallmentManager() {
       const newAmount = parseFloat(paymentAmount);
       
       if (newAmount <= 0) {
-        alert('El monto debe ser mayor a 0');
+        showWarning(
+          'Monto Inválido',
+          'El monto debe ser mayor a 0'
+        );
         return;
       }
 
@@ -239,7 +322,10 @@ export default function InstallmentManager() {
       const newTotalPaid = currentTotalPaid + newAmount;
 
       if (newTotalPaid > selectedSale.total_amount) {
-        alert(`El monto total no puede exceder el valor de la venta: ${formatCurrency(selectedSale.total_amount)}`);
+        showWarning(
+          'Monto Excesivo',
+          `El monto total no puede exceder el valor de la venta: ${formatCurrency(selectedSale.total_amount)}`
+        );
         return;
       }
 
@@ -248,7 +334,7 @@ export default function InstallmentManager() {
         .from('payment_installments')
         .update({
           amount_paid: newAmount,
-          notes: paymentNotes
+          notes: paymentNotes || 'Abono editado'
         })
         .eq('id', editingPayment.id);
 
@@ -259,107 +345,98 @@ export default function InstallmentManager() {
         .from('payments')
         .update({
           amount: newAmount,
-          notes: `Abono - ${paymentNotes}`
+          notes: `Abono - ${paymentNotes || 'Abono editado'}`
         })
         .eq('sale_id', selectedSale.id)
-        .eq('amount', oldAmount);
+        .eq('amount', oldAmount)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (paymentError) console.error('Error updating payment record:', paymentError);
 
-      // Update sale total paid
-      const { error: saleUpdateError } = await supabase
-        .from('sales')
-        .update({
-          total_paid: newTotalPaid,
-          payment_status: newTotalPaid >= selectedSale.total_amount ? 'paid' : newTotalPaid > 0 ? 'partial' : 'pending'
-        })
-        .eq('id', selectedSale.id);
-
-      if (saleUpdateError) throw saleUpdateError;
+      // Recalcular totales de la venta
+      await recalculateSaleTotal(selectedSale.id);
 
       setShowEditModal(false);
       setEditingPayment(null);
       setPaymentAmount('');
       setPaymentNotes('');
       
-      await loadInstallmentSales();
-      // Update the selected sale with fresh data
+      // Recargar datos y actualizar venta seleccionada
       const updatedSales = await loadInstallmentSales();
       const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
       if (updatedSale) {
         setSelectedSale(updatedSale);
       }
       
-      // Preparar datos para impresión del abono editado
-      const paymentForPrint = {
-        id: `payment-edit-${Date.now()}`,
-        payment_amount: newAmount,
-        payment_date: editingPayment.payment_date,
-        payment_notes: paymentNotes,
-        sale: selectedSale,
-        customer: selectedSale.customer,
-        remaining_balance: selectedSale.total_amount - newTotalPaid,
-        total_paid_after: newTotalPaid,
-        is_edit: true
-      };
-      
-      setCompletedPayment(paymentForPrint);
-      setShowPrintModal(true);
+      showSuccess(
+        '¡Abono Actualizado!',
+        `El abono ha sido actualizado a ${formatCurrency(newAmount)} exitosamente`
+      );
     } catch (error) {
       console.error('Error updating payment:', error);
-      alert('Error al actualizar el abono: ' + (error as Error).message);
+      showError(
+        'Error al Actualizar Abono',
+        'No se pudo actualizar el abono. ' + (error as Error).message
+      );
     }
   };
 
   const handleDeletePayment = async (payment: PaymentInstallment) => {
     if (!selectedSale) return;
 
-    if (!window.confirm('¿Estás seguro de que quieres eliminar este abono?')) {
-      return;
-    }
+    showConfirmation(
+      'Eliminar Abono',
+      `¿Estás seguro de que quieres eliminar este abono de ${formatCurrency(payment.amount_paid)}? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          // Delete payment installment
+          const { error: installmentError } = await supabase
+            .from('payment_installments')
+            .delete()
+            .eq('id', payment.id);
 
-    try {
-      // Delete payment installment
-      const { error: installmentError } = await supabase
-        .from('payment_installments')
-        .delete()
-        .eq('id', payment.id);
+          if (installmentError) throw installmentError;
 
-      if (installmentError) throw installmentError;
+          // Delete corresponding payment record
+          const { error: paymentError } = await supabase
+            .from('payments')
+            .delete()
+            .eq('sale_id', selectedSale.id)
+            .eq('amount', payment.amount_paid)
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-      // Delete corresponding payment record
-      const { error: paymentError } = await supabase
-        .from('payments')
-        .delete()
-        .eq('sale_id', selectedSale.id)
-        .eq('amount', payment.amount_paid);
+          if (paymentError) console.error('Error deleting payment record:', paymentError);
 
-      if (paymentError) console.error('Error deleting payment record:', paymentError);
+          // Recalcular totales de la venta
+          await recalculateSaleTotal(selectedSale.id);
 
-      // Update sale total paid
-      const newTotalPaid = selectedSale.total_paid - payment.amount_paid;
-      const { error: saleUpdateError } = await supabase
-        .from('sales')
-        .update({
-          total_paid: newTotalPaid,
-          payment_status: newTotalPaid >= selectedSale.total_amount ? 'paid' : newTotalPaid > 0 ? 'partial' : 'pending'
-        })
-        .eq('id', selectedSale.id);
-
-      if (saleUpdateError) throw saleUpdateError;
-
-      await loadInstallmentSales();
-      // Update the selected sale with fresh data
-      const updatedSales = await loadInstallmentSales();
-      const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
-      if (updatedSale) {
-        setSelectedSale(updatedSale);
+          // Recargar datos y actualizar venta seleccionada
+          const updatedSales = await loadInstallmentSales();
+          const updatedSale = updatedSales.find(s => s.id === selectedSale.id);
+          if (updatedSale) {
+            setSelectedSale(updatedSale);
+          }
+          
+          showSuccess(
+            '¡Abono Eliminado!',
+            `El abono de ${formatCurrency(payment.amount_paid)} ha sido eliminado exitosamente`
+          );
+        } catch (error) {
+          console.error('Error deleting payment:', error);
+          showError(
+            'Error al Eliminar Abono',
+            'No se pudo eliminar el abono. ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
       }
-      alert('Abono eliminado exitosamente');
-    } catch (error) {
-      console.error('Error deleting payment:', error);
-      alert('Error al eliminar el abono: ' + (error as Error).message);
-    }
+    );
   };
 
   const openEditModal = (payment: PaymentInstallment) => {
@@ -430,6 +507,17 @@ export default function InstallmentManager() {
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return 'Pagada';
+      case 'partial':
+        return 'Parcial';
+      default:
+        return 'Pendiente';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -482,8 +570,36 @@ export default function InstallmentManager() {
           <p className="text-blue-800 text-sm">
             Mostrando {filteredAndSortedSales.length} de {installmentSales.length} ventas
             {searchTerm && ` que coinciden con "${searchTerm}"`}
-            {statusFilter !== 'all' && ` con estado "${statusFilter === 'paid' ? 'Pagadas' : statusFilter === 'partial' ? 'Parciales' : 'Pendientes'}"`}
+            {statusFilter !== 'all' && ` con estado "${getStatusLabel(statusFilter)}"`}
           </p>
+        </div>
+      )}
+
+      {/* Summary Cards */}
+      {filteredAndSortedSales.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <p className="text-sm font-medium text-blue-600">Total Ventas</p>
+            <p className="text-2xl font-bold text-blue-900">{filteredAndSortedSales.length}</p>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+            <p className="text-sm font-medium text-green-600">Monto Total</p>
+            <p className="text-2xl font-bold text-green-900">
+              {formatCurrency(filteredAndSortedSales.reduce((sum, sale) => sum + sale.total_amount, 0))}
+            </p>
+          </div>
+          <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+            <p className="text-sm font-medium text-emerald-600">Total Pagado</p>
+            <p className="text-2xl font-bold text-emerald-900">
+              {formatCurrency(filteredAndSortedSales.reduce((sum, sale) => sum + sale.total_paid, 0))}
+            </p>
+          </div>
+          <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+            <p className="text-sm font-medium text-orange-600">Saldo Pendiente</p>
+            <p className="text-2xl font-bold text-orange-900">
+              {formatCurrency(filteredAndSortedSales.reduce((sum, sale) => sum + (sale.total_amount - sale.total_paid), 0))}
+            </p>
+          </div>
         </div>
       )}
 
@@ -523,7 +639,7 @@ export default function InstallmentManager() {
                         <p className="text-sm text-slate-600">
                           Venta #{sale.id.slice(-8)} • {new Date(sale.created_at).toLocaleDateString('es-ES')}
                         </p>
-                        {/* Información adicional del cliente y vendedor */}
+                        {/* Información adicional del cliente */}
                         <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
                           {sale.customer?.phone && (
                             <span className="flex items-center">
@@ -537,96 +653,103 @@ export default function InstallmentManager() {
                               {sale.customer.email}
                             </span>
                           )}
+                          {sale.customer?.cedula && (
+                            <span>CC: {sale.customer.cedula}</span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-4 mt-2 text-sm text-slate-600">
-                          <span className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Total: {formatCurrency(sale.total_amount)}
-                          </span>
-                          <span className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Pagado: {formatCurrency(sale.total_paid)}
-                          </span>
-                          <span className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Saldo: {formatCurrency(sale.total_amount - sale.total_paid)}
-                          </span>
+                        {/* Información financiera */}
+                        <div className="grid grid-cols-4 gap-4 mt-3 text-sm">
+                          <div>
+                            <span className="text-slate-500">Total:</span>
+                            <p className="font-semibold text-slate-900">{formatCurrency(sale.total_amount)}</p>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Pagado:</span>
+                            <p className="font-semibold text-green-600">{formatCurrency(sale.total_paid)}</p>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Saldo:</span>
+                            <p className="font-semibold text-orange-600">{formatCurrency(sale.total_amount - sale.total_paid)}</p>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Abonos:</span>
+                            <p className="font-semibold text-blue-600">{sale.payment_installments.length}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(sale.payment_status)}`}>
-                      {sale.payment_status === 'paid' ? 'Pagada' : 
-                       sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(sale.payment_status)}`}>
+                      {getStatusLabel(sale.payment_status)}
                     </span>
                     {sale.payment_status !== 'paid' && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setSelectedSale(sale);
-                            setPaymentAmount((sale.total_amount - sale.total_paid).toString());
-                            setShowPaymentModal(true);
-                          }}
-                          className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Abonar
-                        </button>
-                        <PrintService
-                          sale={sale}
-                          settings={(() => {
-                            const savedSettings = localStorage.getItem('app_settings');
-                            const printSettings = localStorage.getItem('print_settings');
-                            if (savedSettings || printSettings) {
-                              const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
-                              const printConfig = printSettings ? JSON.parse(printSettings) : {};
-                              return {
-                                print_enabled: true,
-                                auto_print: false,
-                                print_copies: 1,
-                                receipt_width: '80mm',
-                                show_logo: true,
-                                show_company_info: true,
-                                show_customer_info: true,
-                                show_payment_details: true,
-                                show_footer_message: true,
-                                footer_message: '¡Gracias por su compra!',
-                                receipt_header: 'FACTURA DE VENTA',
-                                receipt_footer: 'Conserve este comprobante',
-                                company_name: 'VentasFULL',
-                                company_address: '',
-                                company_phone: '',
-                                company_email: '',
-                                ...appSettings,
-                                ...printConfig
-                              };
-                            }
-                            return {
-                              print_enabled: true,
-                              auto_print: false,
-                              print_copies: 1,
-                              receipt_width: '80mm',
-                              show_logo: true,
-                              show_company_info: true,
-                              show_customer_info: true,
-                              show_payment_details: true,
-                              show_footer_message: true,
-                              footer_message: '¡Gracias por su compra!',
-                              receipt_header: 'FACTURA DE VENTA',
-                              receipt_footer: 'Conserve este comprobante',
-                              company_name: 'VentasFULL',
-                              company_address: '',
-                              company_phone: '',
-                              company_email: ''
-                            };
-                          })()}
-                        />
-                      </>
+                      <button
+                        onClick={() => {
+                          setSelectedSale(sale);
+                          setPaymentAmount((sale.total_amount - sale.total_paid).toString());
+                          setPaymentNotes('');
+                          setShowPaymentModal(true);
+                        }}
+                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 text-sm flex items-center"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Abonar
+                      </button>
                     )}
+                    <PrintService
+                      sale={sale}
+                      settings={(() => {
+                        const savedSettings = localStorage.getItem('app_settings');
+                        const printSettings = localStorage.getItem('print_settings');
+                        if (savedSettings || printSettings) {
+                          const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
+                          const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                          return {
+                            print_enabled: true,
+                            auto_print: false,
+                            print_copies: 1,
+                            receipt_width: '80mm',
+                            show_logo: true,
+                            show_company_info: true,
+                            show_customer_info: true,
+                            show_payment_details: true,
+                            show_footer_message: true,
+                            footer_message: '¡Gracias por su compra!',
+                            receipt_header: 'FACTURA DE VENTA',
+                            receipt_footer: 'Conserve este comprobante',
+                            company_name: 'VentasFULL',
+                            company_address: '',
+                            company_phone: '',
+                            company_email: '',
+                            ...appSettings,
+                            ...printConfig
+                          };
+                        }
+                        return {
+                          print_enabled: true,
+                          auto_print: false,
+                          print_copies: 1,
+                          receipt_width: '80mm',
+                          show_logo: true,
+                          show_company_info: true,
+                          show_customer_info: true,
+                          show_payment_details: true,
+                          show_footer_message: true,
+                          footer_message: '¡Gracias por su compra!',
+                          receipt_header: 'FACTURA DE VENTA',
+                          receipt_footer: 'Conserve este comprobante',
+                          company_name: 'VentasFULL',
+                          company_address: '',
+                          company_phone: '',
+                          company_email: ''
+                        };
+                      })()}
+                    />
                     <button
                       onClick={() => setSelectedSale(sale)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                      title="Ver historial de abonos"
                     >
                       <Eye className="h-4 w-4" />
                     </button>
@@ -651,6 +774,25 @@ export default function InstallmentManager() {
                   <p className="text-sm text-slate-600 mt-1">
                     Venta #{selectedSale.id.slice(-8)} • {new Date(selectedSale.created_at).toLocaleDateString('es-ES')}
                   </p>
+                  {selectedSale.customer && (
+                    <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
+                      {selectedSale.customer.phone && (
+                        <span className="flex items-center">
+                          <Phone className="h-4 w-4 mr-1" />
+                          {selectedSale.customer.phone}
+                        </span>
+                      )}
+                      {selectedSale.customer.email && (
+                        <span className="flex items-center">
+                          <Mail className="h-4 w-4 mr-1" />
+                          {selectedSale.customer.email}
+                        </span>
+                      )}
+                      {selectedSale.customer.cedula && (
+                        <span>CC: {selectedSale.customer.cedula}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => setSelectedSale(null)}
@@ -667,32 +809,81 @@ export default function InstallmentManager() {
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <p className="text-sm font-medium text-blue-600">Total de la Venta</p>
                   <p className="text-2xl font-bold text-blue-900">{formatCurrency(selectedSale.total_amount)}</p>
+                  {selectedSale.discount_amount > 0 && (
+                    <p className="text-xs text-blue-700 mt-1">
+                      Subtotal: {formatCurrency(selectedSale.subtotal || selectedSale.total_amount)}
+                      <br />Descuento: -{formatCurrency(selectedSale.discount_amount)}
+                    </p>
+                  )}
                 </div>
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <p className="text-sm font-medium text-green-600">Total Pagado</p>
                   <p className="text-2xl font-bold text-green-900">{formatCurrency(selectedSale.total_paid)}</p>
+                  <p className="text-xs text-green-700 mt-1">
+                    {((selectedSale.total_paid / selectedSale.total_amount) * 100).toFixed(1)}% del total
+                  </p>
                 </div>
                 <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
                   <p className="text-sm font-medium text-orange-600">Saldo Pendiente</p>
                   <p className="text-2xl font-bold text-orange-900">{formatCurrency(selectedSale.total_amount - selectedSale.total_paid)}</p>
+                  <p className="text-xs text-orange-700 mt-1">
+                    {(((selectedSale.total_amount - selectedSale.total_paid) / selectedSale.total_amount) * 100).toFixed(1)}% restante
+                  </p>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                   <p className="text-sm font-medium text-purple-600">Estado</p>
-                  <p className="text-lg font-bold text-purple-900">
-                    {selectedSale.payment_status === 'paid' ? 'Pagada' : 
-                     selectedSale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
+                  <p className="text-lg font-bold text-purple-900">{getStatusLabel(selectedSale.payment_status)}</p>
+                  <p className="text-xs text-purple-700 mt-1">
+                    {selectedSale.payment_installments.length} abono{selectedSale.payment_installments.length !== 1 ? 's' : ''}
                   </p>
                 </div>
               </div>
+
+              {/* Quick Actions */}
+              {selectedSale.payment_status !== 'paid' && (
+                <div className="mb-6 p-4 bg-slate-50 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-slate-900">Acciones Rápidas</h4>
+                      <p className="text-sm text-slate-600">Gestiona los abonos de esta venta</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setPaymentAmount((selectedSale.total_amount - selectedSale.total_paid).toString());
+                        setPaymentNotes('');
+                        setShowPaymentModal(true);
+                      }}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Registrar Nuevo Abono
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Payment History */}
               <h4 className="font-medium text-slate-900 mb-4">Historial de Abonos</h4>
               <div className="space-y-3">
                 {selectedSale.payment_installments.length === 0 ? (
-                  <p className="text-slate-500 text-center py-8">No hay abonos registrados</p>
+                  <div className="text-center py-8 bg-slate-50 rounded-lg">
+                    <DollarSign className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <p className="text-slate-500">No hay abonos registrados para esta venta</p>
+                    <button
+                      onClick={() => {
+                        setPaymentAmount(selectedSale.total_amount.toString());
+                        setPaymentNotes('');
+                        setShowPaymentModal(true);
+                      }}
+                      className="mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center mx-auto"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Registrar Primer Abono
+                    </button>
+                  </div>
                 ) : (
-                  selectedSale.payment_installments.map((payment) => (
-                    <div key={payment.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
+                  selectedSale.payment_installments.map((payment, index) => (
+                    <div key={payment.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border hover:bg-slate-100 transition-colors duration-200">
                       <div className="flex-1">
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-green-100 rounded-lg">
@@ -700,7 +891,7 @@ export default function InstallmentManager() {
                           </div>
                           <div>
                             <h5 className="font-medium text-slate-900">
-                              Abono de {formatCurrency(payment.amount_paid)}
+                              Abono #{selectedSale.payment_installments.length - index} - {formatCurrency(payment.amount_paid)}
                             </h5>
                             <div className="flex items-center gap-4 text-sm text-slate-600">
                               <div className="flex items-center">
@@ -717,7 +908,7 @@ export default function InstallmentManager() {
                               <span>• {payment.payment_method}</span>
                             </div>
                             {payment.notes && (
-                              <p className="text-sm text-slate-500 mt-1">{payment.notes}</p>
+                              <p className="text-sm text-slate-500 mt-1 italic">"{payment.notes}"</p>
                             )}
                           </div>
                         </div>
@@ -781,7 +972,7 @@ export default function InstallmentManager() {
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Monto del Abono
+                    Monto del Abono *
                   </label>
                   <FormattedNumberInput
                     value={paymentAmount}
@@ -789,6 +980,7 @@ export default function InstallmentManager() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="0"
                     max={(selectedSale.total_amount - selectedSale.total_paid).toString()}
+                    required
                   />
                   <p className="text-xs text-slate-500 mt-1">
                     Máximo: {formatCurrency(selectedSale.total_amount - selectedSale.total_paid)}
@@ -866,7 +1058,7 @@ export default function InstallmentManager() {
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Nuevo Monto del Abono
+                    Nuevo Monto del Abono *
                   </label>
                   <FormattedNumberInput
                     value={paymentAmount}
@@ -874,6 +1066,7 @@ export default function InstallmentManager() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     min="0"
                     max={(selectedSale.total_amount - (selectedSale.total_paid - editingPayment.amount_paid)).toString()}
+                    required
                   />
                   <p className="text-xs text-slate-500 mt-1">
                     Máximo permitido: {formatCurrency(selectedSale.total_amount - (selectedSale.total_paid - editingPayment.amount_paid))}
@@ -1032,6 +1225,28 @@ export default function InstallmentManager() {
           </div>
         </div>
       )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

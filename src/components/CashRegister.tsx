@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Plus, Minus } from 'lucide-react';
+import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Plus, Minus, Edit2, Trash2, Package, CreditCard, Banknote } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { CashRegister as CashRegisterType, User as UserType, CashMovement } from '../lib/types';
+import { CashRegister as CashRegisterType, User as UserType, CashMovement, Sale, SaleItem, Product } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +19,23 @@ interface CashRegisterWithUser extends CashRegisterType {
 
 interface CashRegisterWithMovements extends CashRegisterWithUser {
   cash_movements: CashMovement[];
+  sales_details?: SaleDetail[];
+}
+
+interface SaleDetail {
+  id: string;
+  total_amount: number;
+  payment_type: string;
+  payment_method?: string;
+  created_at: string;
+  customer_name?: string;
+  items_count: number;
+  items: Array<{
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
 }
 
 export default function CashRegister() {
@@ -28,12 +45,16 @@ export default function CashRegister() {
   const [currentRegister, setCurrentRegister] = useState<CashRegisterWithMovements | null>(null);
   const [registers, setRegisters] = useState<CashRegisterWithUser[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [salesDetails, setSalesDetails] = useState<SaleDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [showOpenForm, setShowOpenForm] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [showMovementsModal, setShowMovementsModal] = useState(false);
+  const [showSalesDetailModal, setShowSalesDetailModal] = useState(false);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [selectedSale, setSelectedSale] = useState<SaleDetail | null>(null);
+  const [editingMovement, setEditingMovement] = useState<CashMovement | null>(null);
   
   const [openFormData, setOpenFormData] = useState({
     opening_amount: '',
@@ -116,6 +137,9 @@ export default function CashRegister() {
         // Cargar movimientos de la caja actual
         await loadMovements(data.id);
         
+        // Cargar detalles de ventas
+        await loadSalesDetails(data.id);
+        
         // Calcular balance actual basado en movimientos
         const movementsData = await getMovements(data.id);
         const totalIncome = movementsData
@@ -137,17 +161,80 @@ export default function CashRegister() {
           total_income: totalIncome - (data.opening_amount || 0),
           total_expenses: totalExpenses,
           total_sales_amount: totalSalesAmount,
-          cash_movements: movementsData
+          cash_movements: movementsData,
+          sales_details: salesDetails
         };
         setCurrentRegister(registerWithBalance as CashRegisterWithMovements);
       } else {
         setCurrentRegister(null);
         setMovements([]);
+        setSalesDetails([]);
       }
     } catch (error) {
       console.error('Error loading current register:', error);
       setCurrentRegister(null);
       setMovements([]);
+      setSalesDetails([]);
+    }
+  };
+
+  const loadSalesDetails = async (registerId: string) => {
+    try {
+      // Obtener ventas de la caja actual
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select(`
+          id,
+          total_amount,
+          payment_type,
+          created_at,
+          customer:customers(name),
+          payments(payment_method, notes),
+          sale_items(
+            quantity,
+            unit_price,
+            total_price,
+            product:products(name)
+          )
+        `)
+        .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+        .order('created_at', { ascending: false });
+
+      if (salesError) throw salesError;
+
+      // Filtrar solo las ventas que corresponden a movimientos de esta caja
+      const { data: movementsData, error: movementsError } = await supabase
+        .from('cash_movements')
+        .select('reference_id')
+        .eq('cash_register_id', registerId)
+        .eq('type', 'sale');
+
+      if (movementsError) throw movementsError;
+
+      const saleIds = movementsData.map(m => m.reference_id).filter(Boolean);
+      
+      const filteredSales = salesData?.filter(sale => saleIds.includes(sale.id)) || [];
+
+      const salesWithDetails: SaleDetail[] = filteredSales.map(sale => ({
+        id: sale.id,
+        total_amount: sale.total_amount,
+        payment_type: sale.payment_type,
+        payment_method: sale.payments?.[0]?.payment_method || 'cash',
+        created_at: sale.created_at,
+        customer_name: sale.customer?.name,
+        items_count: sale.sale_items?.length || 0,
+        items: sale.sale_items?.map(item => ({
+          product_name: item.product?.name || 'Producto desconocido',
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price
+        })) || []
+      }));
+
+      setSalesDetails(salesWithDetails);
+    } catch (error) {
+      console.error('Error loading sales details:', error);
+      setSalesDetails([]);
     }
   };
 
@@ -418,11 +505,109 @@ export default function CashRegister() {
     }
   };
 
+  const handleEditMovement = async (movement: CashMovement) => {
+    if (movement.type === 'sale' || movement.type === 'opening' || movement.type === 'closing') {
+      showWarning(
+        'No se puede editar',
+        'Los movimientos de ventas, apertura y cierre no se pueden editar'
+      );
+      return;
+    }
+
+    const newDescription = prompt('Nueva descripción:', movement.description);
+    if (newDescription === null) return;
+
+    const newAmount = prompt('Nuevo monto:', movement.amount.toString());
+    if (newAmount === null) return;
+
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showWarning('Monto Inválido', 'El monto debe ser un número válido mayor a 0');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('cash_movements')
+        .update({
+          amount: amount,
+          description: newDescription.trim()
+        })
+        .eq('id', movement.id);
+
+      if (error) throw error;
+
+      await loadData();
+      showSuccess(
+        '¡Movimiento Actualizado!',
+        'El movimiento ha sido actualizado exitosamente'
+      );
+    } catch (error) {
+      console.error('Error updating movement:', error);
+      showError(
+        'Error al Actualizar',
+        'No se pudo actualizar el movimiento. ' + (error as Error).message
+      );
+    }
+  };
+
+  const handleDeleteMovement = async (movement: CashMovement) => {
+    if (movement.type === 'sale' || movement.type === 'opening' || movement.type === 'closing') {
+      showWarning(
+        'No se puede eliminar',
+        'Los movimientos de ventas, apertura y cierre no se pueden eliminar'
+      );
+      return;
+    }
+
+    showConfirmation(
+      'Eliminar Movimiento',
+      `¿Estás seguro de que quieres eliminar este movimiento de ${formatCurrency(movement.amount)}?`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('cash_movements')
+            .delete()
+            .eq('id', movement.id);
+
+          if (error) throw error;
+
+          await loadData();
+          showSuccess(
+            '¡Movimiento Eliminado!',
+            'El movimiento ha sido eliminado exitosamente'
+          );
+        } catch (error) {
+          console.error('Error deleting movement:', error);
+          showError(
+            'Error al Eliminar',
+            'No se pudo eliminar el movimiento. ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
+      }
+    );
+  };
+
   const calculateDifference = () => {
     if (!currentRegister || !closeFormData.closing_amount) return 0;
     const expected = currentRegister.current_balance || 0;
     const actual = parseFloat(closeFormData.closing_amount);
     return actual - expected;
+  };
+
+  const calculateSessionDuration = () => {
+    if (!currentRegister) return '';
+    const start = new Date(currentRegister.opened_at);
+    const now = new Date();
+    const diffMs = now.getTime() - start.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
   };
 
   const getCategoryLabel = (category: string) => {
@@ -486,6 +671,17 @@ export default function CashRegister() {
     }
   };
 
+  const getPaymentMethodIcon = (method: string) => {
+    switch (method) {
+      case 'cash':
+        return <Banknote className="h-4 w-4" />;
+      case 'card':
+        return <CreditCard className="h-4 w-4" />;
+      default:
+        return <DollarSign className="h-4 w-4" />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -540,6 +736,13 @@ export default function CashRegister() {
               >
                 <Eye className="h-4 w-4 mr-2" />
                 Ver Movimientos
+              </button>
+              <button
+                onClick={() => setShowSalesDetailModal(true)}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center"
+              >
+                <ShoppingCart className="h-4 w-4 mr-2" />
+                Detalle Ventas
               </button>
               <button
                 onClick={() => setShowCloseForm(true)}
@@ -599,6 +802,7 @@ export default function CashRegister() {
                     <p className="text-xl font-bold text-emerald-900">
                       {formatCurrency(currentRegister.total_sales_amount || 0)}
                     </p>
+                    <p className="text-xs text-emerald-700">{salesDetails.length} ventas</p>
                   </div>
                   <div className="p-2 bg-emerald-100 rounded-full">
                     <ShoppingCart className="h-6 w-6 text-emerald-600" />
@@ -609,14 +813,51 @@ export default function CashRegister() {
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-purple-600">Otros Ingresos</p>
+                    <p className="text-sm font-medium text-purple-600">Tiempo Abierta</p>
                     <p className="text-xl font-bold text-purple-900">
-                      {formatCurrency(currentRegister.total_income || 0)}
+                      {calculateSessionDuration()}
+                    </p>
+                    <p className="text-xs text-purple-700">
+                      Desde {new Date(currentRegister.opened_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                   <div className="p-2 bg-purple-100 rounded-full">
-                    <ArrowUpCircle className="h-6 w-6 text-purple-600" />
+                    <Clock className="h-6 w-6 text-purple-600" />
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sales Summary */}
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <h4 className="font-medium text-slate-900 mb-3">Resumen de Ventas del Día</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">
+                    {salesDetails.filter(s => s.payment_type === 'cash').length}
+                  </p>
+                  <p className="text-sm text-slate-600">Ventas en Efectivo</p>
+                  <p className="text-xs text-green-700">
+                    {formatCurrency(salesDetails.filter(s => s.payment_type === 'cash').reduce((sum, s) => sum + s.total_amount, 0))}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {salesDetails.filter(s => s.payment_type === 'installment').length}
+                  </p>
+                  <p className="text-sm text-slate-600">Ventas por Abonos</p>
+                  <p className="text-xs text-blue-700">
+                    {formatCurrency(salesDetails.filter(s => s.payment_type === 'installment').reduce((sum, s) => sum + s.total_amount, 0))}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-purple-600">
+                    {salesDetails.reduce((sum, s) => sum + s.items_count, 0)}
+                  </p>
+                  <p className="text-sm text-slate-600">Productos Vendidos</p>
+                  <p className="text-xs text-purple-700">
+                    Promedio: {salesDetails.length > 0 ? (salesDetails.reduce((sum, s) => sum + s.items_count, 0) / salesDetails.length).toFixed(1) : 0} por venta
+                  </p>
                 </div>
               </div>
             </div>
@@ -675,6 +916,12 @@ export default function CashRegister() {
             <AlertCircle className="h-16 w-16 text-orange-400 mx-auto mb-4" />
             <p className="text-slate-700 text-lg font-medium">No tienes una caja abierta actualmente</p>
             <p className="text-slate-500 mt-2">Abre tu caja para comenzar las operaciones del día y habilitar las ventas</p>
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-800 text-sm">
+                <strong>Importante:</strong> Debes abrir tu caja antes de poder realizar ventas. 
+                Esto es obligatorio para todos los empleados.
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -738,92 +985,154 @@ export default function CashRegister() {
         </div>
       )}
 
-      {/* Close Register Form */}
+      {/* Close Register Form Modal */}
       {showCloseForm && currentRegister && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Cerrar Mi Caja</h3>
-          <form onSubmit={handleCloseRegister} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-slate-50 p-4 rounded-lg">
-                <h4 className="font-medium text-slate-900 mb-2">Resumen del Turno</h4>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span>Monto inicial:</span>
-                    <span>{formatCurrency(currentRegister.opening_amount || 0)}</span>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-xl font-semibold text-slate-900">Cerrar Mi Caja - Resumen Completo</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Revisa todos los detalles antes de cerrar tu caja
+              </p>
+            </div>
+            
+            <div className="p-6">
+              <form onSubmit={handleCloseRegister} className="space-y-6">
+                {/* Resumen General */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-3">Resumen del Turno</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Operador:</span>
+                        <span className="font-medium">{currentUser?.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tiempo abierta:</span>
+                        <span className="font-medium">{calculateSessionDuration()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Monto inicial:</span>
+                        <span>{formatCurrency(currentRegister.opening_amount || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total ventas:</span>
+                        <span className="text-green-600">+{formatCurrency(currentRegister.total_sales_amount || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Otros ingresos:</span>
+                        <span className="text-green-600">+{formatCurrency(currentRegister.total_income || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total egresos:</span>
+                        <span className="text-red-600">-{formatCurrency(currentRegister.total_expenses || 0)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium border-t pt-2">
+                        <span>Balance esperado:</span>
+                        <span className="text-lg">{formatCurrency(currentRegister.current_balance || 0)}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Total ventas:</span>
-                    <span className="text-green-600">+{formatCurrency(currentRegister.total_sales_amount || 0)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Otros ingresos:</span>
-                    <span className="text-green-600">+{formatCurrency(currentRegister.total_income || 0)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total egresos:</span>
-                    <span className="text-red-600">-{formatCurrency(currentRegister.total_expenses || 0)}</span>
-                  </div>
-                  <div className="flex justify-between font-medium border-t pt-1">
-                    <span>Balance esperado:</span>
-                    <span>{formatCurrency(currentRegister.current_balance || 0)}</span>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Monto Final (conteo físico) *
+                      </label>
+                      <FormattedNumberInput
+                        value={closeFormData.closing_amount}
+                        onChange={(value) => setCloseFormData({ ...closeFormData, closing_amount: value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                        min="0"
+                        placeholder="0"
+                      />
+                      {closeFormData.closing_amount && (
+                        <div className={`mt-2 p-2 rounded text-sm ${
+                          calculateDifference() === 0 
+                            ? 'bg-green-50 text-green-700' 
+                            : calculateDifference() > 0 
+                              ? 'bg-blue-50 text-blue-700' 
+                              : 'bg-red-50 text-red-700'
+                        }`}>
+                          <strong>Diferencia: {formatCurrency(calculateDifference())}</strong>
+                          {calculateDifference() > 0 && ' (sobrante)'}
+                          {calculateDifference() < 0 && ' (faltante)'}
+                          {calculateDifference() === 0 && ' (exacto)'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Notas de cierre
+                      </label>
+                      <textarea
+                        value={closeFormData.notes}
+                        onChange={(e) => setCloseFormData({ ...closeFormData, notes: e.target.value })}
+                        rows={4}
+                        placeholder="Observaciones, incidencias, explicación de diferencias, etc."
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Monto Final (conteo físico)
-                </label>
-                <FormattedNumberInput
-                  value={closeFormData.closing_amount}
-                  onChange={(value) => setCloseFormData({ ...closeFormData, closing_amount: value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                  min="0"
-                  placeholder="0"
-                />
-                {closeFormData.closing_amount && (
-                  <div className={`mt-2 text-sm ${
-                    calculateDifference() === 0 
-                      ? 'text-green-600' 
-                      : calculateDifference() > 0 
-                        ? 'text-blue-600' 
-                        : 'text-red-600'
-                  }`}>
-                    Diferencia: {formatCurrency(calculateDifference())}
-                    {calculateDifference() > 0 && ' (sobrante)'}
-                    {calculateDifference() < 0 && ' (faltante)'}
+
+                {/* Detalle de Ventas */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="font-medium text-blue-900 mb-3">Detalle de Ventas del Día</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-blue-700">Ventas en Efectivo:</p>
+                      <p className="font-bold text-blue-900">
+                        {salesDetails.filter(s => s.payment_type === 'cash').length} ventas
+                      </p>
+                      <p className="text-blue-800">
+                        {formatCurrency(salesDetails.filter(s => s.payment_type === 'cash').reduce((sum, s) => sum + s.total_amount, 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-blue-700">Ventas por Abonos:</p>
+                      <p className="font-bold text-blue-900">
+                        {salesDetails.filter(s => s.payment_type === 'installment').length} ventas
+                      </p>
+                      <p className="text-blue-800">
+                        {formatCurrency(salesDetails.filter(s => s.payment_type === 'installment').reduce((sum, s) => sum + s.total_amount, 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-blue-700">Total Productos:</p>
+                      <p className="font-bold text-blue-900">
+                        {salesDetails.reduce((sum, s) => sum + s.items_count, 0)} unidades
+                      </p>
+                      <p className="text-blue-800">
+                        Ticket promedio: {salesDetails.length > 0 ? formatCurrency(salesDetails.reduce((sum, s) => sum + s.total_amount, 0) / salesDetails.length) : formatCurrency(0)}
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+
+                {/* Botones */}
+                <div className="flex gap-3 pt-4 border-t border-slate-200">
+                  <button
+                    type="submit"
+                    disabled={!closeFormData.closing_amount}
+                    className="bg-slate-600 text-white px-6 py-3 rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center"
+                  >
+                    <Clock className="h-4 w-4 mr-2" />
+                    Cerrar Mi Caja
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCloseForm(false)}
+                    className="bg-slate-200 text-slate-700 px-6 py-3 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Notas de cierre (opcional)
-              </label>
-              <textarea
-                value={closeFormData.notes}
-                onChange={(e) => setCloseFormData({ ...closeFormData, notes: e.target.value })}
-                rows={3}
-                placeholder="Observaciones, incidencias, etc."
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200"
-              >
-                Cerrar Mi Caja
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCloseForm(false)}
-                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
       )}
 
@@ -966,7 +1275,7 @@ export default function CashRegister() {
       {/* Movements Modal */}
       {showMovementsModal && currentRegister && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-slate-900">
@@ -1010,11 +1319,125 @@ export default function CashRegister() {
                           {movement.type === 'expense' || movement.type === 'closing' ? '-' : '+'}
                           {formatCurrency(movement.amount)}
                         </div>
+                        {isAdmin && movement.type !== 'sale' && movement.type !== 'opening' && movement.type !== 'closing' && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleEditMovement(movement)}
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              title="Editar movimiento"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMovement(movement)}
+                              className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              title="Eliminar movimiento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sales Detail Modal */}
+      {showSalesDetailModal && currentRegister && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-slate-900">
+                  Detalle de Ventas del Día
+                </h3>
+                <button
+                  onClick={() => setShowSalesDetailModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {salesDetails.length === 0 ? (
+                <div className="text-center py-8">
+                  <ShoppingCart className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-slate-500">No hay ventas registradas en esta caja</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {salesDetails.map((sale) => (
+                    <div key={sale.id} className="border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition-colors duration-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <h4 className="font-semibold text-slate-900">
+                              Venta #{sale.id.slice(-8)}
+                            </h4>
+                            <p className="text-sm text-slate-600">
+                              {new Date(sale.created_at).toLocaleString('es-ES')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              sale.payment_type === 'cash' 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {getPaymentMethodIcon(sale.payment_method || 'cash')}
+                              <span className="ml-1">
+                                {sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}
+                              </span>
+                            </span>
+                            {sale.customer_name && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                <User className="h-3 w-3 mr-1" />
+                                {sale.customer_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-slate-900">
+                            {formatCurrency(sale.total_amount)}
+                          </p>
+                          <p className="text-sm text-slate-600">
+                            {sale.items_count} producto{sale.items_count !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Productos de la venta */}
+                      <div className="bg-slate-50 p-3 rounded-lg">
+                        <h5 className="font-medium text-slate-900 mb-2 flex items-center">
+                          <Package className="h-4 w-4 mr-2" />
+                          Productos Vendidos
+                        </h5>
+                        <div className="space-y-1">
+                          {sale.items.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between text-sm">
+                              <span className="flex-1">{item.product_name}</span>
+                              <span className="text-slate-600 mx-2">
+                                {item.quantity} × {formatCurrency(item.unit_price)}
+                              </span>
+                              <span className="font-medium text-slate-900">
+                                {formatCurrency(item.total_price)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1065,7 +1488,10 @@ export default function CashRegister() {
                           Caja del {new Date(register.opened_at).toLocaleDateString('es-ES')}
                         </p>
                         <p className="text-sm text-slate-600">
-                          {register.status === 'open' ? ' Abierta' : ` Cerrada a las ${new Date(register.closed_at!).toLocaleTimeString('es-ES')}`}
+                          {register.status === 'open' ? 
+                            `Abierta desde las ${new Date(register.opened_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}` : 
+                            `Cerrada a las ${new Date(register.closed_at!).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
+                          }
                         </p>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
@@ -1073,6 +1499,7 @@ export default function CashRegister() {
                         {register.status === 'closed' && (
                           <>
                             <span>Final: {formatCurrency(register.closing_amount || 0)}</span>
+                            <span>Ventas: {formatCurrency(register.total_sales || 0)}</span>
                           </>
                         )}
                       </div>
@@ -1086,6 +1513,11 @@ export default function CashRegister() {
                     }`}>
                       {register.status === 'open' ? 'Abierta' : 'Cerrada'}
                     </span>
+                    {register.status === 'closed' && register.closing_amount !== undefined && register.opening_amount !== undefined && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Diferencia: {formatCurrency((register.closing_amount + (register.total_sales || 0)) - register.opening_amount)}
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}

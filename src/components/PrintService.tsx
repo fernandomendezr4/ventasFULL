@@ -208,6 +208,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
   const getFontSize = () => {
     switch (settings.font_size) {
       case 'small': return '10px';
+      case 'extra-large': return '16px';
       case 'large': return '14px';
       default: return '12px';
     }
@@ -216,6 +217,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
   const getLineHeight = () => {
     switch (settings.line_spacing) {
       case 'compact': return '1.2';
+      case 'loose': return '1.8';
       case 'relaxed': return '1.6';
       default: return '1.4';
     }
@@ -225,6 +227,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     switch (settings.receipt_width) {
       case '58mm': return '200px';
       case '110mm': return '380px';
+      case 'A4': return '210mm';
       default: return '280px'; // 80mm
     }
   };
@@ -232,6 +235,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
   const getLogoSize = () => {
     switch (settings.logo_size) {
       case 'small': return '30px';
+      case 'extra-large': return '100px';
       case 'large': return '70px';
       default: return '50px';
     }
@@ -240,17 +244,52 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
   const getLogoFontSize = () => {
     switch (settings.logo_size) {
       case 'small': return '12px';
+      case 'extra-large': return '24px';
       case 'large': return '20px';
       default: return '16px';
     }
   };
 
+  const getPaperMargins = () => {
+    switch (settings.paper_margins) {
+      case 'none': return '0';
+      case 'small': return '5mm';
+      case 'large': return '15mm';
+      default: return '10mm'; // normal
+    }
+  };
+
+  const getBarcodeHeight = () => {
+    switch (settings.barcode_height) {
+      case 'small': return 30;
+      case 'large': return 60;
+      case 'extra-large': return 80;
+      default: return 40; // medium
+    }
+  };
+
+  const getQRSize = () => {
+    switch (settings.qr_size) {
+      case 'small': return 60;
+      case 'large': return 120;
+      case 'extra-large': return 160;
+      default: return 80; // medium
+    }
+  };
   const generateReceiptHTML = (sale: SaleWithItems, settings: any) => {
     let html = '';
     
     // Verificar si es un comprobante de abono
     const isInstallmentReceipt = sale.is_installment_receipt;
 
+    // Estilos adicionales basados en configuración
+    const additionalStyles = `
+      ${settings.show_borders ? '.receipt-section { border: 1px solid #000; margin: 2px 0; padding: 2px; }' : ''}
+      ${settings.show_lines ? '.separator-line { border-bottom: 1px solid #000; margin: 2px 0; }' : ''}
+      ${settings.bold_totals ? '.total-amount { font-weight: bold; font-size: 1.2em; }' : ''}
+      ${settings.highlight_discounts ? '.discount-amount { background-color: #ffeb3b; padding: 1px 3px; }' : ''}
+      .paper-margins { margin: ${getPaperMargins()}; }
+    `;
     // Logo
     if (settings.show_logo) {
       if (settings.logo_url) {
@@ -271,7 +310,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     // Company Info
     if (settings.show_company_info) {
       html += `
-        <div class="center border-bottom">
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'border-bottom'}">
           <div class="bold">${settings.company_name || 'NOMBRE DE LA EMPRESA'}</div>
       `;
       
@@ -290,6 +329,9 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       if (settings.tax_id) {
         html += `<div>NIT: ${settings.tax_id}</div>`;
       }
+      if (settings.additional_contact) {
+        html += `<div style="margin-top: 5px;">${settings.additional_contact}</div>`;
+      }
       
       html += '</div>';
     }
@@ -297,7 +339,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     // Custom Header
     if (settings.receipt_header) {
       html += `
-        <div class="center border-bottom">
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'border-bottom'}">
           ${settings.receipt_header}
         </div>
       `;
@@ -306,34 +348,42 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     // Sale Info
     if (isInstallmentReceipt) {
       html += `
-        <div class="border-bottom">
+        <div class="${settings.show_borders ? 'receipt-section' : 'border-bottom'}">
           <div class="center bold">COMPROBANTE DE ABONO</div>
+          ${settings.show_sale_number ? `
           <div class="flex">
             <span>VENTA:</span>
             <span>#${sale.id.slice(-8)}</span>
           </div>
+          ` : ''}
+          ${settings.show_date_time ? `
           <div>Fecha abono: ${new Date(sale.payment_date || sale.created_at).toLocaleDateString('es-ES')}</div>
           <div>Hora: ${new Date(sale.payment_date || sale.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
           <div>Fecha venta: ${new Date(sale.created_at).toLocaleDateString('es-ES')}</div>
+          ` : ''}
       `;
       
-      if (sale.user) {
+      if (sale.user && settings.show_seller_info) {
         html += `<div>Vendedor: ${sale.user.name}</div>`;
       }
       
       html += '</div>';
     } else {
       html += `
-        <div class="border-bottom">
+        <div class="${settings.show_borders ? 'receipt-section' : 'border-bottom'}">
+          ${settings.show_sale_number ? `
           <div class="flex">
             <span>COMPROBANTE DE VENTA</span>
             <span>#${sale.id.slice(-8)}</span>
           </div>
+          ` : ''}
+          ${settings.show_date_time ? `
           <div>Fecha: ${new Date(sale.created_at).toLocaleDateString('es-ES')}</div>
           <div>Hora: ${new Date(sale.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
+          ` : ''}
       `;
       
-      if (sale.user) {
+      if (sale.user && settings.show_seller_info) {
         html += `<div>Vendedor: ${sale.user.name}</div>`;
       }
       
@@ -343,7 +393,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     // Customer Info
     if (settings.show_customer_info && sale.customer) {
       html += `
-        <div class="border-bottom">
+        <div class="${settings.show_borders ? 'receipt-section' : 'border-bottom'}">
           <div>Cliente: ${sale.customer.name}</div>
       `;
       
@@ -362,7 +412,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
 
     // Products (solo para ventas completas, no para abonos)
     if (!isInstallmentReceipt && sale.sale_items && sale.sale_items.length > 0) {
-      html += '<div class="border-bottom">';
+      html += `<div class="${settings.show_borders ? 'receipt-section' : 'border-bottom'}">`;
       
       sale.sale_items.forEach(item => {
         html += `
@@ -372,7 +422,9 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
               <span>${formatCurrency(item.total_price)}</span>
             </div>
             <div class="product-details">
-              ${item.quantity} x ${formatCurrency(item.unit_price)}
+              ${item.quantity} x ${settings.show_unit_prices ? formatCurrency(item.unit_price) : ''}
+              ${settings.show_product_codes && item.product.barcode ? ` | Código: ${item.product.barcode}` : ''}
+              ${settings.show_product_categories && item.product.category ? ` | ${item.product.category.name}` : ''}
             </div>
           </div>
         `;
@@ -384,10 +436,10 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
     // Totals
     if (isInstallmentReceipt) {
       html += `
-        <div class="total-section">
+        <div class="total-section ${settings.show_borders ? 'receipt-section' : ''}">
           <div class="flex">
             <span>TOTAL VENTA:</span>
-            <span>${formatCurrency(sale.total_amount)}</span>
+            <span class="${settings.bold_totals ? 'total-amount' : ''}">${formatCurrency(sale.total_amount)}</span>
           </div>
           <div class="flex">
             <span>PAGADO ANTES:</span>
@@ -395,7 +447,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           </div>
           <div class="flex bold">
             <span>ABONO ACTUAL:</span>
-            <span>${formatCurrency(sale.payment_amount || 0)}</span>
+            <span class="${settings.bold_totals ? 'total-amount' : ''}">${formatCurrency(sale.payment_amount || 0)}</span>
           </div>
           <div class="flex">
             <span>TOTAL PAGADO:</span>
@@ -403,14 +455,14 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           </div>
           <div class="flex bold">
             <span>SALDO RESTANTE:</span>
-            <span>${formatCurrency(sale.remaining_balance || 0)}</span>
+            <span class="${settings.bold_totals ? 'total-amount' : ''}">${formatCurrency(sale.remaining_balance || 0)}</span>
           </div>
         </div>
       `;
     } else {
-      html += '<div class="total-section">';
+      html += `<div class="total-section ${settings.show_borders ? 'receipt-section' : ''}">`;
       
-      if (sale.subtotal && sale.subtotal !== sale.total_amount) {
+      if (settings.show_subtotals && sale.subtotal && sale.subtotal !== sale.total_amount) {
         html += `
           <div class="flex">
             <span>SUBTOTAL:</span>
@@ -419,11 +471,20 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
         `;
       }
       
-      if (sale.discount_amount && sale.discount_amount > 0) {
+      if (settings.show_discount_details && sale.discount_amount && sale.discount_amount > 0) {
         html += `
           <div class="flex">
             <span>DESCUENTO:</span>
-            <span>-${formatCurrency(sale.discount_amount)}</span>
+            <span class="${settings.highlight_discounts ? 'discount-amount' : ''}">-${formatCurrency(sale.discount_amount)}</span>
+          </div>
+        `;
+      }
+      
+      if (settings.show_tax_details && sale.tax_amount && sale.tax_amount > 0) {
+        html += `
+          <div class="flex">
+            <span>IMPUESTOS:</span>
+            <span>${formatCurrency(sale.tax_amount)}</span>
           </div>
         `;
       }
@@ -431,7 +492,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       html += `
         <div class="flex bold">
           <span>TOTAL:</span>
-          <span>${formatCurrency(sale.total_amount)}</span>
+          <span class="${settings.bold_totals ? 'total-amount' : ''}">${formatCurrency(sale.total_amount)}</span>
         </div>
       `;
       
@@ -440,7 +501,7 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
 
     // Payment Details
     if (settings.show_payment_details) {
-      html += '<div class="payment-section">';
+      html += `<div class="payment-section ${settings.show_borders ? 'receipt-section' : ''}">`;
       
       if (isInstallmentReceipt) {
         html += `
@@ -458,10 +519,12 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
           const received = sale.total_paid || sale.total_amount;
           const change = Math.max(0, received - sale.total_amount);
           
+          if (settings.show_change_details) {
           html += `
             <div>Recibido: ${formatCurrency(received)}</div>
             <div>Cambio: ${formatCurrency(change)}</div>
           `;
+          }
         } else {
           html += `
             <div>Pagado: ${formatCurrency(sale.total_paid || 0)}</div>
@@ -479,14 +542,14 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
 
     // Códigos de barras y QR
     if (settings.show_barcode || settings.show_qr_code) {
-      html += '<div class="border-t border-slate-300 pt-2 mt-2">';
+      html += `<div class="${settings.show_borders ? 'receipt-section' : 'border-t border-slate-300 pt-2 mt-2'}">`;
       
       if (settings.show_barcode) {
         const barcodeData = generateSaleBarcode(sale.id);
         html += `
           <div class="barcode-container">
             <svg id="sale-barcode"></svg>
-            <div class="text-xs text-slate-600 mt-1">${barcodeData}</div>
+            ${settings.barcode_show_text ? `<div class="text-xs text-slate-600 mt-1">${barcodeData}</div>` : ''}
           </div>
         `;
       }
@@ -509,10 +572,29 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       html += '</div>';
     }
 
-    // Footer Message
-    if (settings.footer_message) {
+    // Términos y Condiciones
+    if (settings.show_terms_conditions && settings.terms_conditions) {
       html += `
-        <div class="center footer-section">
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'footer-section'}">
+          <div class="bold" style="font-size: 0.9em;">TÉRMINOS Y CONDICIONES</div>
+          <div style="font-size: 0.8em; margin-top: 3px;">${settings.terms_conditions}</div>
+        </div>
+      `;
+    }
+
+    // Política de Devoluciones
+    if (settings.show_return_policy && settings.return_policy) {
+      html += `
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'footer-section'}">
+          <div class="bold" style="font-size: 0.9em;">POLÍTICA DE DEVOLUCIONES</div>
+          <div style="font-size: 0.8em; margin-top: 3px;">${settings.return_policy}</div>
+        </div>
+      `;
+    }
+    // Footer Message
+    if (settings.show_footer_message && settings.footer_message) {
+      html += `
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'footer-section'}">
           ${isInstallmentReceipt ? 
             (settings.footer_message.replace('compra', 'abono') || '¡Gracias por su abono!') : 
             settings.footer_message
@@ -521,10 +603,18 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
       `;
     }
 
+    // Mensaje de Agradecimiento
+    if (settings.thank_you_message) {
+      html += `
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'footer-section'}">
+          <div class="bold">${settings.thank_you_message}</div>
+        </div>
+      `;
+    }
     // Custom Footer
     if (settings.receipt_footer) {
       html += `
-        <div class="center footer-section">
+        <div class="center ${settings.show_borders ? 'receipt-section' : 'footer-section'}">
           ${settings.receipt_footer}
         </div>
       `;

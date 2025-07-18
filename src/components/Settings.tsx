@@ -449,8 +449,21 @@ export default function Settings() {
 
           {activeTab === 'print' && (
             <div className="space-y-6">
+              {/* Configuración General de Impresión */}
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Configuración de Impresión</h3>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center">
+                    <Printer className="h-5 w-5 text-blue-600 mr-3" />
+                    <div>
+                      <h4 className="text-blue-900 font-medium">Configuración Avanzada de Impresión</h4>
+                      <p className="text-blue-700 text-sm mt-1">
+                        Personaliza completamente tus comprobantes de venta con opciones profesionales
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -464,6 +477,7 @@ export default function Settings() {
                       <option value="58mm">58mm (Pequeño)</option>
                       <option value="80mm">80mm (Estándar)</option>
                       <option value="110mm">110mm (Grande)</option>
+                      <option value="A4">A4 (Carta completa)</option>
                     </select>
                   </div>
                   <div>
@@ -478,6 +492,22 @@ export default function Settings() {
                       <option value="small">Pequeña</option>
                       <option value="medium">Mediana</option>
                       <option value="large">Grande</option>
+                      <option value="extra-large">Extra Grande (16px)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Espaciado de Líneas
+                    </label>
+                    <select
+                      value={printSettings.line_spacing}
+                      onChange={(e) => setPrintSettings({ ...printSettings, line_spacing: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="compact">Compacto (1.2)</option>
+                      <option value="normal">Normal (1.4)</option>
+                      <option value="relaxed">Relajado (1.6)</option>
+                      <option value="loose">Amplio (1.8)</option>
                     </select>
                   </div>
                   <div>
@@ -492,21 +522,199 @@ export default function Settings() {
                       max="5"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Tamaño del Logo
+                    </label>
+                    <select
+                      value={printSettings.logo_size}
+                      onChange={(e) => setPrintSettings({ ...printSettings, logo_size: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="small">Pequeño (30px)</option>
+                      <option value="medium">Mediano (50px)</option>
+                      <option value="large">Grande (70px)</option>
+                      <option value="extra-large">Extra Grande (100px)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Orientación del Papel
+                    </label>
+                    <select
+                      value={printSettings.paper_orientation || 'portrait'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, paper_orientation: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="portrait">Vertical (Portrait)</option>
+                      <option value="landscape">Horizontal (Landscape)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Márgenes del Papel
+                    </label>
+                    <select
+                      value={printSettings.paper_margins || 'normal'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, paper_margins: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="none">Sin márgenes</option>
+                      <option value="small">Márgenes pequeños (5mm)</option>
+                      <option value="normal">Márgenes normales (10mm)</option>
+                      <option value="large">Márgenes grandes (15mm)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Calidad de Impresión
+                    </label>
+                    <select
+                      value={printSettings.print_quality || 'normal'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, print_quality: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="draft">Borrador (Rápido)</option>
+                      <option value="normal">Normal (Recomendado)</option>
+                      <option value="high">Alta Calidad</option>
+                      <option value="photo">Calidad Fotográfica</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
+              {/* Configuración de Impresora */}
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Configuración de Impresora</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Tipo de Impresora
+                    </label>
+                    <select
+                      value={printSettings.printer_type || 'thermal'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, printer_type: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="thermal">Térmica (POS)</option>
+                      <option value="inkjet">Inyección de Tinta</option>
+                      <option value="laser">Láser</option>
+                      <option value="dot_matrix">Matriz de Puntos</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Velocidad de Impresión
+                    </label>
+                    <select
+                      value={printSettings.print_speed || 'normal'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, print_speed: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="slow">Lenta (Mejor calidad)</option>
+                      <option value="normal">Normal</option>
+                      <option value="fast">Rápida (Menos calidad)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Densidad de Impresión
+                    </label>
+                    <select
+                      value={printSettings.print_density || 'normal'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, print_density: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="light">Ligera</option>
+                      <option value="normal">Normal</option>
+                      <option value="dark">Oscura</option>
+                      <option value="extra-dark">Extra Oscura</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Corte de Papel
+                    </label>
+                    <select
+                      value={printSettings.paper_cut || 'full'}
+                      onChange={(e) => setPrintSettings({ ...printSettings, paper_cut: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="none">Sin corte</option>
+                      <option value="partial">Corte parcial</option>
+                      <option value="full">Corte completo</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Elementos del Comprobante</h3>
+                <div className="bg-slate-50 p-4 rounded-lg mb-4">
+                  <h4 className="font-medium text-slate-900 mb-3">Configuración Visual</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={printSettings.show_borders || false}
+                        onChange={(e) => setPrintSettings({ ...printSettings, show_borders: e.target.checked })}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-slate-700">Mostrar Bordes</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={printSettings.show_lines || false}
+                        onChange={(e) => setPrintSettings({ ...printSettings, show_lines: e.target.checked })}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-slate-700">Líneas Separadoras</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={printSettings.bold_totals || false}
+                        onChange={(e) => setPrintSettings({ ...printSettings, bold_totals: e.target.checked })}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-slate-700">Totales en Negrita</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={printSettings.highlight_discounts || false}
+                        onChange={(e) => setPrintSettings({ ...printSettings, highlight_discounts: e.target.checked })}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-slate-700">Resaltar Descuentos</span>
+                    </label>
+                  </div>
+                </div>
+                
                 <div className="space-y-3">
                   {[
                     { key: 'show_logo', label: 'Mostrar Logo' },
                     { key: 'show_company_info', label: 'Mostrar Información de la Empresa' },
                     { key: 'show_customer_info', label: 'Mostrar Información del Cliente' },
+                    { key: 'show_sale_details', label: 'Mostrar Detalles de la Venta' },
+                    { key: 'show_product_codes', label: 'Mostrar Códigos de Productos' },
+                    { key: 'show_product_categories', label: 'Mostrar Categorías de Productos' },
+                    { key: 'show_unit_prices', label: 'Mostrar Precios Unitarios' },
+                    { key: 'show_subtotals', label: 'Mostrar Subtotales por Producto' },
                     { key: 'show_payment_details', label: 'Mostrar Detalles de Pago' },
+                    { key: 'show_change_details', label: 'Mostrar Detalles del Cambio' },
+                    { key: 'show_tax_details', label: 'Mostrar Detalles de Impuestos' },
+                    { key: 'show_discount_details', label: 'Mostrar Detalles de Descuentos' },
+                    { key: 'show_seller_info', label: 'Mostrar Información del Vendedor' },
+                    { key: 'show_sale_number', label: 'Mostrar Número de Venta' },
+                    { key: 'show_date_time', label: 'Mostrar Fecha y Hora' },
                     { key: 'show_barcode', label: 'Mostrar Código de Barras' },
                     { key: 'show_qr_code', label: 'Mostrar Código QR' },
                     { key: 'show_footer_message', label: 'Mostrar Mensaje de Pie' },
-                    { key: 'auto_print', label: 'Impresión Automática' }
+                    { key: 'show_terms_conditions', label: 'Mostrar Términos y Condiciones' },
+                    { key: 'show_return_policy', label: 'Mostrar Política de Devoluciones' },
+                    { key: 'auto_print', label: 'Impresión Automática' },
+                    { key: 'auto_open_drawer', label: 'Abrir Cajón Automáticamente' }
                   ].map((item) => (
                     <label key={item.key} className="flex items-center">
                       <input
@@ -521,6 +729,105 @@ export default function Settings() {
                 </div>
               </div>
 
+              {/* Configuración de Códigos QR y Códigos de Barras */}
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Códigos QR y Códigos de Barras</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-slate-900">Configuración de Código QR</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Contenido del QR
+                      </label>
+                      <select
+                        value={printSettings.qr_content || 'sale_details'}
+                        onChange={(e) => setPrintSettings({ ...printSettings, qr_content: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="sale_id">Solo ID de Venta</option>
+                        <option value="sale_details">Detalles Completos de Venta</option>
+                        <option value="company_info">Información de la Empresa</option>
+                        <option value="verification_url">URL de Verificación</option>
+                        <option value="custom">Personalizado</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Tamaño del QR
+                      </label>
+                      <select
+                        value={printSettings.qr_size || 'medium'}
+                        onChange={(e) => setPrintSettings({ ...printSettings, qr_size: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="small">Pequeño (60px)</option>
+                        <option value="medium">Mediano (80px)</option>
+                        <option value="large">Grande (120px)</option>
+                        <option value="extra-large">Extra Grande (160px)</option>
+                      </select>
+                    </div>
+                    {printSettings.qr_content === 'custom' && (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Texto Personalizado del QR
+                        </label>
+                        <textarea
+                          value={printSettings.qr_custom_text || ''}
+                          onChange={(e) => setPrintSettings({ ...printSettings, qr_custom_text: e.target.value })}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Ingresa el texto que aparecerá en el código QR"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-slate-900">Configuración de Código de Barras</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Tipo de Código de Barras
+                      </label>
+                      <select
+                        value={printSettings.barcode_type || 'CODE128'}
+                        onChange={(e) => setPrintSettings({ ...printSettings, barcode_type: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="CODE128">CODE128 (Recomendado)</option>
+                        <option value="CODE39">CODE39</option>
+                        <option value="EAN13">EAN13</option>
+                        <option value="UPC">UPC</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Altura del Código de Barras
+                      </label>
+                      <select
+                        value={printSettings.barcode_height || 'medium'}
+                        onChange={(e) => setPrintSettings({ ...printSettings, barcode_height: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="small">Pequeña (30px)</option>
+                        <option value="medium">Mediana (40px)</option>
+                        <option value="large">Grande (60px)</option>
+                        <option value="extra-large">Extra Grande (80px)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={printSettings.barcode_show_text || true}
+                          onChange={(e) => setPrintSettings({ ...printSettings, barcode_show_text: e.target.checked })}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="ml-2 text-sm text-slate-700">Mostrar Texto del Código</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Mensajes Personalizados</h3>
                 <div className="space-y-4">
@@ -558,6 +865,172 @@ export default function Settings() {
                       placeholder="Texto que aparece al final del comprobante"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Términos y Condiciones
+                    </label>
+                    <textarea
+                      value={printSettings.terms_conditions || ''}
+                      onChange={(e) => setPrintSettings({ ...printSettings, terms_conditions: e.target.value })}
+                      rows={3}
+                      placeholder="Términos y condiciones de la venta"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Política de Devoluciones
+                    </label>
+                    <textarea
+                      value={printSettings.return_policy || ''}
+                      onChange={(e) => setPrintSettings({ ...printSettings, return_policy: e.target.value })}
+                      rows={3}
+                      placeholder="Política de devoluciones y cambios"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Mensaje de Agradecimiento
+                    </label>
+                    <input
+                      type="text"
+                      value={printSettings.thank_you_message || ''}
+                      onChange={(e) => setPrintSettings({ ...printSettings, thank_you_message: e.target.value })}
+                      placeholder="¡Gracias por su compra!"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Información de Contacto Adicional
+                    </label>
+                    <textarea
+                      value={printSettings.additional_contact || ''}
+                      onChange={(e) => setPrintSettings({ ...printSettings, additional_contact: e.target.value })}
+                      rows={2}
+                      placeholder="WhatsApp, redes sociales, horarios de atención, etc."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Vista Previa del Comprobante */}
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Vista Previa del Comprobante</h3>
+                <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-lg p-6">
+                  <div className="bg-white rounded-lg shadow-sm p-4 max-w-sm mx-auto" style={{ 
+                    width: printSettings.receipt_width === '58mm' ? '200px' : 
+                           printSettings.receipt_width === '80mm' ? '280px' : 
+                           printSettings.receipt_width === '110mm' ? '380px' : '400px',
+                    fontSize: printSettings.font_size === 'small' ? '10px' : 
+                             printSettings.font_size === 'large' ? '14px' : 
+                             printSettings.font_size === 'extra-large' ? '16px' : '12px'
+                  }}>
+                    {/* Vista previa simplificada */}
+                    {printSettings.show_logo && (
+                      <div className="text-center mb-2">
+                        <div className="w-8 h-8 bg-blue-600 rounded-full mx-auto flex items-center justify-center text-white text-xs font-bold">
+                          L
+                        </div>
+                      </div>
+                    )}
+                    
+                    {printSettings.show_company_info && (
+                      <div className="text-center border-b border-dashed border-slate-300 pb-2 mb-2">
+                        <div className="font-bold">{generalSettings.company_name || 'NOMBRE DE LA EMPRESA'}</div>
+                        {generalSettings.company_phone && <div>{generalSettings.company_phone}</div>}
+                      </div>
+                    )}
+                    
+                    {printSettings.receipt_header && (
+                      <div className="text-center border-b border-dashed border-slate-300 pb-2 mb-2">
+                        {printSettings.receipt_header}
+                      </div>
+                    )}
+                    
+                    <div className="border-b border-dashed border-slate-300 pb-2 mb-2">
+                      <div className="flex justify-between">
+                        <span>COMPROBANTE DE VENTA</span>
+                        <span>#12345678</span>
+                      </div>
+                      <div>Fecha: {new Date().toLocaleDateString('es-ES')}</div>
+                      <div>Hora: {new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                    
+                    {printSettings.show_customer_info && (
+                      <div className="border-b border-dashed border-slate-300 pb-2 mb-2">
+                        <div>Cliente: Cliente de Ejemplo</div>
+                        <div>Tel: 300 123 4567</div>
+                      </div>
+                    )}
+                    
+                    <div className="border-b border-dashed border-slate-300 pb-2 mb-2">
+                      <div className="flex justify-between">
+                        <span>Producto Ejemplo</span>
+                        <span>$10,000</span>
+                      </div>
+                      <div className="text-xs text-slate-600 ml-2">
+                        2 x $5,000
+                      </div>
+                    </div>
+                    
+                    <div className="border-b border-slate-300 pb-2 mb-2">
+                      <div className="flex justify-between font-bold">
+                        <span>TOTAL:</span>
+                        <span>$10,000</span>
+                      </div>
+                    </div>
+                    
+                    {printSettings.show_payment_details && (
+                      <div className="border-b border-dashed border-slate-300 pb-2 mb-2">
+                        <div>Método de pago: Efectivo</div>
+                        <div>Recibido: $15,000</div>
+                        <div>Cambio: $5,000</div>
+                      </div>
+                    )}
+                    
+                    {printSettings.show_barcode && (
+                      <div className="text-center border-b border-dashed border-slate-300 pb-2 mb-2">
+                        <div className="bg-slate-800 h-6 w-32 mx-auto mb-1"></div>
+                        <div className="text-xs">SALE12345678</div>
+                      </div>
+                    )}
+                    
+                    {printSettings.show_qr_code && (
+                      <div className="text-center border-b border-dashed border-slate-300 pb-2 mb-2">
+                        <div className="bg-slate-800 h-12 w-12 mx-auto mb-1"></div>
+                        <div className="text-xs">Código QR</div>
+                      </div>
+                    )}
+                    
+                    {printSettings.footer_message && (
+                      <div className="text-center border-b border-dashed border-slate-300 pb-2 mb-2">
+                        {printSettings.footer_message}
+                      </div>
+                    )}
+                    
+                    {printSettings.receipt_footer && (
+                      <div className="text-center">
+                        {printSettings.receipt_footer}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="text-center mt-4">
+                    <p className="text-sm text-slate-600 mb-2">Vista previa del comprobante</p>
+                    <button
+                      onClick={() => {
+                        // Simular impresión de prueba
+                        alert('Esta es una vista previa. La impresión real se realizará con los datos de la venta.');
+                      }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
+                    >
+                      <Printer className="h-4 w-4 mr-2 inline" />
+                      Imprimir Prueba
+                    </button>
                   </div>
                 </div>
               </div>

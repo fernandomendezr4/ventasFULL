@@ -5,6 +5,7 @@ import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
+import { supabase } from '../lib/supabase';
 
 interface PaymentMethod {
   id: string;

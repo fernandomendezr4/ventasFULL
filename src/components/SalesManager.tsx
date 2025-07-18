@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer, Phone } from 'lucide-react';
+import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer, Phone, CreditCard, Banknote, Building2, Smartphone, Tag } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -17,6 +17,26 @@ export default function SalesManager() {
   const [sortBy, setSortBy] = useState<'created_at' | 'total_amount' | 'customer_name'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Load payment methods from localStorage
+  const getPaymentMethods = () => {
+    try {
+      const savedMethods = localStorage.getItem('payment_methods');
+      if (savedMethods) {
+        return JSON.parse(savedMethods);
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+    }
+    return [
+      { id: 'cash', name: 'Efectivo', icon: 'Banknote' },
+      { id: 'card', name: 'Tarjeta', icon: 'CreditCard' },
+      { id: 'transfer', name: 'Transferencia Bancaria', icon: 'Building2' },
+      { id: 'nequi', name: 'NEQUI', icon: 'Smartphone' }
+    ];
+  };
+
+  const paymentMethods = getPaymentMethods();
+
   useEffect(() => {
     loadSales();
   }, []);
@@ -28,6 +48,10 @@ export default function SalesManager() {
         .from('sales')
         .select(`
           *,
+          payments (
+            payment_method,
+            notes
+          ),
           customer:customers (name, phone, email),
           user:users (name, email),
           sale_items (
@@ -61,6 +85,46 @@ export default function SalesManager() {
         alert('Error al eliminar venta: ' + (error as Error).message);
       }
     }
+  };
+
+  const getPaymentMethodName = (sale: SaleWithItems) => {
+    // For cash sales, get the payment method from payments table
+    if (sale.payment_type === 'cash' && sale.payments && sale.payments.length > 0) {
+      const payment = sale.payments[0];
+      const method = paymentMethods.find(m => m.id === payment.payment_method || 
+        (payment.payment_method === 'other' && payment.notes?.includes('NEQUI')));
+      return method?.name || payment.payment_method;
+    }
+    return sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos';
+  };
+
+  const getPaymentMethodIcon = (sale: SaleWithItems) => {
+    if (sale.payment_type === 'installment') {
+      return <CreditCard className="h-4 w-4" />;
+    }
+    
+    if (sale.payments && sale.payments.length > 0) {
+      const payment = sale.payments[0];
+      const method = paymentMethods.find(m => m.id === payment.payment_method || 
+        (payment.payment_method === 'other' && payment.notes?.includes('NEQUI')));
+      
+      if (method) {
+        switch (method.icon) {
+          case 'Banknote':
+            return <Banknote className="h-4 w-4" />;
+          case 'CreditCard':
+            return <CreditCard className="h-4 w-4" />;
+          case 'Building2':
+            return <Building2 className="h-4 w-4" />;
+          case 'Smartphone':
+            return <Smartphone className="h-4 w-4" />;
+          default:
+            return <CreditCard className="h-4 w-4" />;
+        }
+      }
+    }
+    
+    return <Banknote className="h-4 w-4" />;
   };
 
   const filteredAndSortedSales = sales.filter(sale => {
@@ -255,24 +319,24 @@ export default function SalesManager() {
                           {sale.customer && (
                             <span className="flex items-center">
                               <User className="h-4 w-4 mr-1 text-blue-600" />
-                              Cliente: {sale.customer.name}
+                              {sale.customer.name}
                             </span>
                           )}
                           {sale.user && (
                             <span className="flex items-center">
                               <User className="h-4 w-4 mr-1 text-green-600" />
-                              Vendedor: {sale.user.name}
+                              {sale.user.name}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                            sale.payment_type === 'cash' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}
+                        <div className="flex items-center gap-2 mt-2">
+                          {/* Payment Type and Method */}
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {getPaymentMethodIcon(sale)}
+                            <span className="ml-1">{getPaymentMethodName(sale)}</span>
                           </span>
+                          
+                          {/* Payment Status for installments */}
                           {sale.payment_status && sale.payment_type === 'installment' && (
                             <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                               sale.payment_status === 'paid' 
@@ -285,6 +349,25 @@ export default function SalesManager() {
                                sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
                             </span>
                           )}
+                          
+                          {/* Discount indicator */}
+                          {sale.discount_amount && sale.discount_amount > 0 && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                              <Tag className="h-3 w-3 mr-1" />
+                              Desc: {formatCurrency(sale.discount_amount)}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Legacy payment type badges - keeping for compatibility */}
+                        <div className="flex items-center gap-2 mt-1" style={{ display: 'none' }}>
+                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                            sale.payment_type === 'cash' 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600">
@@ -437,6 +520,39 @@ export default function SalesManager() {
                   <span className="text-2xl font-bold text-slate-900">
                     {formatCurrency(selectedSale.total_amount)}
                   </span>
+                </div>
+                
+                {/* Payment and discount details in modal */}
+                <div className="mt-4 pt-4 border-t border-slate-200 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Subtotal:</span>
+                    <span>{formatCurrency(selectedSale.subtotal || selectedSale.total_amount)}</span>
+                  </div>
+                  {selectedSale.discount_amount && selectedSale.discount_amount > 0 && (
+                    <div className="flex justify-between text-sm text-orange-600">
+                      <span>Descuento:</span>
+                      <span>-{formatCurrency(selectedSale.discount_amount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Método de pago:</span>
+                    <span className="flex items-center">
+                      {getPaymentMethodIcon(selectedSale)}
+                      <span className="ml-1">{getPaymentMethodName(selectedSale)}</span>
+                    </span>
+                  </div>
+                  {selectedSale.payment_type === 'installment' && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Total pagado:</span>
+                        <span className="text-green-600">{formatCurrency(selectedSale.total_paid || 0)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Saldo pendiente:</span>
+                        <span className="text-orange-600">{formatCurrency(selectedSale.total_amount - (selectedSale.total_paid || 0))}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

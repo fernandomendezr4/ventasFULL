@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, DollarSign, TrendingUp, Clock, User, Plus, Minus, Eye, Edit2, Trash2, X, AlertTriangle, CheckCircle, Package, ShoppingCart, Calendar, Banknote, CreditCard, Building2, Smartphone, FileText, BarChart3, AlertCircle } from 'lucide-react';
+import { Calculator, DollarSign, TrendingUp, TrendingDown, Clock, User, Plus, Minus, Edit2, Trash2, Eye, X, AlertTriangle, CheckCircle, Save, BarChart3, FileText, Package, ShoppingCart, ArrowUpCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, CashMovement, SaleWithItems, CashRegisterDiscrepancyCalculation, DetailedCashRegisterReport, CashRegisterDiscrepancy, CashRegisterAudit } from '../lib/types';
 import { formatCurrency } from '../lib/currency';

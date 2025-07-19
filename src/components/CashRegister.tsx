@@ -1401,6 +1401,243 @@ export default function CashRegister() {
         </div>
       )}
 
+      {/* Discrepancy Analysis Modal */}
+      {showDiscrepancyAnalysis && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-slate-900 flex items-center">
+                  <BarChart3 className="h-6 w-6 mr-3 text-orange-600" />
+                  Análisis de Descuadres - Caja #{currentRegister?.id.slice(-8)}
+                </h3>
+                <button
+                  onClick={() => setShowDiscrepancyAnalysis(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              {discrepancyData ? (
+                <div className="space-y-6">
+                  {/* Resumen de Cálculos */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <h4 className="font-medium text-blue-900 mb-2">Monto Esperado</h4>
+                      <p className="text-2xl font-bold text-blue-900">
+                        {formatCurrency(discrepancyData.expected_amount)}
+                      </p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                      <h4 className="font-medium text-green-900 mb-2">Monto Calculado</h4>
+                      <p className="text-2xl font-bold text-green-900">
+                        {formatCurrency(discrepancyData.calculated_amount)}
+                      </p>
+                    </div>
+                    <div className={`p-4 rounded-lg border ${
+                      discrepancyData.discrepancy_amount === 0 
+                        ? 'bg-green-50 border-green-200' 
+                        : discrepancyData.discrepancy_amount > 0
+                          ? 'bg-yellow-50 border-yellow-200'
+                          : 'bg-red-50 border-red-200'
+                    }`}>
+                      <h4 className={`font-medium mb-2 ${
+                        discrepancyData.discrepancy_amount === 0 
+                          ? 'text-green-900' 
+                          : discrepancyData.discrepancy_amount > 0
+                            ? 'text-yellow-900'
+                            : 'text-red-900'
+                      }`}>
+                        Diferencia
+                      </h4>
+                      <p className={`text-2xl font-bold ${
+                        discrepancyData.discrepancy_amount === 0 
+                          ? 'text-green-900' 
+                          : discrepancyData.discrepancy_amount > 0
+                            ? 'text-yellow-900'
+                            : 'text-red-900'
+                      }`}>
+                        {discrepancyData.discrepancy_amount >= 0 ? '+' : ''}{formatCurrency(discrepancyData.discrepancy_amount)}
+                      </p>
+                      <p className="text-xs mt-1 opacity-75">
+                        {discrepancyData.discrepancy_type === 'balanced' ? 'Cuadrada' :
+                         discrepancyData.discrepancy_type === 'overage' ? 'Sobrante' : 'Faltante'}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                      <h4 className="font-medium text-purple-900 mb-2">Total Ventas</h4>
+                      <p className="text-2xl font-bold text-purple-900">
+                        {formatCurrency(discrepancyData.total_sales)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Desglose Detallado */}
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-slate-900 mb-4">Desglose de Cálculo</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Monto de apertura:</span>
+                        <span className="font-medium">{formatCurrency(discrepancyData.opening_amount)}</span>
+                      </div>
+                      <div className="flex justify-between text-green-600">
+                        <span>+ Total ingresos:</span>
+                        <span className="font-medium">{formatCurrency(discrepancyData.total_income)}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600">
+                        <span>- Total gastos:</span>
+                        <span className="font-medium">{formatCurrency(discrepancyData.total_expenses)}</span>
+                      </div>
+                      <hr className="my-2" />
+                      <div className="flex justify-between font-bold">
+                        <span>= Monto esperado:</span>
+                        <span>{formatCurrency(discrepancyData.expected_amount)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Botón para registrar descuadre */}
+                  {user?.role === 'admin' && discrepancyData.discrepancy_amount !== 0 && (
+                    <div className="flex justify-center">
+                      <button
+                        onClick={() => {
+                          setDiscrepancyForm({
+                            ...discrepancyForm,
+                            type: discrepancyData.discrepancy_amount > 0 ? 'overage' : 'shortage',
+                            expected_amount: discrepancyData.expected_amount.toString(),
+                            actual_amount: discrepancyData.calculated_amount.toString()
+                          });
+                          setShowAddDiscrepancy(true);
+                        }}
+                        className="bg-orange-600 text-white px-6 py-2 rounded-lg hover:bg-orange-700 transition-colors duration-200 flex items-center"
+                      >
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Registrar Descuadre
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                  <p className="text-slate-600">Calculando análisis...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Discrepancy Modal */}
+      {showAddDiscrepancy && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Registrar Descuadre</h3>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Tipo de Descuadre
+                </label>
+                <select
+                  value={discrepancyForm.type}
+                  onChange={(e) => setDiscrepancyForm({
+                    ...discrepancyForm,
+                    type: e.target.value as 'shortage' | 'overage' | 'error'
+                  })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="shortage">Faltante</option>
+                  <option value="overage">Sobrante</option>
+                  <option value="error">Error</option>
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Monto Esperado
+                  </label>
+                  <FormattedNumberInput
+                    value={discrepancyForm.expected_amount}
+                    onChange={(value) => setDiscrepancyForm({
+                      ...discrepancyForm,
+                      expected_amount: value
+                    })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Monto Real
+                  </label>
+                  <FormattedNumberInput
+                    value={discrepancyForm.actual_amount}
+                    onChange={(value) => setDiscrepancyForm({
+                      ...discrepancyForm,
+                      actual_amount: value
+                    })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Razón del Descuadre
+                </label>
+                <textarea
+                  value={discrepancyForm.reason}
+                  onChange={(e) => setDiscrepancyForm({
+                    ...discrepancyForm,
+                    reason: e.target.value
+                  })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Describe la causa del descuadre..."
+                />
+              </div>
+              
+              {discrepancyForm.expected_amount && discrepancyForm.actual_amount && (
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <div className="flex justify-between text-sm">
+                    <span>Diferencia:</span>
+                    <span className={`font-bold ${
+                      parseFloat(discrepancyForm.actual_amount) - parseFloat(discrepancyForm.expected_amount) >= 0
+                        ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(parseFloat(discrepancyForm.actual_amount) - parseFloat(discrepancyForm.expected_amount))}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleAddDiscrepancy}
+                className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors duration-200"
+              >
+                Registrar
+              </button>
+              <button
+                onClick={() => setShowAddDiscrepancy(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sales Detail Modal */}
       {showSalesDetailModal && currentRegister && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

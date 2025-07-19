@@ -302,6 +302,63 @@ export interface CashMovement {
   created_by: string | null;
 }
 
+// Nuevos tipos para control mejorado de caja
+export interface CashRegisterSale {
+  id: string;
+  cash_register_id: string;
+  sale_id: string;
+  payment_method: string;
+  amount_received: number;
+  change_given: number;
+  created_at: string;
+}
+
+export interface CashRegisterDiscrepancy {
+  id: string;
+  cash_register_id: string;
+  discrepancy_type: 'shortage' | 'overage' | 'error';
+  expected_amount: number;
+  actual_amount: number;
+  difference_amount: number;
+  reason: string;
+  resolution: string;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CashRegisterAudit {
+  id: string;
+  cash_register_id: string;
+  movement_id: string | null;
+  action_type: 'create' | 'update' | 'delete';
+  old_values: any;
+  new_values: any;
+  reason: string;
+  performed_by: string | null;
+  performed_at: string;
+}
+
+export interface CashRegisterDiscrepancyCalculation {
+  expected_amount: number;
+  calculated_amount: number;
+  discrepancy_amount: number;
+  discrepancy_type: string;
+  total_sales: number;
+  total_income: number;
+  total_expenses: number;
+  opening_amount: number;
+}
+
+export interface DetailedCashRegisterReport {
+  register_info: any;
+  movements_summary: any;
+  sales_detail: any;
+  discrepancy_analysis: any;
+  audit_trail: any;
+}
+
 // Tipos extendidos con relaciones
 export interface ProductWithCategory extends Product {
   category: Category | null;

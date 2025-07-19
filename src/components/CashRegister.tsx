@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Plus, Minus, Edit2, Trash2, Package, CreditCard, Banknote, Search, Check } from 'lucide-react';
+import { Calculator, DollarSign, TrendingUp, Clock, User, Plus, Minus, Eye, Edit2, Trash2, X, AlertTriangle, CheckCircle, Package, ShoppingCart, Calendar, Banknote, CreditCard, Building2, Smartphone, FileText, BarChart3, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { CashRegister as CashRegisterType, User as UserType, CashMovement, Sale, SaleItem, Product } from '../lib/types';
+import { CashRegister as CashRegisterType, CashMovement, SaleWithItems, CashRegisterDiscrepancyCalculation, DetailedCashRegisterReport, CashRegisterDiscrepancy, CashRegisterAudit } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import { useAuth } from '../contexts/AuthContext';

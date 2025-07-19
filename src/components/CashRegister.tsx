@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Plus, Minus, Edit2, Trash2, Package, CreditCard, Banknote } from 'lucide-react';
+import { DollarSign, Clock, User, FileText, Calculator, TrendingUp, AlertCircle, Eye, X, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Plus, Minus, Edit2, Trash2, Package, CreditCard, Banknote, Search, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, User as UserType, CashMovement, Sale, SaleItem, Product } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -55,6 +55,7 @@ export default function CashRegister() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [selectedSale, setSelectedSale] = useState<SaleDetail | null>(null);
   const [editingMovement, setEditingMovement] = useState<CashMovement | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
   
   const [openFormData, setOpenFormData] = useState({
     opening_amount: '',
@@ -76,6 +77,12 @@ export default function CashRegister() {
     amount: '',
     category: 'gastos_operativos',
     description: '',
+  });
+
+  // Estado para revisión de caja
+  const [reviewFormData, setReviewFormData] = useState({
+    actual_amount: '',
+    review_notes: ''
   });
 
   // Categorías para ingresos y egresos
@@ -284,6 +291,53 @@ export default function CashRegister() {
     } catch (error) {
       console.error('Error loading registers:', error);
       setRegisters([]);
+    }
+  };
+
+  const handleReviewCash = (register: CashRegisterWithMovements) => {
+    setCurrentRegister(register);
+    setReviewFormData({
+      actual_amount: register.closing_amount?.toString() || '',
+      review_notes: ''
+    });
+    setShowReviewModal(true);
+  };
+
+  const submitReview = async () => {
+    if (!currentRegister) return;
+
+    try {
+      const actualAmount = parseFloat(reviewFormData.actual_amount) || 0;
+      
+      // Actualizar el monto de cierre con la revisión
+      const { error: updateError } = await supabase
+        .from('cash_registers')
+        .update({
+          closing_amount: actualAmount,
+          notes: currentRegister.notes + 
+            `\n--- REVISIÓN ${new Date().toLocaleString('es-ES')} ---\n` +
+            `Monto corregido: ${formatCurrency(actualAmount)}\n` +
+            `Notas de revisión: ${reviewFormData.review_notes}`
+        })
+        .eq('id', currentRegister.id);
+
+      if (updateError) throw updateError;
+
+      // Recargar datos
+      loadData();
+      setShowReviewModal(false);
+      setCurrentRegister(null);
+      
+      showSuccess(
+        '¡Revisión Completada!',
+        'La revisión de caja ha sido completada exitosamente'
+      );
+    } catch (error) {
+      console.error('Error reviewing cash register:', error);
+      showError(
+        'Error al Revisar Caja',
+        'No se pudo completar la revisión. ' + (error as Error).message
+      );
     }
   };
 
@@ -1438,6 +1492,111 @@ export default function CashRegister() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Revisión de Caja */}
+      {showReviewModal && currentRegister && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900 flex items-center">
+                    <Search className="h-6 w-6 mr-3 text-yellow-600" />
+                    Revisar Caja con Descuadre
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Caja del {new Date(currentRegister.opened_at).toLocaleDateString('es-ES')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowReviewModal(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              {/* Información del Descuadre */}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <h4 className="font-medium text-red-900 mb-2">Descuadre Detectado</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-red-700">Monto Esperado:</span>
+                    <p className="font-bold text-red-900">
+                      {formatCurrency((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0))}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-red-700">Monto Registrado:</span>
+                    <p className="font-bold text-red-900">
+                      {formatCurrency(currentRegister.closing_amount || 0)}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-red-700">Diferencia:</span>
+                    <p className={`font-bold text-lg ${
+                      (currentRegister.closing_amount || 0) - ((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0)) > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {(currentRegister.closing_amount || 0) - ((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0)) > 0 ? '+' : ''}
+                      {formatCurrency(Math.abs((currentRegister.closing_amount || 0) - ((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0))))}
+                      {(currentRegister.closing_amount || 0) - ((currentRegister.opening_amount || 0) + (currentRegister.total_sales || 0)) > 0 ? ' (Sobrante)' : ' (Faltante)'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Formulario de Revisión */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Monto Real Encontrado en Caja *
+                  </label>
+                  <FormattedNumberInput
+                    value={reviewFormData.actual_amount}
+                    onChange={(value) => setReviewFormData({ ...reviewFormData, actual_amount: value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ingresa el monto real contado"
+                    required
+                    min="0"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Notas de la Revisión
+                  </label>
+                  <textarea
+                    value={reviewFormData.review_notes}
+                    onChange={(e) => setReviewFormData({ ...reviewFormData, review_notes: e.target.value })}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Explica las razones del descuadre, acciones tomadas, etc."
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3 flex-shrink-0">
+              <button
+                onClick={submitReview}
+                disabled={!reviewFormData.actual_amount}
+                className="flex-1 bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Completar Revisión
+              </button>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

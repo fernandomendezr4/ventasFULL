@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, DollarSign, TrendingUp, Clock, User, Plus, Minus, Eye, Edit2, Trash2, X, AlertTriangle, CheckCircle, Package, ShoppingCart, Calendar, Banknote, CreditCard, Building2, Smartphone, FileText, BarChart3, AlertCircle } from 'lucide-react';
+import { Calculator, DollarSign, TrendingUp, Clock, User, Plus, Minus, Eye, Edit2, Trash2, X, AlertTriangle, CheckCircle, Package, ShoppingCart, Calendar, Banknote, CreditCard, Building2, Smartphone, FileText, BarChart3, AlertCircle, ArrowUpCircle, ArrowDownCircle, Check, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CashRegister as CashRegisterType, CashMovement, SaleWithItems, CashRegisterDiscrepancyCalculation, DetailedCashRegisterReport, CashRegisterDiscrepancy, CashRegisterAudit } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -9,6 +9,13 @@ import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
+
+interface UserType {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
 
 interface CashRegisterWithUser extends CashRegisterType {
   user: UserType | null;
@@ -56,6 +63,20 @@ export default function CashRegister() {
   const [selectedSale, setSelectedSale] = useState<SaleDetail | null>(null);
   const [editingMovement, setEditingMovement] = useState<CashMovement | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showDiscrepancyAnalysis, setShowDiscrepancyAnalysis] = useState(false);
+  const [discrepancyData, setDiscrepancyData] = useState<CashRegisterDiscrepancyCalculation | null>(null);
+  const [showDetailedReport, setShowDetailedReport] = useState(false);
+  const [detailedReport, setDetailedReport] = useState<DetailedCashRegisterReport | null>(null);
+  const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [auditTrail, setAuditTrail] = useState<CashRegisterAudit[]>([]);
+  const [discrepancies, setDiscrepancies] = useState<CashRegisterDiscrepancy[]>([]);
+  const [showAddDiscrepancy, setShowAddDiscrepancy] = useState(false);
+  const [discrepancyForm, setDiscrepancyForm] = useState({
+    type: 'shortage' as 'shortage' | 'overage' | 'error',
+    expected_amount: '',
+    actual_amount: '',
+    reason: ''
+  });
   
   const [openFormData, setOpenFormData] = useState({
     opening_amount: '',

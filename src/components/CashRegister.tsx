@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calculator, DollarSign, TrendingUp, AlertTriangle, Plus, Minus, Save, X, Eye, Clock, User, FileText, BarChart3 } from 'lucide-react';
+import { Calculator, DollarSign, TrendingUp, AlertTriangle, Plus, Minus, Save, X, Eye, Clock, User, FileText, BarChart3, History, Package, Users, ShoppingCart } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,7 +47,13 @@ export default function CashRegister() {
   const { user } = useAuth();
   const [currentRegister, setCurrentRegister] = useState<CashRegisterWithUser | null>(null);
   const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [closedRegisters, setClosedRegisters] = useState<CashRegisterWithUser[]>([]);
+  const [selectedClosedRegister, setSelectedClosedRegister] = useState<CashRegisterWithUser | null>(null);
+  const [registerSales, setRegisterSales] = useState<any[]>([]);
+  const [registerProducts, setRegisterProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showRegisterDetail, setShowRegisterDetail] = useState(false);
   const [showOpenForm, setShowOpenForm] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
@@ -88,6 +94,7 @@ export default function CashRegister() {
 
   useEffect(() => {
     loadCurrentRegister();
+    loadClosedRegisters();
   }, [user]);
 
   const loadCurrentRegister = async () => {
@@ -131,6 +138,72 @@ export default function CashRegister() {
     }
   };
 
+  const loadClosedRegisters = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('cash_registers')
+        .select(`
+          *,
+          user:users (name, email)
+        `)
+        .eq('status', 'closed')
+        .order('closed_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setClosedRegisters(data || []);
+    } catch (error) {
+      console.error('Error loading closed registers:', error);
+    }
+  };
+
+  const loadRegisterDetails = async (registerId: string) => {
+    try {
+      // Cargar ventas de la caja
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          customer:customers (name, phone, email),
+          user:users (name),
+          sale_items (
+            *,
+            product:products (name, sale_price)
+          )
+        `)
+        .gte('created_at', selectedClosedRegister?.opened_at)
+        .lte('created_at', selectedClosedRegister?.closed_at)
+        .order('created_at', { ascending: false });
+
+      if (salesError) throw salesError;
+
+      // Agrupar productos vendidos
+      const productsSold: { [key: string]: any } = {};
+      salesData?.forEach(sale => {
+        sale.sale_items?.forEach((item: any) => {
+          const productId = item.product_id;
+          if (!productsSold[productId]) {
+            productsSold[productId] = {
+              product: item.product,
+              total_quantity: 0,
+              total_revenue: 0,
+              sales_count: 0
+            };
+          }
+          productsSold[productId].total_quantity += item.quantity;
+          productsSold[productId].total_revenue += item.total_price;
+          productsSold[productId].sales_count += 1;
+        });
+      });
+
+      setRegisterSales(salesData || []);
+      setRegisterProducts(Object.values(productsSold));
+    } catch (error) {
+      console.error('Error loading register details:', error);
+    }
+  };
   const openCashRegister = async () => {
     if (!user || !openingAmount) return;
 
@@ -196,6 +269,7 @@ export default function CashRegister() {
       setActualClosingAmount('');
       setDiscrepancyReason('');
       setSessionNotes('');
+      loadClosedRegisters(); // Recargar historial
     } catch (error) {
       console.error('Error closing cash register:', error);
       alert('Error al cerrar caja: ' + (error as Error).message);
@@ -299,7 +373,277 @@ export default function CashRegister() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Caja Registradora</h2>
-        {!currentRegister && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowHistory(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+          >
+            <History className="h-4 w-4 mr-2" />
+            Historial
+          </button>
+          {!currentRegister && (
+            <button
+              onClick={() => setShowOpenForm(true)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+            >
+              <Calculator className="h-4 w-4 mr-2" />
+              Abrir Caja
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* History Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900 flex items-center">
+                  <History className="h-5 w-5 mr-2 text-blue-600" />
+                  Historial de Cajas Cerradas
+                </h3>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              {closedRegisters.length === 0 ? (
+                <div className="text-center py-12">
+                  <History className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-slate-500">No hay cajas cerradas</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {closedRegisters.map((register) => (
+                    <div key={register.id} className="bg-slate-50 rounded-lg p-4 hover:bg-slate-100 transition-colors duration-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-4">
+                            <div>
+                              <h4 className="font-semibold text-slate-900">
+                                Caja #{register.id.slice(-8)}
+                              </h4>
+                              <p className="text-sm text-slate-600">
+                                Operador: {register.user?.name}
+                              </p>
+                              <p className="text-sm text-slate-600">
+                                {new Date(register.opened_at).toLocaleDateString('es-ES')} - {' '}
+                                {new Date(register.closed_at!).toLocaleDateString('es-ES')}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                              <div>
+                                <span className="text-slate-600">Inicial:</span>
+                                <p className="font-semibold">{formatCurrency(register.opening_amount)}</p>
+                              </div>
+                              <div>
+                                <span className="text-slate-600">Final:</span>
+                                <p className="font-semibold">{formatCurrency(register.actual_closing_amount)}</p>
+                              </div>
+                              <div>
+                                <span className="text-slate-600">Ventas:</span>
+                                <p className="font-semibold text-green-600">{formatCurrency(register.total_sales)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedClosedRegister(register);
+                            setShowRegisterDetail(true);
+                            loadRegisterDetails(register.id);
+                          }}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Ver Detalles
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Register Detail Modal */}
+      {showRegisterDetail && selectedClosedRegister && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Detalles de Caja #{selectedClosedRegister.id.slice(-8)}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowRegisterDetail(false);
+                    setSelectedClosedRegister(null);
+                    setRegisterSales([]);
+                    setRegisterProducts([]);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              <div className="space-y-6">
+                {/* Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-2">Período</h4>
+                    <p className="text-sm text-blue-700">
+                      {new Date(selectedClosedRegister.opened_at).toLocaleDateString('es-ES')}
+                    </p>
+                    <p className="text-sm text-blue-700">
+                      {new Date(selectedClosedRegister.opened_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - {' '}
+                      {new Date(selectedClosedRegister.closed_at!).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h4 className="font-medium text-green-900 mb-2">Total Ventas</h4>
+                    <p className="text-2xl font-bold text-green-600">
+                      {formatCurrency(selectedClosedRegister.total_sales)}
+                    </p>
+                    <p className="text-sm text-green-700">{registerSales.length} ventas</p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <h4 className="font-medium text-purple-900 mb-2">Productos Vendidos</h4>
+                    <p className="text-2xl font-bold text-purple-600">
+                      {registerProducts.reduce((sum, p) => sum + p.total_quantity, 0)}
+                    </p>
+                    <p className="text-sm text-purple-700">{registerProducts.length} productos únicos</p>
+                  </div>
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <h4 className="font-medium text-orange-900 mb-2">Diferencia</h4>
+                    <p className={`text-2xl font-bold ${
+                      selectedClosedRegister.discrepancy_amount >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(selectedClosedRegister.discrepancy_amount)}
+                    </p>
+                    <p className="text-sm text-orange-700">
+                      {selectedClosedRegister.discrepancy_amount >= 0 ? 'Sobrante' : 'Faltante'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Ventas */}
+                  <div className="bg-slate-50 rounded-lg p-6">
+                    <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+                      <ShoppingCart className="h-5 w-5 mr-2 text-green-600" />
+                      Ventas Realizadas ({registerSales.length})
+                    </h4>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {registerSales.map((sale) => (
+                        <div key={sale.id} className="bg-white p-3 rounded border">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                Venta #{sale.id.slice(-8)}
+                              </p>
+                              <p className="text-sm text-slate-600">
+                                {sale.customer?.name || 'Cliente genérico'}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {new Date(sale.created_at).toLocaleTimeString('es-ES')}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-green-600">
+                                {formatCurrency(sale.total_amount)}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {sale.sale_items?.length} productos
+                              </p>
+                            </div>
+                          </div>
+                          {sale.customer?.phone && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              Tel: {sale.customer.phone}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Productos */}
+                  <div className="bg-slate-50 rounded-lg p-6">
+                    <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+                      <Package className="h-5 w-5 mr-2 text-purple-600" />
+                      Productos Vendidos ({registerProducts.length})
+                    </h4>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {registerProducts
+                        .sort((a, b) => b.total_quantity - a.total_quantity)
+                        .map((productData, index) => (
+                        <div key={index} className="bg-white p-3 rounded border">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                {productData.product.name}
+                              </p>
+                              <p className="text-sm text-slate-600">
+                                Precio: {formatCurrency(productData.product.sale_price)}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {productData.sales_count} ventas
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-purple-600">
+                                {productData.total_quantity} unidades
+                              </p>
+                              <p className="text-sm text-green-600">
+                                {formatCurrency(productData.total_revenue)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notas y observaciones */}
+                {(selectedClosedRegister.session_notes || selectedClosedRegister.discrepancy_reason) && (
+                  <div className="bg-slate-50 rounded-lg p-6">
+                    <h4 className="font-medium text-slate-900 mb-4">Notas y Observaciones</h4>
+                    {selectedClosedRegister.discrepancy_reason && (
+                      <div className="mb-4">
+                        <h5 className="font-medium text-orange-700 mb-2">Razón de la diferencia:</h5>
+                        <p className="text-slate-700 bg-white p-3 rounded border">
+                          {selectedClosedRegister.discrepancy_reason}
+                        </p>
+                      </div>
+                    )}
+                    {selectedClosedRegister.session_notes && (
+                      <div>
+                        <h5 className="font-medium text-blue-700 mb-2">Notas de la sesión:</h5>
+                        <p className="text-slate-700 bg-white p-3 rounded border">
+                          {selectedClosedRegister.session_notes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
           <button
             onClick={() => setShowOpenForm(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
@@ -325,7 +669,7 @@ export default function CashRegister() {
             Abrir Caja Registradora
           </button>
         </div>
-      ) : (
+      )}
         <>
           {/* Current Register Status */}
           <div className="bg-white rounded-xl shadow-sm p-6">

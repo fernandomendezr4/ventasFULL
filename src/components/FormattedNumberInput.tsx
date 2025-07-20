@@ -59,6 +59,14 @@ export default function FormattedNumberInput({
     if (displayValue) {
       const numericValue = parseFormattedNumber(displayValue);
       
+      // Validar límite máximo de la base de datos
+      if (numericValue > 999999999999999.99) {
+        const maxFormatted = formatNumberInput('999999999999999.99');
+        setDisplayValue(maxFormatted);
+        onChange('999999999999999.99');
+        return;
+      }
+      
       if (min && numericValue < parseFloat(min)) {
         const minFormatted = formatNumberInput(min);
         setDisplayValue(minFormatted);

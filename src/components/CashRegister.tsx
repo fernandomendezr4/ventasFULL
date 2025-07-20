@@ -95,6 +95,12 @@ export default function CashRegister() {
         return;
       }
 
+      // Validar que el monto no exceda los límites de la base de datos
+      if (amount > 999999999999999.99) {
+        alert('El monto de apertura es demasiado grande. Máximo permitido: $999,999,999,999,999.99');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('cash_registers')
         .insert([{
@@ -138,6 +144,12 @@ export default function CashRegister() {
       const expectedAmount = calculateExpectedBalance();
       const discrepancy = amount - expectedAmount;
 
+      // Validar que los montos no excedan los límites de la base de datos
+      if (amount > 999999999999999.99) {
+        alert('El monto de cierre es demasiado grande. Máximo permitido: $999,999,999,999,999.99');
+        return;
+      }
+
       const { error } = await supabase
         .from('cash_registers')
         .update({
@@ -156,7 +168,7 @@ export default function CashRegister() {
 
       // Si hay discrepancia significativa, registrarla
       if (Math.abs(discrepancy) > 100) {
-        await supabase
+        const { error: discrepancyError } = await supabase
           .from('cash_register_discrepancies')
           .insert([{
             cash_register_id: currentRegister.id,
@@ -167,6 +179,11 @@ export default function CashRegister() {
             reason: discrepancyReason,
             created_by: user?.id
           }]);
+        
+        if (discrepancyError) {
+          console.error('Error creating discrepancy record:', discrepancyError);
+          // No fallar el cierre por esto, solo registrar el error
+        }
       }
 
       setCurrentRegister(null);
@@ -188,6 +205,12 @@ export default function CashRegister() {
       const amount = parseFloat(movementData.amount);
       if (amount <= 0) {
         alert('El monto debe ser mayor a cero');
+        return;
+      }
+
+      // Validar que el monto no exceda los límites de la base de datos
+      if (amount > 999999999999999.99) {
+        alert('El monto es demasiado grande. Máximo permitido: $999,999,999,999,999.99');
         return;
       }
 

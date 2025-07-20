@@ -34,7 +34,7 @@ interface CashMovement {
 
 export default function CashRegister() {
   const { user } = useAuth();
-  const { showNotification } = useNotification();
+  const { showSuccess, showError } = useNotification();
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +75,7 @@ export default function CashRegister() {
       }
     } catch (error) {
       console.error('Error loading cash register:', error);
-      showNotification('Error loading cash register', 'error');
+      showError('Error loading cash register');
     } finally {
       setLoading(false);
     }
@@ -117,11 +117,11 @@ export default function CashRegister() {
       setShowOpenModal(false);
       setOpeningAmount('');
       setSessionNotes('');
-      showNotification('Cash register opened successfully', 'success');
+      showSuccess('Cash register opened successfully');
       loadMovements(data.id);
     } catch (error) {
       console.error('Error opening register:', error);
-      showNotification('Error opening cash register', 'error');
+      showError('Error opening cash register');
     }
   };
 
@@ -152,10 +152,10 @@ export default function CashRegister() {
       setShowCloseModal(false);
       setClosingAmount('');
       setSessionNotes('');
-      showNotification('Cash register closed successfully', 'success');
+      showSuccess('Cash register closed successfully');
     } catch (error) {
       console.error('Error closing register:', error);
-      showNotification('Error closing cash register', 'error');
+      showError('Error closing cash register');
     }
   };
 

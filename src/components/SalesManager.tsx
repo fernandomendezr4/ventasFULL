@@ -375,6 +375,22 @@ export default function SalesManager() {
                           <span>{sale.customer.phone}</span>
                         </div>
                       )}
+                      
+                      {/* Installment progress for credit sales */}
+                      {sale.payment_type === 'installment' && (
+                        <div className="mt-2 w-full">
+                          <div className="flex justify-between text-xs text-slate-600 mb-1">
+                            <span>Progreso: {formatCurrency(sale.total_paid || 0)} / {formatCurrency(sale.total_amount)}</span>
+                            <span>{(((sale.total_paid || 0) / sale.total_amount) * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-1.5">
+                            <div 
+                              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                              style={{ width: `${((sale.total_paid || 0) / sale.total_amount) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -539,6 +555,18 @@ export default function SalesManager() {
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-600">Saldo pendiente:</span>
                         <span className="text-orange-600">{formatCurrency(selectedSale.total_amount - (selectedSale.total_paid || 0))}</span>
+                      </div>
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs text-slate-600 mb-1">
+                          <span>Progreso de pago</span>
+                          <span>{(((selectedSale.total_paid || 0) / selectedSale.total_amount) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${((selectedSale.total_paid || 0) / selectedSale.total_amount) * 100}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </>
                   )}

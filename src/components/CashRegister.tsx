@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, DollarSign, Clock, TrendingUp, TrendingDown, Calculator, Save, X, AlertTriangle, CheckCircle, Eye, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Minus, DollarSign, Clock, TrendingUp, TrendingDown, Calculator, Save, X, AlertTriangle, CheckCircle, Eye, Trash2, Edit2, CreditCard, History } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/currency';
@@ -62,6 +62,10 @@ export default function CashRegister() {
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [registers, setRegisters] = useState<CashRegisterWithUser[]>([]);
+  const [showSalesDetailModal, setShowSalesDetailModal] = useState(false);
+  const [showInstallmentsModal, setShowInstallmentsModal] = useState(false);
+  const [salesSummary, setSalesSummary] = useState<any>(null);
+  const [installmentsSummary, setInstallmentsSummary] = useState<any[]>([]);
   
   // Form states
   const [openingAmount, setOpeningAmount] = useState('');
@@ -104,6 +108,7 @@ export default function CashRegister() {
 
       if (register) {
         loadMovements(register.id);
+        loadSalesSummary(register.id);
       }
     } catch (error) {
       console.error('Error loading cash register:', error);
@@ -129,6 +134,40 @@ export default function CashRegister() {
     }
   };
 
+  const loadSalesSummary = async (registerId: string) => {
+    try {
+      const { data, error } = await supabase.rpc('get_cash_register_sales_summary', {
+        register_id: registerId
+      });
+
+      if (error) throw error;
+      setSalesSummary(data?.[0] || null);
+    } catch (error) {
+      console.error('Error loading sales summary:', error);
+    }
+  };
+
+  const loadInstallmentsSummary = async (registerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('cash_register_installments')
+        .select(`
+          *,
+          sale:sales (
+            id,
+            total_amount,
+            customer:customers (name)
+          )
+        `)
+        .eq('cash_register_id', registerId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setInstallmentsSummary(data || []);
+    } catch (error) {
+      console.error('Error loading installments summary:', error);
+    }
+  };
   const loadRegistersHistory = async () => {
     if (!user) return;
 
@@ -464,7 +503,7 @@ export default function CashRegister() {
           </div>
 
           {/* Resumen de Movimientos */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border">
               <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
                 <TrendingUp className="h-5 w-5 mr-2 text-green-600" />
@@ -488,13 +527,75 @@ export default function CashRegister() {
             </div>
 
             <div className="bg-white p-6 rounded-xl shadow-sm border">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Acciones</h3>
+              <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+                <DollarSign className="h-5 w-5 mr-2 text-blue-600" />
+                Ventas Registradas
+              </h3>
+              <p className="text-2xl font-bold text-blue-600">
+                {salesSummary?.total_sales_count || 0}
+              </p>
+              <p className="text-sm text-slate-600 mt-1">
+                {formatCurrency(salesSummary?.total_sales_amount || 0)}
+              </p>
+              <button
+                onClick={() => setShowSalesDetailModal(true)}
+                className="text-xs text-blue-600 hover:text-blue-800 mt-2"
+              >
+                Ver detalles
+              </button>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+                <CreditCard className="h-5 w-5 mr-2 text-purple-600" />
+                Abonos Recibidos
+              </h3>
+              <p className="text-2xl font-bold text-purple-600">
+                {formatCurrency(salesSummary?.total_installments_received || 0)}
+              </p>
+              <p className="text-sm text-slate-600 mt-1">
+                {movements.filter(m => m.category === 'abonos_credito').length} abonos
+              </p>
+              <button
+                onClick={() => {
+                  loadInstallmentsSummary(currentRegister.id);
+                  setShowInstallmentsModal(true);
+                }}
+                className="text-xs text-purple-600 hover:text-purple-800 mt-2"
+              >
+                Ver abonos
+              </button>
+            </div>
+
+          </div>
+
+          {/* Acciones */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Acciones Rápidas</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button
                 onClick={() => setShowMovementModal(true)}
-                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center gap-2"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center gap-2"
               >
                 <Plus className="h-4 w-4" />
                 Registrar Movimiento
+              </button>
+              <button
+                onClick={() => setShowSalesDetailModal(true)}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <Eye className="h-4 w-4" />
+                Ver Ventas
+              </button>
+              <button
+                onClick={() => {
+                  loadInstallmentsSummary(currentRegister.id);
+                  setShowInstallmentsModal(true);
+                }}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <CreditCard className="h-4 w-4" />
+                Ver Abonos
               </button>
             </div>
           </div>
@@ -848,6 +949,136 @@ export default function CashRegister() {
                 className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalle de Ventas */}
+      {showSalesDetailModal && currentRegister && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Detalle de Ventas - Caja Actual</h3>
+            </div>
+            <div className="p-6 flex-1 overflow-y-auto">
+              {salesSummary && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-2">Total de Ventas</h4>
+                    <p className="text-2xl font-bold text-blue-900">{salesSummary.total_sales_count}</p>
+                    <p className="text-sm text-blue-700">{formatCurrency(salesSummary.total_sales_amount)}</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h4 className="font-medium text-green-900 mb-2">Ventas en Efectivo</h4>
+                    <p className="text-2xl font-bold text-green-900">{salesSummary.cash_sales_count}</p>
+                    <p className="text-sm text-green-700">{formatCurrency(salesSummary.cash_sales_amount)}</p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                    <h4 className="font-medium text-purple-900 mb-2">Abonos Recibidos</h4>
+                    <p className="text-2xl font-bold text-purple-900">{formatCurrency(salesSummary.total_installments_received)}</p>
+                    <p className="text-sm text-purple-700">De ventas a crédito</p>
+                  </div>
+                </div>
+              )}
+              
+              <div className="space-y-4">
+                <h4 className="font-medium text-slate-900">Movimientos de Ventas</h4>
+                {movements.filter(m => m.type === 'sale' || m.category === 'abonos_credito').map((movement) => (
+                  <div key={movement.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      {movement.type === 'sale' ? (
+                        <DollarSign className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <CreditCard className="h-4 w-4 text-purple-600" />
+                      )}
+                      <div>
+                        <h5 className="font-medium text-slate-900">{movement.description}</h5>
+                        <p className="text-sm text-slate-600">
+                          {new Date(movement.created_at).toLocaleString('es-ES')}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-green-600">
+                        +{formatCurrency(movement.amount)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {movement.type === 'sale' ? 'Venta' : 'Abono'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200">
+              <button
+                onClick={() => setShowSalesDetailModal(false)}
+                className="w-full bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalle de Abonos */}
+      {showInstallmentsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Abonos Recibidos - Caja Actual</h3>
+            </div>
+            <div className="p-6 flex-1 overflow-y-auto">
+              {installmentsSummary.length === 0 ? (
+                <div className="text-center py-8">
+                  <CreditCard className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-slate-500">No se han recibido abonos en esta caja</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {installmentsSummary.map((installment) => (
+                    <div key={installment.id} className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="flex items-center gap-3">
+                        <CreditCard className="h-4 w-4 text-purple-600" />
+                        <div>
+                          <h5 className="font-medium text-slate-900">
+                            Abono - Venta #{installment.sale.id.slice(-8)}
+                          </h5>
+                          <p className="text-sm text-slate-600">
+                            Cliente: {installment.sale.customer?.name || 'Sin cliente'}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(installment.created_at).toLocaleString('es-ES')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-purple-600">
+                          {formatCurrency(installment.amount_paid)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {installment.payment_method === 'cash' ? 'Efectivo' : 
+                           installment.payment_method === 'card' ? 'Tarjeta' :
+                           installment.payment_method === 'transfer' ? 'Transferencia' : 'Otro'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Total venta: {formatCurrency(installment.sale.total_amount)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-slate-200">
+              <button
+                onClick={() => setShowInstallmentsModal(false)}
+                className="w-full bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cerrar
               </button>
             </div>
           </div>

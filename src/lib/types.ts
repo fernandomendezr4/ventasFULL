@@ -377,6 +377,10 @@ export interface CashRegisterWithUser extends CashRegister {
   total_income?: number;
   total_expenses?: number;
   total_sales_amount?: number;
+  total_sales_count?: number;
+  total_installments_amount?: number;
+  total_installments_count?: number;
+  calculated_balance?: number;
 }
 
 export interface CashRegisterWithMovements extends CashRegisterWithUser {

@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Minus, DollarSign, Clock, TrendingUp, TrendingDown, Calculator, Save, X, AlertTriangle, CheckCircle, Eye, Trash2, Edit2, CreditCard, History } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Minus, DollarSign, Clock, TrendingUp, TrendingDown, Calculator, Save, X, AlertTriangle, CheckCircle, Eye, Trash2, Edit2, CreditCard, History, Package, FileText, BarChart3, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
+import CashRegisterAudit from './CashRegisterAudit';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
 
@@ -25,6 +26,14 @@ interface CashRegister {
   discrepancy_reason: string;
   session_notes: string;
   last_movement_at: string;
+  total_sales_count?: number;
+  total_sales_amount?: number;
+  total_installments_count?: number;
+  total_installments_amount?: number;
+  current_balance?: number;
+  calculated_balance?: number;
+  cash_movements?: CashMovement[];
+  user?: { name: string };
 }
 
 interface CashMovement {
@@ -37,6 +46,7 @@ interface CashMovement {
   reference_id: string | null;
   created_by: string | null;
   created_at: string;
+  created_by_user?: { name: string };
 }
 
 interface User {
@@ -57,6 +67,7 @@ export default function CashRegister() {
   const [currentRegister, setCurrentRegister] = useState<CashRegister | null>(null);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'current' | 'audit'>('current');
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
@@ -66,6 +77,8 @@ export default function CashRegister() {
   const [showInstallmentsModal, setShowInstallmentsModal] = useState(false);
   const [salesSummary, setSalesSummary] = useState<any>(null);
   const [installmentsSummary, setInstallmentsSummary] = useState<any[]>([]);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showSalesModal, setShowSalesModal] = useState(false);
   
   // Form states
   const [openingAmount, setOpeningAmount] = useState('');
@@ -84,32 +97,89 @@ export default function CashRegister() {
     loadRegistersHistory();
   }, [user]);
 
+  // Auto-refresh every 30 seconds when on current tab
+  useEffect(() => {
+    if (activeTab === 'current') {
+      const interval = setInterval(loadCurrentRegister, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
+
   const loadCurrentRegister = async () => {
     if (!user) return;
 
     try {
       setLoading(true);
       
-      // Obtener caja abierta actual del usuario
-      const { data: register, error } = await supabase
+      // Get current open register for the user
+      const { data: registerData, error: registerError } = await supabase
         .from('cash_registers')
-        .select('*')
-        .eq('user_id', user.id)
+        .select('*, user:users(name)')
         .eq('status', 'open')
+        .eq('user_id', user.id)
         .order('opened_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        throw error;
+      if (registerError && registerError.code !== 'PGRST116') {
+        throw registerError;
+      }
+
+      let register = registerData;
+
+      if (register) {
+        // Get movements for this register
+        const { data: movementsData, error: movementsError } = await supabase
+          .from('cash_movements')
+          .select('*, created_by_user:users(name)')
+          .eq('cash_register_id', register.id)
+          .order('created_at', { ascending: false });
+
+        if (movementsError) throw movementsError;
+
+        register.cash_movements = movementsData || [];
+        
+        // Get sales count and amount for this register
+        const { data: salesData, error: salesError } = await supabase
+          .from('cash_register_sales')
+          .select(`
+            amount_received,
+            sale:sales(total_amount, payment_type, created_at)
+          `)
+          .eq('cash_register_id', register.id);
+
+        if (!salesError && salesData) {
+          register.total_sales_count = salesData.length;
+          register.total_sales_amount = salesData.reduce((sum, s) => sum + (s.sale?.total_amount || 0), 0);
+        }
+
+        // Get installments count and amount for this register
+        const { data: installmentsData, error: installmentsError } = await supabase
+          .from('cash_register_installments')
+          .select('amount_paid')
+          .eq('cash_register_id', register.id);
+
+        if (!installmentsError && installmentsData) {
+          register.total_installments_count = installmentsData.length;
+          register.total_installments_amount = installmentsData.reduce((sum, i) => sum + i.amount_paid, 0);
+        }
+
+        // Calculate current balance
+        const totalIncome = register.cash_movements
+          .filter(m => ['income', 'sale', 'opening'].includes(m.type))
+          .reduce((sum, m) => sum + m.amount, 0);
+        
+        const totalExpenses = register.cash_movements
+          .filter(m => m.type === 'expense')
+          .reduce((sum, m) => sum + m.amount, 0);
+
+        register.current_balance = totalIncome - totalExpenses;
+        register.calculated_balance = register.opening_amount + totalIncome - totalExpenses;
       }
 
       setCurrentRegister(register);
-
-      if (register) {
-        loadMovements(register.id);
-        loadSalesSummary(register.id);
-      }
+      setMovements(register?.cash_movements || []);
+      loadSalesSummary(register?.id);
     } catch (error) {
       console.error('Error loading cash register:', error);
       showError('Error al Cargar Caja', 'No se pudo cargar la información de la caja registradora');
@@ -118,23 +188,9 @@ export default function CashRegister() {
     }
   };
 
-  const loadMovements = async (registerId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('cash_movements')
-        .select('*')
-        .eq('cash_register_id', registerId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setMovements(data || []);
-    } catch (error) {
-      console.error('Error loading movements:', error);
-      showError('Error al Cargar Movimientos', 'No se pudieron cargar los movimientos de caja');
-    }
-  };
-
-  const loadSalesSummary = async (registerId: string) => {
+  const loadSalesSummary = async (registerId?: string) => {
+    if (!registerId) return;
+    
     try {
       const { data, error } = await supabase.rpc('get_cash_register_sales_summary', {
         register_id: registerId
@@ -168,6 +224,7 @@ export default function CashRegister() {
       console.error('Error loading installments summary:', error);
     }
   };
+
   const loadRegistersHistory = async () => {
     if (!user) return;
 
@@ -214,7 +271,7 @@ export default function CashRegister() {
       setOpeningAmount('');
       setSessionNotes('');
       showSuccess('¡Caja Abierta!', 'La caja registradora se ha abierto exitosamente');
-      loadMovements(data.id);
+      loadCurrentRegister();
       loadRegistersHistory();
     } catch (error) {
       console.error('Error opening register:', error);
@@ -295,7 +352,7 @@ export default function CashRegister() {
       setMovementAmount('');
       setMovementCategory('');
       setMovementDescription('');
-      loadMovements(currentRegister.id);
+      loadCurrentRegister();
       showSuccess(
         'Movimiento Registrado', 
         `Se ha registrado el ${movementType === 'income' ? 'ingreso' : 'egreso'} exitosamente`
@@ -319,9 +376,7 @@ export default function CashRegister() {
 
           if (error) throw error;
 
-          if (currentRegister) {
-            loadMovements(currentRegister.id);
-          }
+          loadCurrentRegister();
           showSuccess('Movimiento Eliminado', 'El movimiento se ha eliminado exitosamente');
         } catch (error) {
           console.error('Error deleting movement:', error);
@@ -401,6 +456,10 @@ export default function CashRegister() {
     }
   };
 
+  if (activeTab === 'audit') {
+    return <CashRegisterAudit />;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -412,8 +471,33 @@ export default function CashRegister() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">Caja Registradora</h1>
-        <div className="flex gap-3">
+        <h2 className="text-3xl font-bold text-slate-900 flex items-center">
+          <Calculator className="h-8 w-8 mr-3 text-blue-600" />
+          Caja Registradora
+        </h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab('current')}
+            className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center ${
+              activeTab === 'current'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            <Activity className="h-4 w-4 mr-2" />
+            Caja Actual
+          </button>
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center ${
+              activeTab === 'audit'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Auditoría
+          </button>
           <button
             onClick={() => setShowHistoryModal(true)}
             className="bg-slate-600 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200 flex items-center gap-2"
@@ -502,6 +586,61 @@ export default function CashRegister() {
             </div>
           </div>
 
+          {/* Sales and Installments Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-green-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-green-900 flex items-center">
+                  <Package className="h-5 w-5 mr-2" />
+                  Ventas Registradas
+                </h3>
+                <button
+                  onClick={() => setShowSalesModal(true)}
+                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                  title="Ver detalles de ventas"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Cantidad:</span>
+                  <span className="font-bold text-slate-900">{currentRegister.total_sales_count || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Total:</span>
+                  <span className="font-bold text-green-600">{formatCurrency(currentRegister.total_sales_amount || 0)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-blue-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-blue-900 flex items-center">
+                  <CreditCard className="h-5 w-5 mr-2" />
+                  Abonos Recibidos
+                </h3>
+                <button
+                  onClick={() => setShowInstallmentsModal(true)}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                  title="Ver detalles de abonos"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Cantidad:</span>
+                  <span className="font-bold text-slate-900">{currentRegister.total_installments_count || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Total:</span>
+                  <span className="font-bold text-blue-600">{formatCurrency(currentRegister.total_installments_amount || 0)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Resumen de Movimientos */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border">
@@ -569,8 +708,24 @@ export default function CashRegister() {
 
           </div>
 
-          {/* Acciones */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border">
+          {/* Current Balance */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-purple-200">
+            <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+              <Calculator className="h-5 w-5 mr-2" />
+              Balance Actual
+            </h3>
+            <div className="text-center">
+              <p className="text-4xl font-bold text-purple-600 mb-2">
+                {formatCurrency(currentRegister.calculated_balance || currentRegister.current_balance || 0)}
+              </p>
+              <p className="text-sm text-slate-600">
+                Última actualización: {new Date().toLocaleTimeString('es-ES')}
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="bg-white p-6 rounded-xl shadow-sm">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Acciones Rápidas</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button
@@ -588,22 +743,19 @@ export default function CashRegister() {
                 Ver Ventas
               </button>
               <button
-                onClick={() => {
-                  loadInstallmentsSummary(currentRegister.id);
-                  setShowInstallmentsModal(true);
-                }}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center gap-2"
+                onClick={() => setShowDetailsModal(true)}
+                className="p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors duration-200 flex items-center justify-center"
               >
-                <CreditCard className="h-4 w-4" />
-                Ver Abonos
+                <BarChart3 className="h-5 w-5 text-blue-600 mr-2" />
+                <span className="font-medium text-blue-700">Ver Resumen Completo</span>
               </button>
             </div>
           </div>
 
-          {/* Lista de Movimientos */}
-          <div className="bg-white rounded-xl shadow-sm border">
+          {/* Recent Movements */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Movimientos de Caja</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Movimientos Recientes</h3>
             </div>
             <div className="p-6">
               {movements.length === 0 ? (
@@ -613,36 +765,30 @@ export default function CashRegister() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {movements.map((movement) => (
+                  {movements.slice(0, 10).map((movement) => (
                     <div key={movement.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors duration-200">
                       <div className="flex items-center gap-3">
                         {getMovementIcon(movement.type)}
                         <div>
-                          <h4 className="font-medium text-slate-900">{movement.description}</h4>
-                          <div className="flex items-center gap-2 text-sm text-slate-600">
-                            <span className="bg-slate-200 px-2 py-1 rounded text-xs">
-                              {getMovementTypeLabel(movement.type)}
-                            </span>
-                            <span>•</span>
-                            <span>{movement.category}</span>
-                            <span>•</span>
-                            <span>{new Date(movement.created_at).toLocaleString('es-ES')}</span>
-                          </div>
+                          <p className="font-medium text-slate-900">{movement.description}</p>
+                          <p className="text-sm text-slate-600">
+                            {movement.category} • {new Date(movement.created_at).toLocaleTimeString('es-ES')} • {movement.created_by_user?.name || 'Sistema'}
+                          </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className={`text-lg font-bold ${
+                      <div className="text-right">
+                        <p className={`text-lg font-bold ${
                           movement.type === 'income' || movement.type === 'sale' 
                             ? 'text-green-600' 
                             : 'text-red-600'
                         }`}>
                           {movement.type === 'income' || movement.type === 'sale' ? '+' : '-'}
                           {formatCurrency(movement.amount)}
-                        </span>
+                        </p>
                         {movement.type !== 'sale' && movement.type !== 'opening' && movement.type !== 'closing' && (
                           <button
                             onClick={() => deleteMovement(movement.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200 mt-1"
                             title="Eliminar movimiento"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1085,6 +1231,32 @@ export default function CashRegister() {
         </div>
       )}
 
+      {/* Sales Detail Modal */}
+      {showSalesModal && currentRegister && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Ventas Registradas - Caja #{currentRegister.id.slice(-8)}
+              </h3>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              <SalesDetailTable cashRegisterId={currentRegister.id} />
+            </div>
+            
+            <div className="p-6 border-t border-slate-200">
+              <button
+                onClick={() => setShowSalesModal(false)}
+                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Historial */}
       {showHistoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1196,6 +1368,152 @@ export default function CashRegister() {
         type={confirmation.type}
         loading={confirmation.loading}
       />
+    </div>
+  );
+}
+
+// Component for Sales Detail Table
+function SalesDetailTable({ cashRegisterId }: { cashRegisterId: string }) {
+  const [sales, setSales] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadSales();
+  }, [cashRegisterId]);
+
+  const loadSales = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cash_register_sales')
+        .select(`
+          *,
+          sale:sales(
+            id,
+            total_amount,
+            payment_type,
+            created_at,
+            customer:customers(name),
+            sale_items(quantity)
+          )
+        `)
+        .eq('cash_register_id', cashRegisterId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSales(data || []);
+    } catch (error) {
+      console.error('Error loading sales:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-4">Cargando ventas...</div>;
+  }
+
+  if (sales.length === 0) {
+    return <div className="text-center py-8 text-slate-500">No hay ventas registradas en esta caja</div>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-slate-50">
+            <th className="text-left p-3 border">Venta</th>
+            <th className="text-left p-3 border">Cliente</th>
+            <th className="text-left p-3 border">Productos</th>
+            <th className="text-right p-3 border">Monto</th>
+            <th className="text-left p-3 border">Hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sales.map((saleRecord) => (
+            <tr key={saleRecord.id} className="hover:bg-slate-50">
+              <td className="p-3 border">#{saleRecord.sale.id.slice(-8)}</td>
+              <td className="p-3 border">{saleRecord.sale.customer?.name || 'Sin cliente'}</td>
+              <td className="p-3 border">{saleRecord.sale.sale_items?.length || 0}</td>
+              <td className="p-3 border text-right">{formatCurrency(saleRecord.sale.total_amount)}</td>
+              <td className="p-3 border">{new Date(saleRecord.sale.created_at).toLocaleTimeString('es-ES')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Component for Installments Detail Table
+function InstallmentsDetailTable({ cashRegisterId }: { cashRegisterId: string }) {
+  const [installments, setInstallments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadInstallments();
+  }, [cashRegisterId]);
+
+  const loadInstallments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cash_register_installments')
+        .select(`
+          *,
+          installment:payment_installments(
+            id,
+            sale_id,
+            payment_method,
+            notes
+          ),
+          sale:sales(
+            id,
+            customer:customers(name)
+          )
+        `)
+        .eq('cash_register_id', cashRegisterId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setInstallments(data || []);
+    } catch (error) {
+      console.error('Error loading installments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-4">Cargando abonos...</div>;
+  }
+
+  if (installments.length === 0) {
+    return <div className="text-center py-8 text-slate-500">No hay abonos registrados en esta caja</div>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-slate-50">
+            <th className="text-left p-3 border">Venta</th>
+            <th className="text-left p-3 border">Cliente</th>
+            <th className="text-left p-3 border">Método</th>
+            <th className="text-right p-3 border">Monto</th>
+            <th className="text-left p-3 border">Hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          {installments.map((installmentRecord) => (
+            <tr key={installmentRecord.id} className="hover:bg-slate-50">
+              <td className="p-3 border">#{installmentRecord.sale.id.slice(-8)}</td>
+              <td className="p-3 border">{installmentRecord.sale.customer?.name || 'Sin cliente'}</td>
+              <td className="p-3 border">{installmentRecord.payment_method}</td>
+              <td className="p-3 border text-right">{formatCurrency(installmentRecord.amount_paid)}</td>
+              <td className="p-3 border">{new Date(installmentRecord.created_at).toLocaleTimeString('es-ES')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

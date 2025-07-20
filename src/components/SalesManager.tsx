@@ -358,17 +358,6 @@ export default function SalesManager() {
                             </span>
                           )}
                         </div>
-                        
-                        {/* Legacy payment type badges - keeping for compatibility */}
-                        <div className="flex items-center gap-2 mt-1" style={{ display: 'none' }}>
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                            sale.payment_type === 'cash' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}
-                          </span>
-                        </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600">
                         <span className="flex items-center">

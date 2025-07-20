@@ -73,7 +73,7 @@ export default function CashRegister() {
         .from('cash_movements')
         .select(`
           *,
-          created_by:users(name)
+          created_by
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
@@ -468,7 +468,7 @@ export default function CashRegister() {
                               {movement.created_by && (
                                 <span className="flex items-center">
                                   <User className="h-3 w-3 mr-1" />
-                                  {movement.created_by.name}
+                                  {movement.created_by}
                                 </span>
                               )}
                             </div>

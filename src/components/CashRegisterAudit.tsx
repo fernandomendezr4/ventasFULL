@@ -168,7 +168,7 @@ export default function CashRegisterAudit() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Reporte de Auditoría - Caja ${session_info.cash_register_id.slice(-8)}</title>
+          <title>Reporte de Auditoría - Caja ${session_info.cash_register_id?.slice(-8) || 'N/A'}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             .header { text-align: center; margin-bottom: 30px; }
@@ -186,7 +186,7 @@ export default function CashRegisterAudit() {
         <body>
           <div class="header">
             <h1>REPORTE DE AUDITORÍA - CAJA REGISTRADORA</h1>
-            <p>Caja ID: ${session_info.cash_register_id.slice(-8)}</p>
+            <p>Caja ID: ${session_info.cash_register_id?.slice(-8) || 'N/A'}</p>
             <p>Operador: ${session_info.operator_name}</p>
             <p>Fecha: ${new Date(session_info.opened_at).toLocaleDateString('es-ES')}</p>
           </div>

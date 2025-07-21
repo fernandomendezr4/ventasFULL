@@ -391,6 +391,7 @@ export interface SaleWithItems extends Sale {
 
 export interface CashRegisterWithUser extends CashRegister {
   user: User | null;
+  payments?: any[];
   current_balance?: number;
   total_income?: number;
   total_expenses?: number;

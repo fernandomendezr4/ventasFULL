@@ -321,13 +321,19 @@ export default function NewSale() {
 
       // Record payment if cash
       if (paymentType === 'cash') {
+        // Determinar las notas del pago basado en el método
+        let paymentNotes = `Pago completo - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`;
+        if (paymentMethod === 'nequi') {
+          paymentNotes += ' - NEQUI';
+        }
+        
         const { error: paymentError } = await supabase
           .from('payments')
           .insert([{
             sale_id: sale.id,
             amount: total,
             payment_method: paymentMethod === 'nequi' ? 'other' : paymentMethod,
-            notes: `Pago completo - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`
+            notes: paymentNotes
           }]);
 
         if (paymentError) throw paymentError;

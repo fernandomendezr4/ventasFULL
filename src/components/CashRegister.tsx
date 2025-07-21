@@ -100,38 +100,49 @@ export default function CashRegister() {
         return;
       }
 
-      if (amount > 99999999.99) {
-        alert('El monto de apertura es demasiado grande. Máximo permitido: $99,999,999.99');
+      if (amount > 9999999.99) {
+        alert('El monto de apertura es demasiado grande. Máximo permitido: $9,999,999.99');
         return;
       }
 
       // Verificar que no haya otra caja abierta para este usuario
       const { data: existingRegister, error: checkError } = await supabase
         .from('cash_registers')
-        .select('id')
+        .select('id, opened_at, status')
         .eq('user_id', user.id)
         .eq('status', 'open')
+        .gte('opened_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         .limit(1)
         .maybeSingle();
 
       if (checkError) {
         console.error('Error checking existing register:', checkError);
-        throw checkError;
+        // No fallar por este error, continuar
+        console.warn('No se pudo verificar cajas existentes, continuando...');
       }
 
       if (existingRegister) {
-        alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
+        alert(`Ya tienes una caja abierta desde ${new Date(existingRegister.opened_at).toLocaleDateString()}. Debes cerrarla antes de abrir una nueva.`);
         return;
       }
 
       const insertData = {
         user_id: user.id,
         opening_amount: amount,
+        closing_amount: 0,
+        total_sales: 0,
         status: 'open' as const,
+        expected_closing_amount: 0,
+        actual_closing_amount: 0,
+        discrepancy_amount: 0,
+        discrepancy_reason: '',
         session_notes: sessionNotes || '',
         opened_at: new Date().toISOString(),
+        closed_at: null,
         last_movement_at: new Date().toISOString()
       };
+
+      console.log('Insertando nueva caja:', insertData);
 
       const { data, error } = await supabase
         .from('cash_registers')
@@ -149,23 +160,19 @@ export default function CashRegister() {
       setOpeningAmount('');
       setSessionNotes('');
       
-      // Esperar un momento para que se procesen los triggers
-      setTimeout(async () => {
-        await loadMovements(data.id);
-        alert('Caja abierta exitosamente');
-      }, 500);
+      // Cargar movimientos inmediatamente
+      await loadMovements(data.id);
+      alert('Caja abierta exitosamente');
+      
     } catch (error) {
       console.error('Error opening register:', error);
       
       const errorMessage = (error as Error).message;
-      if (errorMessage.includes('ya tiene una caja abierta')) {
+      if (errorMessage.includes('ya tiene una caja abierta') || errorMessage.includes('single_open_register')) {
         alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
-      } else if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
-        alert('Error en el sistema al abrir la caja. Intentando nuevamente...');
-        // Reintentar después de un breve delay
-        setTimeout(() => {
-          loadCurrentRegister();
-        }, 1000);
+      } else if (errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
+        alert('Error: Ya existe una caja con estos datos. Recargando...');
+        loadCurrentRegister();
       } else {
         alert('Error al abrir caja: ' + errorMessage);
       }
@@ -187,8 +194,8 @@ export default function CashRegister() {
       const discrepancy = amount - expectedAmount;
 
       // Validar que los montos no excedan los límites de la base de datos
-      if (amount > 99999999.99) {
-        alert('El monto de cierre es demasiado grande. Máximo permitido: $99,999,999.99');
+      if (amount > 9999999.99) {
+        alert('El monto de cierre es demasiado grande. Máximo permitido: $9,999,999.99');
         return;
       }
 
@@ -268,8 +275,8 @@ export default function CashRegister() {
       }
 
       // Validar que el monto no exceda los límites de la base de datos
-      if (amount > 99999999.99) {
-        alert('El monto es demasiado grande. Máximo permitido: $99,999,999.99');
+      if (amount > 9999999.99) {
+        alert('El monto es demasiado grande. Máximo permitido: $9,999,999.99');
         return;
       }
 
@@ -291,23 +298,17 @@ export default function CashRegister() {
       setShowMovementForm(false);
       setMovementData({ type: 'income', category: '', amount: '', description: '' });
       
-      // Esperar un momento para que se procesen los triggers
-      setTimeout(async () => {
-        await loadMovements(currentRegister.id);
-        alert(`Movimiento de ${movementData.type === 'income' ? 'ingreso' : 'gasto'} registrado exitosamente`);
-      }, 500);
+      // Recargar movimientos inmediatamente
+      await loadMovements(currentRegister.id);
+      alert(`Movimiento de ${movementData.type === 'income' ? 'ingreso' : 'gasto'} registrado exitosamente`);
+      
     } catch (error) {
       console.error('Error adding movement:', error);
       
       const errorMessage = (error as Error).message;
-      if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
-        alert('Error en el sistema al registrar el movimiento. Intentando nuevamente...');
-        setTimeout(() => {
-          loadMovements(currentRegister.id);
-        }, 1000);
-      } else {
-        alert('Error al agregar movimiento: ' + errorMessage);
-      }
+      alert('Error al agregar movimiento: ' + errorMessage);
+      // Recargar movimientos para mostrar el estado actual
+      loadMovements(currentRegister.id);
     }
   };
 
@@ -623,6 +624,7 @@ export default function CashRegister() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="0"
                   min="0"
+                  max="9999999"
                 />
               </div>
               <div>
@@ -701,6 +703,7 @@ export default function CashRegister() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder={calculateExpectedBalance().toString()}
                   min="0"
+                  max="9999999"
                 />
                 {closingAmount && (
                   <div className="mt-2 text-sm">
@@ -841,6 +844,7 @@ export default function CashRegister() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="0"
                   min="0"
+                  max="9999999"
                 />
               </div>
               

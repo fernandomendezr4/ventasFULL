@@ -331,41 +331,6 @@ export default function NewSale() {
           }]);
 
         if (paymentError) throw paymentError;
-
-        // Register in cash register if open
-        try {
-          const { data: currentRegister } = await supabase
-            .from('cash_registers')
-            .select('*')
-            .eq('status', 'open')
-            .eq('user_id', user?.id)
-            .order('opened_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (currentRegister) {
-            await supabase
-              .from('cash_movements')
-              .insert([{
-                cash_register_id: currentRegister.id,
-                type: 'sale',
-                category: 'ventas_efectivo',
-                amount: total,
-                description: `Venta #${sale.id.slice(-8)} - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`,
-                reference_id: sale.id,
-                created_by: user?.id
-              }]);
-
-            await supabase
-              .from('cash_registers')
-              .update({
-                total_sales: (currentRegister.total_sales || 0) + total
-              })
-              .eq('id', currentRegister.id);
-          }
-        } catch (error) {
-          console.error('Error updating cash register:', error);
-        }
       }
 
       // Prepare sale data for printing

@@ -213,6 +213,12 @@ export interface Database {
           user_id: string | null;
           opening_amount: number;
           closing_amount: number;
+          expected_closing_amount: number;
+          actual_closing_amount: number;
+          discrepancy_amount: number;
+          discrepancy_reason: string;
+          session_notes: string;
+          last_movement_at: string;
           total_sales: number;
           status: string;
           opened_at: string;
@@ -225,6 +231,12 @@ export interface Database {
           user_id?: string | null;
           opening_amount?: number;
           closing_amount?: number;
+          expected_closing_amount?: number;
+          actual_closing_amount?: number;
+          discrepancy_amount?: number;
+          discrepancy_reason?: string;
+          session_notes?: string;
+          last_movement_at?: string;
           total_sales?: number;
           status?: string;
           opened_at?: string;
@@ -237,6 +249,12 @@ export interface Database {
           user_id?: string | null;
           opening_amount?: number;
           closing_amount?: number;
+          expected_closing_amount?: number;
+          actual_closing_amount?: number;
+          discrepancy_amount?: number;
+          discrepancy_reason?: string;
+          session_notes?: string;
+          last_movement_at?: string;
           total_sales?: number;
           status?: string;
           opened_at?: string;

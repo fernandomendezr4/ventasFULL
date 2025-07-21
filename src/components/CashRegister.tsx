@@ -37,7 +37,7 @@ export default function CashRegister() {
     try {
       setLoading(true);
       
-      // Buscar caja abierta del usuario actual
+      // Buscar caja abierta del usuario actual con mejor query
       const { data: register, error: registerError } = await supabase
         .from('cash_registers')
         .select(`
@@ -46,6 +46,7 @@ export default function CashRegister() {
         `)
         .eq('user_id', user.id)
         .eq('status', 'open')
+        .gte('opened_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Solo últimas 24 horas
         .order('opened_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -61,7 +62,8 @@ export default function CashRegister() {
       }
     } catch (error) {
       console.error('Error loading cash register:', error);
-      alert('Error al cargar caja registradora: ' + (error as Error).message);
+      // No mostrar alert aquí para evitar spam de errores
+      console.warn('No se pudo cargar la caja registradora:', (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -73,7 +75,8 @@ export default function CashRegister() {
         .from('cash_movements')
         .select(`
           *,
-          created_by
+          created_by,
+          created_by_user:users!cash_movements_created_by_fkey (name)
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
@@ -82,6 +85,8 @@ export default function CashRegister() {
       setMovements(data || []);
     } catch (error) {
       console.error('Error loading movements:', error);
+      // Fallback: mostrar movimientos vacíos en lugar de fallar
+      setMovements([]);
     }
   };
 
@@ -95,19 +100,37 @@ export default function CashRegister() {
         return;
       }
 
-      // Validar que el monto no exceda los límites de la base de datos
-      if (amount > 999999999999999.99) {
-        alert('El monto de apertura es demasiado grande. Máximo permitido: $999,999,999,999,999.99');
+      if (amount > 99999999.99) {
+        alert('El monto de apertura es demasiado grande. Máximo permitido: $99,999,999.99');
         return;
       }
 
-      // Preparar datos de inserción con validaciones
+      // Verificar que no haya otra caja abierta para este usuario
+      const { data: existingRegister, error: checkError } = await supabase
+        .from('cash_registers')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'open')
+        .limit(1)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('Error checking existing register:', checkError);
+        throw checkError;
+      }
+
+      if (existingRegister) {
+        alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
+        return;
+      }
+
       const insertData = {
         user_id: user.id,
         opening_amount: amount,
         status: 'open' as const,
-        notes: sessionNotes || '',
-        opened_at: new Date().toISOString()
+        session_notes: sessionNotes || '',
+        opened_at: new Date().toISOString(),
+        last_movement_at: new Date().toISOString()
       };
 
       const { data, error } = await supabase
@@ -126,18 +149,23 @@ export default function CashRegister() {
       setOpeningAmount('');
       setSessionNotes('');
       
-      // Cargar movimientos para la nueva caja
-      await loadMovements(data.id);
-      
-      // Mostrar mensaje de éxito
-      alert('Caja abierta exitosamente');
+      // Esperar un momento para que se procesen los triggers
+      setTimeout(async () => {
+        await loadMovements(data.id);
+        alert('Caja abierta exitosamente');
+      }, 500);
     } catch (error) {
       console.error('Error opening register:', error);
       
-      // Mensaje de error más específico
       const errorMessage = (error as Error).message;
-      if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
-        alert('Error en el sistema al abrir la caja. Por favor, contacta al administrador.');
+      if (errorMessage.includes('ya tiene una caja abierta')) {
+        alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
+      } else if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
+        alert('Error en el sistema al abrir la caja. Intentando nuevamente...');
+        // Reintentar después de un breve delay
+        setTimeout(() => {
+          loadCurrentRegister();
+        }, 1000);
       } else {
         alert('Error al abrir caja: ' + errorMessage);
       }
@@ -159,12 +187,11 @@ export default function CashRegister() {
       const discrepancy = amount - expectedAmount;
 
       // Validar que los montos no excedan los límites de la base de datos
-      if (amount > 999999999999999.99) {
-        alert('El monto de cierre es demasiado grande. Máximo permitido: $999,999,999,999,999.99');
+      if (amount > 99999999.99) {
+        alert('El monto de cierre es demasiado grande. Máximo permitido: $99,999,999.99');
         return;
       }
 
-      // Preparar datos de actualización con validaciones adicionales
       const updateData = {
         closing_amount: amount,
         actual_closing_amount: amount,
@@ -173,7 +200,8 @@ export default function CashRegister() {
         discrepancy_reason: discrepancyReason || '',
         session_notes: sessionNotes || '',
         status: 'closed' as const,
-        closed_at: new Date().toISOString()
+        closed_at: new Date().toISOString(),
+        last_movement_at: new Date().toISOString()
       };
 
       const { error } = await supabase
@@ -240,12 +268,11 @@ export default function CashRegister() {
       }
 
       // Validar que el monto no exceda los límites de la base de datos
-      if (amount > 999999999999999.99) {
-        alert('El monto es demasiado grande. Máximo permitido: $999,999,999,999,999.99');
+      if (amount > 99999999.99) {
+        alert('El monto es demasiado grande. Máximo permitido: $99,999,999.99');
         return;
       }
 
-      // Preparar datos del movimiento con validaciones
       const movementInsertData = {
         cash_register_id: currentRegister.id,
         type: movementData.type,
@@ -263,17 +290,21 @@ export default function CashRegister() {
 
       setShowMovementForm(false);
       setMovementData({ type: 'income', category: '', amount: '', description: '' });
-      await loadMovements(currentRegister.id);
       
-      // Mostrar mensaje de éxito
-      alert(`Movimiento de ${movementData.type === 'income' ? 'ingreso' : 'gasto'} registrado exitosamente`);
+      // Esperar un momento para que se procesen los triggers
+      setTimeout(async () => {
+        await loadMovements(currentRegister.id);
+        alert(`Movimiento de ${movementData.type === 'income' ? 'ingreso' : 'gasto'} registrado exitosamente`);
+      }, 500);
     } catch (error) {
       console.error('Error adding movement:', error);
       
-      // Mensaje de error más específico
       const errorMessage = (error as Error).message;
       if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
-        alert('Error en el sistema al registrar el movimiento. Por favor, contacta al administrador.');
+        alert('Error en el sistema al registrar el movimiento. Intentando nuevamente...');
+        setTimeout(() => {
+          loadMovements(currentRegister.id);
+        }, 1000);
       } else {
         alert('Error al agregar movimiento: ' + errorMessage);
       }

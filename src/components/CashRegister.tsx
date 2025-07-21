@@ -73,7 +73,10 @@ export default function CashRegister() {
     try {
       const { data, error } = await supabase
         .from('cash_movements')
-        .select('*')
+        .select(`
+          *,
+          created_by_user:users!cash_movements_created_by_fkey(name)
+        `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
 
@@ -563,15 +566,8 @@ export default function CashRegister() {
                               {movement.created_by && (
                                 <span className="flex items-center">
                                   <User className="h-3 w-3 mr-1" />
-                                  {(() => {
-                                    // Buscar el nombre del usuario que creó el movimiento
-                                    if (movement.created_by === user?.id) {
-                                      return user.name;
-                                    }
-                                    // Si no es el usuario actual, mostrar "Usuario" genérico
-                                    // En una implementación completa, aquí se haría una consulta para obtener el nombre
-                                    return 'Usuario';
-                                  })()}
+                                  {movement.created_by_user?.name || 
+                                   (movement.created_by === user?.id ? user.name : 'Usuario')}
                                 </span>
                               )}
                             </div>

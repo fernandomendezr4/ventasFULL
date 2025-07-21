@@ -89,13 +89,90 @@ export default function CashRegisterAudit() {
   const loadSessions = async () => {
     try {
       setLoading(true);
+      
+      // Query cash registers with calculated data since the view doesn't exist
       const { data, error } = await supabase
-        .from('cash_register_session_details')
-        .select('*')
+        .from('cash_registers')
+        .select(`
+          id,
+          user_id,
+          opening_amount,
+          closing_amount,
+          expected_closing_amount,
+          actual_closing_amount,
+          discrepancy_amount,
+          status,
+          opened_at,
+          closed_at,
+          session_notes,
+          user:users(name, email)
+        `)
         .order('opened_at', { ascending: false });
 
       if (error) throw error;
-      setSessions(data || []);
+      
+      // Transform data to match expected interface
+      const transformedSessions = await Promise.all((data || []).map(async (register) => {
+        // Get sales count and amount for this register
+        const { data: salesData } = await supabase
+          .from('cash_register_sales')
+          .select('sale_id')
+          .eq('cash_register_id', register.id);
+        
+        // Get installments count and amount for this register
+        const { data: installmentsData } = await supabase
+          .from('cash_register_installments')
+          .select('amount_paid')
+          .eq('cash_register_id', register.id);
+        
+        // Get movements for income and expenses
+        const { data: movementsData } = await supabase
+          .from('cash_movements')
+          .select('type, amount')
+          .eq('cash_register_id', register.id);
+        
+        const totalSalesCount = salesData?.length || 0;
+        const totalInstallmentsCount = installmentsData?.length || 0;
+        const totalInstallmentsAmount = installmentsData?.reduce((sum, inst) => sum + inst.amount_paid, 0) || 0;
+        
+        const movements = movementsData || [];
+        const totalSalesAmount = movements.filter(m => m.type === 'sale').reduce((sum, m) => sum + m.amount, 0);
+        const totalIncome = movements.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0);
+        const totalExpenses = movements.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0);
+        
+        // Calculate session duration
+        const openedAt = new Date(register.opened_at);
+        const closedAt = register.closed_at ? new Date(register.closed_at) : new Date();
+        const sessionDurationMinutes = Math.round((closedAt.getTime() - openedAt.getTime()) / (1000 * 60));
+        
+        // Calculate balance
+        const calculatedBalance = register.opening_amount + totalSalesAmount + totalInstallmentsAmount + totalIncome - totalExpenses;
+        
+        return {
+          id: register.id,
+          cash_register_id: register.id,
+          opened_at: register.opened_at,
+          closed_at: register.closed_at,
+          status: register.status,
+          operator_name: register.user?.name || 'Usuario desconocido',
+          operator_email: register.user?.email || '',
+          opening_amount: register.opening_amount,
+          closing_amount: register.closing_amount || 0,
+          expected_closing_amount: register.expected_closing_amount || calculatedBalance,
+          actual_closing_amount: register.actual_closing_amount || register.closing_amount || 0,
+          discrepancy_amount: register.discrepancy_amount || 0,
+          session_duration_minutes: sessionDurationMinutes,
+          total_sales_count: totalSalesCount,
+          total_sales_amount: totalSalesAmount,
+          total_installments_count: totalInstallmentsCount,
+          total_installments_amount: totalInstallmentsAmount,
+          total_income: totalIncome,
+          total_expenses: totalExpenses,
+          calculated_balance: calculatedBalance
+        };
+      }));
+      
+      setSessions(transformedSessions);
     } catch (error) {
       console.error('Error loading sessions:', error);
     } finally {
@@ -121,13 +198,112 @@ export default function CashRegisterAudit() {
   const generateAuditReport = async (cashRegisterId: string) => {
     try {
       setLoadingReport(true);
-      const { data, error } = await supabase.rpc('generate_cash_register_audit_report', {
-        p_cash_register_id: cashRegisterId,
-        p_include_details: true
-      });
+      
+      // Since the RPC function doesn't exist, build the report manually
+      const { data: registerData, error: registerError } = await supabase
+        .from('cash_registers')
+        .select(`
+          *,
+          user:users(name, email)
+        `)
+        .eq('id', cashRegisterId)
+        .single();
+      
+      if (registerError) throw registerError;
+      
+      // Get sales detail
+      const { data: salesDetail } = await supabase
+        .from('cash_register_sales')
+        .select(`
+          *,
+          sale:sales(
+            id,
+            total_amount,
+            created_at,
+            customer:customers(name)
+          )
+        `)
+        .eq('cash_register_id', cashRegisterId);
+      
+      // Get installments detail
+      const { data: installmentsDetail } = await supabase
+        .from('cash_register_installments')
+        .select(`
+          *,
+          sale:sales(
+            id,
+            customer:customers(name)
+          )
+        `)
+        .eq('cash_register_id', cashRegisterId);
+      
+      // Get movements detail
+      const { data: movementsDetail } = await supabase
+        .from('cash_movements')
+        .select('*')
+        .eq('cash_register_id', cashRegisterId)
+        .neq('type', 'sale'); // Exclude sales as they're shown separately
+      
+      // Calculate totals
+      const totalSalesAmount = salesDetail?.reduce((sum, sale) => sum + (sale.sale?.total_amount || 0), 0) || 0;
+      const totalInstallmentsAmount = installmentsDetail?.reduce((sum, inst) => sum + inst.amount_paid, 0) || 0;
+      const totalIncome = movementsDetail?.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0) || 0;
+      const totalExpenses = movementsDetail?.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0) || 0;
+      
+      const calculatedBalance = registerData.opening_amount + totalSalesAmount + totalInstallmentsAmount + totalIncome - totalExpenses;
+      
+      // Calculate session duration
+      const openedAt = new Date(registerData.opened_at);
+      const closedAt = registerData.closed_at ? new Date(registerData.closed_at) : new Date();
+      const sessionDurationMinutes = Math.round((closedAt.getTime() - openedAt.getTime()) / (1000 * 60));
+      
+      const auditData = {
+        session_info: {
+          cash_register_id: registerData.id,
+          opened_at: registerData.opened_at,
+          closed_at: registerData.closed_at,
+          status: registerData.status,
+          operator_name: registerData.user?.name || 'Usuario desconocido',
+          opening_amount: registerData.opening_amount,
+          closing_amount: registerData.closing_amount || 0,
+          calculated_balance: calculatedBalance,
+          discrepancy_amount: registerData.discrepancy_amount || 0,
+          session_duration_minutes: sessionDurationMinutes,
+          total_sales_count: salesDetail?.length || 0,
+          total_sales_amount: totalSalesAmount,
+          total_installments_count: installmentsDetail?.length || 0,
+          total_installments_amount: totalInstallmentsAmount,
+          total_income: totalIncome,
+          total_expenses: totalExpenses
+        },
+        sales_detail: salesDetail?.map(sale => ({
+          sale_number: sale.sale?.id?.slice(-8) || 'N/A',
+          customer_name: sale.sale?.customer?.name || 'Sin cliente',
+          payment_type: 'cash',
+          items_count: 1, // We don't have this data easily available
+          total_amount: sale.sale?.total_amount || 0,
+          created_at: sale.created_at
+        })) || [],
+        installments_detail: installmentsDetail?.map(inst => ({
+          sale_number: inst.sale?.id?.slice(-8) || 'N/A',
+          customer_name: inst.sale?.customer?.name || 'Sin cliente',
+          payment_method: inst.payment_method,
+          amount_paid: inst.amount_paid,
+          payment_date: inst.created_at
+        })) || [],
+        movements_detail: movementsDetail?.map(movement => ({
+          type: movement.type,
+          category: movement.category,
+          description: movement.description,
+          amount: movement.amount,
+          created_by_name: 'Usuario', // We don't have this relationship
+          created_at: movement.created_at
+        })) || [],
+        audit_trail: [],
+        generated_at: new Date().toISOString()
+      };
 
-      if (error) throw error;
-      setAuditReport(data);
+      setAuditReport(auditData);
       setSelectedSession(cashRegisterId);
       setShowDetailModal(true);
     } catch (error) {

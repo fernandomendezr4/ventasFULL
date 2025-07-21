@@ -101,14 +101,18 @@ export default function CashRegister() {
         return;
       }
 
+      // Preparar datos de inserción con validaciones
+      const insertData = {
+        user_id: user.id,
+        opening_amount: amount,
+        status: 'open' as const,
+        notes: sessionNotes || '',
+        opened_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('cash_registers')
-        .insert([{
-          user_id: user.id,
-          opening_amount: amount,
-          status: 'open',
-          notes: sessionNotes
-        }])
+        .insert([insertData])
         .select(`
           *,
           user:users (name, email)
@@ -124,9 +128,19 @@ export default function CashRegister() {
       
       // Cargar movimientos para la nueva caja
       await loadMovements(data.id);
+      
+      // Mostrar mensaje de éxito
+      alert('Caja abierta exitosamente');
     } catch (error) {
       console.error('Error opening register:', error);
-      alert('Error al abrir caja: ' + (error as Error).message);
+      
+      // Mensaje de error más específico
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
+        alert('Error en el sistema al abrir la caja. Por favor, contacta al administrador.');
+      } else {
+        alert('Error al abrir caja: ' + errorMessage);
+      }
     }
   };
 
@@ -150,39 +164,46 @@ export default function CashRegister() {
         return;
       }
 
+      // Preparar datos de actualización con validaciones adicionales
+      const updateData = {
+        closing_amount: amount,
+        actual_closing_amount: amount,
+        expected_closing_amount: expectedAmount,
+        discrepancy_amount: discrepancy,
+        discrepancy_reason: discrepancyReason || '',
+        session_notes: sessionNotes || '',
+        status: 'closed' as const,
+        closed_at: new Date().toISOString()
+      };
+
       const { error } = await supabase
         .from('cash_registers')
-        .update({
-          closing_amount: amount,
-          actual_closing_amount: amount,
-          expected_closing_amount: expectedAmount,
-          discrepancy_amount: discrepancy,
-          discrepancy_reason: discrepancyReason,
-          session_notes: sessionNotes,
-          status: 'closed',
-          closed_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', currentRegister.id);
 
       if (error) throw error;
 
       // Si hay discrepancia significativa, registrarla
       if (Math.abs(discrepancy) > 100) {
-        const { error: discrepancyError } = await supabase
-          .from('cash_register_discrepancies')
-          .insert([{
-            cash_register_id: currentRegister.id,
-            discrepancy_type: discrepancy > 0 ? 'overage' : 'shortage',
-            expected_amount: expectedAmount,
-            actual_amount: amount,
-            difference_amount: Math.abs(discrepancy),
-            reason: discrepancyReason,
-            created_by: user?.id
-          }]);
-        
-        if (discrepancyError) {
-          console.error('Error creating discrepancy record:', discrepancyError);
-          // No fallar el cierre por esto, solo registrar el error
+        try {
+          const { error: discrepancyError } = await supabase
+            .from('cash_register_discrepancies')
+            .insert([{
+              cash_register_id: currentRegister.id,
+              discrepancy_type: discrepancy > 0 ? 'overage' : 'shortage',
+              expected_amount: expectedAmount,
+              actual_amount: amount,
+              difference_amount: Math.abs(discrepancy),
+              reason: discrepancyReason || 'Sin razón especificada',
+              created_by: user?.id
+            }]);
+          
+          if (discrepancyError) {
+            console.error('Error creating discrepancy record:', discrepancyError);
+            // No fallar el cierre por esto, solo registrar el error
+          }
+        } catch (discrepancyErr) {
+          console.error('Error al registrar discrepancia:', discrepancyErr);
         }
       }
 
@@ -192,9 +213,19 @@ export default function CashRegister() {
       setClosingAmount('');
       setSessionNotes('');
       setDiscrepancyReason('');
+      
+      // Mostrar mensaje de éxito
+      alert('Caja cerrada exitosamente');
     } catch (error) {
       console.error('Error closing register:', error);
-      alert('Error al cerrar caja: ' + (error as Error).message);
+      
+      // Mensaje de error más específico
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
+        alert('Error en el sistema al cerrar la caja. Por favor, contacta al administrador.');
+      } else {
+        alert('Error al cerrar caja: ' + errorMessage);
+      }
     }
   };
 
@@ -214,25 +245,38 @@ export default function CashRegister() {
         return;
       }
 
+      // Preparar datos del movimiento con validaciones
+      const movementInsertData = {
+        cash_register_id: currentRegister.id,
+        type: movementData.type,
+        category: movementData.category || (movementData.type === 'income' ? 'otros_ingresos' : 'otros_gastos'),
+        amount: amount,
+        description: movementData.description.trim(),
+        created_by: user?.id
+      };
+
       const { error } = await supabase
         .from('cash_movements')
-        .insert([{
-          cash_register_id: currentRegister.id,
-          type: movementData.type,
-          category: movementData.category || (movementData.type === 'income' ? 'otros_ingresos' : 'otros_gastos'),
-          amount: amount,
-          description: movementData.description,
-          created_by: user?.id
-        }]);
+        .insert([movementInsertData]);
 
       if (error) throw error;
 
       setShowMovementForm(false);
       setMovementData({ type: 'income', category: '', amount: '', description: '' });
       await loadMovements(currentRegister.id);
+      
+      // Mostrar mensaje de éxito
+      alert(`Movimiento de ${movementData.type === 'income' ? 'ingreso' : 'gasto'} registrado exitosamente`);
     } catch (error) {
       console.error('Error adding movement:', error);
-      alert('Error al agregar movimiento: ' + (error as Error).message);
+      
+      // Mensaje de error más específico
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
+        alert('Error en el sistema al registrar el movimiento. Por favor, contacta al administrador.');
+      } else {
+        alert('Error al agregar movimiento: ' + errorMessage);
+      }
     }
   };
 

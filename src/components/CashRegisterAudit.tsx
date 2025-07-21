@@ -247,7 +247,7 @@ export default function CashRegisterAudit() {
     // Filter by search term
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      const sessionId = session.id.slice(-8);
+      const sessionId = String(session.id || '').slice(-8);
       const operatorName = session.operator_name?.toLowerCase() || '';
       
       return sessionId.includes(searchTerm) || operatorName.includes(searchLower);

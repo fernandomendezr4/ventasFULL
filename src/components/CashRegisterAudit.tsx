@@ -149,7 +149,7 @@ export default function CashRegisterAudit() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `auditoria_caja_${session.id.slice(-8)}_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `auditoria_caja_${session.id?.slice(-8) || 'unknown'}_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -422,14 +422,14 @@ export default function CashRegisterAudit() {
           </div>
         ) : (
           <div className="divide-y divide-slate-200">
-            {filteredSessions.map((session) => (
+            {filteredSessions.filter(session => session && session.id).map((session) => (
               <div key={session.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-4">
                       <div>
                         <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                          Caja #{session.id.slice(-8)}
+                          Caja #{session.id?.slice(-8) || 'N/A'}
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(session.status)}`}>
                             {session.status === 'open' ? (
                               <>
@@ -528,7 +528,7 @@ export default function CashRegisterAudit() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-semibold text-slate-900">
-                    Reporte de Auditoría - Caja #{auditReport.session_info.cash_register_id.slice(-8)}
+                    Reporte de Auditoría - Caja #{auditReport.session_info.cash_register_id?.slice(-8) || 'N/A'}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
                     Operador: {auditReport.session_info.operator_name} • 

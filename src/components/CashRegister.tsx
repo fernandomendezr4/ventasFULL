@@ -563,7 +563,15 @@ export default function CashRegister() {
                               {movement.created_by && (
                                 <span className="flex items-center">
                                   <User className="h-3 w-3 mr-1" />
-                                  Usuario: {movement.created_by.slice(0, 8)}
+                                  {(() => {
+                                    // Buscar el nombre del usuario que creó el movimiento
+                                    if (movement.created_by === user?.id) {
+                                      return user.name;
+                                    }
+                                    // Si no es el usuario actual, mostrar "Usuario" genérico
+                                    // En una implementación completa, aquí se haría una consulta para obtener el nombre
+                                    return 'Usuario';
+                                  })()}
                                 </span>
                               )}
                             </div>

@@ -81,10 +81,7 @@ export default function CashRegister() {
       
       const { data, error } = await supabase
         .from('cash_movements')
-        .select(`
-          *,
-          created_by_user:users!cash_movements_created_by_fkey(name)
-        `)
+        .select('*')
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
 
@@ -603,8 +600,7 @@ export default function CashRegister() {
                             <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
                               <span className="flex items-center">
                                 <Clock className="h-3 w-3 mr-1" />
-                                {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
+                                {movement.created_by === user?.id ? user.name : 'Usuario'}
                               {movement.created_by && (
                                 <span className="flex items-center">
                                   <User className="h-3 w-3 mr-1" />

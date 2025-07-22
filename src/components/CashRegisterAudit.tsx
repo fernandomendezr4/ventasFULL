@@ -199,7 +199,7 @@ export default function CashRegisterAudit() {
           await supabase
             .from('cash_register_installments')
             .select('installment_id')
-            .eq('cash_register_id', registerId)
+      const userIds = [...new Set(movements?.map(m => m.created_by).filter(Boolean) || [])];
             .then(({ data }) => data?.map(item => item.installment_id) || [])
         );
 
@@ -211,7 +211,7 @@ export default function CashRegisterAudit() {
         .select(`
           *,
           users!inner(name)
-        `)
+        .select('*')
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
 

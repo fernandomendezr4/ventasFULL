@@ -213,7 +213,16 @@ export default function CashRegisterAudit() {
       // Get movements detail
       const { data: movementsDetail } = await supabase
         .from('cash_movements')
-        .select('*')
+        .select(`
+          id,
+          type,
+          category,
+          amount,
+          description,
+          reference_id,
+          created_by,
+          created_at
+        `)
         .eq('cash_register_id', cashRegisterId)
         .order('created_at', { ascending: false });
       

@@ -44,7 +44,7 @@ export default function CashRegister() {
         .from('cash_registers')
         .select(`
           *,
-          user:users!cash_registers_user_id_fkey (name, email)
+          user:users (name, email)
         `)
         .eq('user_id', user.id)
         .eq('status', 'open')
@@ -152,7 +152,7 @@ export default function CashRegister() {
         .insert([insertData])
         .select(`
           *,
-          user:users!cash_registers_user_id_fkey (name, email)
+          user:users (name, email)
         `)
         .single();
 
@@ -418,6 +418,12 @@ export default function CashRegister() {
     }
   };
 
+  const getUserName = (createdBy: string | null | undefined) => {
+    if (!createdBy) return 'Sistema';
+    if (createdBy === user?.id) return user.name || 'Tú';
+    return 'Usuario';
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -602,13 +608,10 @@ export default function CashRegister() {
                                 <Clock className="h-3 w-3 mr-1" />
                                 {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                               </span>
-                              {movement.created_by && (
-                                <span className="flex items-center">
-                                  <User className="h-3 w-3 mr-1" />
-                                  {movement.created_by_user?.name || 
-                                   (movement.created_by === user?.id ? user.name : 'Usuario')}
-                                </span>
-                              )}
+                              <span className="flex items-center">
+                                <User className="h-3 w-3 mr-1" />
+                                {getUserName(movement.created_by)}
+                              </span>
                             </div>
                           </div>
                         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2, UserPlus, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2, UserPlus, AlertTriangle, Calculator } from 'lucide-react';
 import { Product, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,6 +32,8 @@ export default function NewSale() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showCustomerSelectionModal, setShowCustomerSelectionModal] = useState(false);
   const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
+  const [loadingCashRegister, setLoadingCashRegister] = useState(true);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(DEFAULT_PAYMENT_METHODS);
@@ -54,7 +56,38 @@ export default function NewSale() {
     loadProducts();
     loadCustomers();
     loadPaymentMethods();
+    checkCashRegisterStatus();
   }, []);
+
+  const checkCashRegisterStatus = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingCashRegister(true);
+      
+      // Buscar caja abierta del usuario actual
+      const { data: register, error } = await supabase
+        .from('cash_registers')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking cash register:', error);
+        throw error;
+      }
+
+      setCurrentCashRegister(register);
+    } catch (error) {
+      console.error('Error checking cash register status:', error);
+      setCurrentCashRegister(null);
+    } finally {
+      setLoadingCashRegister(false);
+    }
+  };
 
   const loadPaymentMethods = () => {
     try {
@@ -214,6 +247,12 @@ export default function NewSale() {
   };
 
   const processSale = async () => {
+    // Verificar que hay caja abierta antes de procesar la venta
+    if (!currentCashRegister) {
+      alert('Debe abrir una caja registradora antes de realizar ventas. Vaya a la sección "Caja" para abrir una caja.');
+      return;
+    }
+
     if (cart.length === 0) {
       alert('Agrega productos al carrito');
       return;
@@ -245,6 +284,12 @@ export default function NewSale() {
   };
 
   const processActualSale = async () => {
+    // Verificar nuevamente que hay caja abierta
+    if (!currentCashRegister) {
+      alert('Debe abrir una caja registradora antes de realizar ventas. Vaya a la sección "Caja" para abrir una caja.');
+      return;
+    }
+
     // Validar que si es venta por abonos, debe tener cliente seleccionado
     if (paymentType === 'installment' && !selectedCustomer) {
       alert('Para ventas por abonos debe seleccionar un cliente');
@@ -416,11 +461,74 @@ export default function NewSale() {
         return <CreditCard className="h-5 w-5" />;
     }
   };
+  // Si está cargando el estado de la caja, mostrar loading
+  if (loadingCashRegister) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Verificando estado de caja registradora...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si no hay caja abierta, mostrar mensaje de error
+  if (!currentCashRegister) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-8">
+            <AlertTriangle className="h-16 w-16 text-red-600 mx-auto mb-6" />
+            <h3 className="text-xl font-semibold text-red-900 mb-4">Caja Registradora Requerida</h3>
+            <p className="text-red-700 mb-6 leading-relaxed">
+              Para realizar ventas, primero debe abrir una caja registradora. 
+              Esto es necesario para registrar correctamente todos los movimientos de dinero.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.hash = '#cash-register'}
+                className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center mx-auto"
+              >
+                <Calculator className="h-5 w-5 mr-2" />
+                Ir a Caja Registradora
+              </button>
+              <button
+                onClick={checkCashRegisterStatus}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
+              >
+                Verificar Estado de Caja
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
+        <div className="flex items-center gap-4">
+          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <div className="flex items-center text-sm">
+              <Calculator className="h-4 w-4 text-green-600 mr-2" />
+              <span className="text-green-700 font-medium">
+                Caja Abierta: #{currentCashRegister.id.slice(-8)}
+              </span>
+            </div>
+            <p className="text-xs text-green-600 mt-1">
+              Apertura: {formatCurrency(currentCashRegister.opening_amount)}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

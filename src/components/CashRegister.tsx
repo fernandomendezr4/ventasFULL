@@ -458,13 +458,15 @@ export default function CashRegister() {
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Caja Registradora</h2>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowAuditView(true)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Ver Auditoría
-          </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={() => setShowAuditView(true)}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Ver Auditoría
+            </button>
+          )}
           {!currentRegister && (
             <button
               onClick={() => setShowOpenForm(true)}

@@ -16,11 +16,20 @@ import {
   BarChart3,
   Package,
   CreditCard,
-  Activity
+  Activity,
+  Edit2,
+  Trash2,
+  Save,
+  X
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
+import FormattedNumberInput from './FormattedNumberInput';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 interface AuditReport {
   session_info: {
@@ -69,6 +78,8 @@ interface CashRegisterSession {
 
 export default function CashRegisterAudit() {
   const { user } = useAuth();
+  const { notification, showSuccess, showError, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [sessions, setSessions] = useState<CashRegisterSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
@@ -80,6 +91,21 @@ export default function CashRegisterAudit() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [operators, setOperators] = useState<any[]>([]);
+  const [editingMovement, setEditingMovement] = useState<any>(null);
+  const [editingInstallment, setEditingInstallment] = useState<any>(null);
+  const [showEditMovementModal, setShowEditMovementModal] = useState(false);
+  const [showEditInstallmentModal, setShowEditInstallmentModal] = useState(false);
+  const [movementFormData, setMovementFormData] = useState({
+    type: '',
+    category: '',
+    amount: '',
+    description: ''
+  });
+  const [installmentFormData, setInstallmentFormData] = useState({
+    amount_paid: '',
+    payment_method: '',
+    notes: ''
+  });
 
   useEffect(() => {
     loadSessions();
@@ -378,6 +404,188 @@ export default function CashRegisterAudit() {
     `);
     
     printWindow.document.close();
+  };
+
+  const handleEditMovement = (movement: any) => {
+    setEditingMovement(movement);
+    setMovementFormData({
+      type: movement.type,
+      category: movement.category,
+      amount: movement.amount.toString(),
+      description: movement.description
+    });
+    setShowEditMovementModal(true);
+  };
+
+  const handleEditInstallment = (installment: any) => {
+    setEditingInstallment(installment);
+    setInstallmentFormData({
+      amount_paid: installment.amount_paid.toString(),
+      payment_method: installment.payment_method,
+      notes: installment.notes || ''
+    });
+    setShowEditInstallmentModal(true);
+  };
+
+  const handleUpdateMovement = async () => {
+    if (!editingMovement) return;
+
+    try {
+      const amount = parseFloat(movementFormData.amount);
+      if (amount <= 0) {
+        showError('Monto Inválido', 'El monto debe ser mayor a cero');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('cash_movements')
+        .update({
+          type: movementFormData.type,
+          category: movementFormData.category,
+          amount: amount,
+          description: movementFormData.description
+        })
+        .eq('id', editingMovement.id);
+
+      if (error) throw error;
+
+      setShowEditMovementModal(false);
+      setEditingMovement(null);
+      
+      // Regenerar el reporte
+      if (selectedSession) {
+        await generateAuditReport(selectedSession);
+      }
+      
+      showSuccess(
+        '¡Movimiento Actualizado!',
+        'El movimiento ha sido actualizado exitosamente'
+      );
+    } catch (error) {
+      console.error('Error updating movement:', error);
+      showError(
+        'Error al Actualizar',
+        'No se pudo actualizar el movimiento: ' + (error as Error).message
+      );
+    }
+  };
+
+  const handleUpdateInstallment = async () => {
+    if (!editingInstallment) return;
+
+    try {
+      const amount = parseFloat(installmentFormData.amount_paid);
+      if (amount <= 0) {
+        showError('Monto Inválido', 'El monto debe ser mayor a cero');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('payment_installments')
+        .update({
+          amount_paid: amount,
+          payment_method: installmentFormData.payment_method,
+          notes: installmentFormData.notes
+        })
+        .eq('id', editingInstallment.id);
+
+      if (error) throw error;
+
+      setShowEditInstallmentModal(false);
+      setEditingInstallment(null);
+      
+      // Regenerar el reporte
+      if (selectedSession) {
+        await generateAuditReport(selectedSession);
+      }
+      
+      showSuccess(
+        '¡Abono Actualizado!',
+        'El abono ha sido actualizado exitosamente'
+      );
+    } catch (error) {
+      console.error('Error updating installment:', error);
+      showError(
+        'Error al Actualizar',
+        'No se pudo actualizar el abono: ' + (error as Error).message
+      );
+    }
+  };
+
+  const handleDeleteMovement = (movement: any) => {
+    showConfirmation(
+      'Eliminar Movimiento',
+      `¿Estás seguro de que quieres eliminar este movimiento de ${movement.type === 'income' ? 'ingreso' : 'gasto'} por ${formatCurrency(movement.amount)}? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('cash_movements')
+            .delete()
+            .eq('id', movement.id);
+
+          if (error) throw error;
+
+          // Regenerar el reporte
+          if (selectedSession) {
+            await generateAuditReport(selectedSession);
+          }
+          
+          showSuccess(
+            '¡Movimiento Eliminado!',
+            'El movimiento ha sido eliminado exitosamente'
+          );
+        } catch (error) {
+          console.error('Error deleting movement:', error);
+          showError(
+            'Error al Eliminar',
+            'No se pudo eliminar el movimiento: ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
+      }
+    );
+  };
+
+  const handleDeleteInstallment = (installment: any) => {
+    showConfirmation(
+      'Eliminar Abono',
+      `¿Estás seguro de que quieres eliminar este abono por ${formatCurrency(installment.amount_paid)}? Esta acción no se puede deshacer y afectará el balance de la venta.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('payment_installments')
+            .delete()
+            .eq('id', installment.id);
+
+          if (error) throw error;
+
+          // Regenerar el reporte
+          if (selectedSession) {
+            await generateAuditReport(selectedSession);
+          }
+          
+          showSuccess(
+            '¡Abono Eliminado!',
+            'El abono ha sido eliminado exitosamente'
+          );
+        } catch (error) {
+          console.error('Error deleting installment:', error);
+          showError(
+            'Error al Eliminar',
+            'No se pudo eliminar el abono: ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
+      }
+    );
   };
 
   const filteredSessions = sessions.filter(session => {
@@ -854,6 +1062,9 @@ export default function CashRegisterAudit() {
                             <th className="text-right p-3 border">Monto</th>
                             <th className="text-left p-3 border">Usuario</th>
                             <th className="text-left p-3 border">Fecha</th>
+                            {user?.role === 'admin' && (
+                              <th className="text-center p-3 border">Acciones</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -871,6 +1082,26 @@ export default function CashRegisterAudit() {
                               <td className="p-3 border text-right">{formatCurrency(movement.amount)}</td>
                               <td className="p-3 border">{movement.created_by_name || 'Sistema'}</td>
                               <td className="p-3 border">{new Date(movement.created_at).toLocaleTimeString('es-ES')}</td>
+                              {user?.role === 'admin' && (
+                                <td className="p-3 border text-center">
+                                  <div className="flex gap-1 justify-center">
+                                    <button
+                                      onClick={() => handleEditMovement(movement)}
+                                      className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                                      title="Editar movimiento"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteMovement(movement)}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                                      title="Eliminar movimiento"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
@@ -892,6 +1123,213 @@ export default function CashRegisterAudit() {
           </div>
         </div>
       )}
+
+      {/* Edit Movement Modal */}
+      {showEditMovementModal && editingMovement && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Editar Movimiento
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Modifica los datos del movimiento de caja
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Tipo de Movimiento
+                </label>
+                <select
+                  value={movementFormData.type}
+                  onChange={(e) => setMovementFormData({ ...movementFormData, type: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="income">Ingreso</option>
+                  <option value="expense">Gasto</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Categoría
+                </label>
+                <select
+                  value={movementFormData.category}
+                  onChange={(e) => setMovementFormData({ ...movementFormData, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Seleccionar categoría</option>
+                  {movementFormData.type === 'income' ? (
+                    <>
+                      <option value="otros_ingresos">Otros Ingresos</option>
+                      <option value="devolucion_proveedor">Devolución Proveedor</option>
+                      <option value="ajuste_inventario">Ajuste Inventario</option>
+                      <option value="prestamo">Préstamo</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="otros_gastos">Otros Gastos</option>
+                      <option value="compra_productos">Compra Productos</option>
+                      <option value="servicios">Servicios</option>
+                      <option value="transporte">Transporte</option>
+                      <option value="mantenimiento">Mantenimiento</option>
+                      <option value="devolucion_cliente">Devolución Cliente</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Monto
+                </label>
+                <FormattedNumberInput
+                  value={movementFormData.amount}
+                  onChange={(value) => setMovementFormData({ ...movementFormData, amount: value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min="0"
+                  max="9999999"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Descripción
+                </label>
+                <textarea
+                  value={movementFormData.description}
+                  onChange={(e) => setMovementFormData({ ...movementFormData, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleUpdateMovement}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <Save className="h-4 w-4" />
+                Guardar Cambios
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditMovementModal(false);
+                  setEditingMovement(null);
+                }}
+                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Installment Modal */}
+      {showEditInstallmentModal && editingInstallment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Editar Abono
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Modifica los datos del abono registrado
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Monto del Abono
+                </label>
+                <FormattedNumberInput
+                  value={installmentFormData.amount_paid}
+                  onChange={(value) => setInstallmentFormData({ ...installmentFormData, amount_paid: value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min="0"
+                  max="9999999"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Método de Pago
+                </label>
+                <select
+                  value={installmentFormData.payment_method}
+                  onChange={(e) => setInstallmentFormData({ ...installmentFormData, payment_method: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="other">Otro</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Notas
+                </label>
+                <textarea
+                  value={installmentFormData.notes}
+                  onChange={(e) => setInstallmentFormData({ ...installmentFormData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Notas sobre este abono..."
+                />
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleUpdateInstallment}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <Save className="h-4 w-4" />
+                Guardar Cambios
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditInstallmentModal(false);
+                  setEditingInstallment(null);
+                }}
+                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

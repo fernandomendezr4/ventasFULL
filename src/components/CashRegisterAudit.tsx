@@ -105,7 +105,7 @@ export default function CashRegisterAudit() {
           opened_at,
           closed_at,
           session_notes,
-          user:users!cash_registers_user_id_fkey(name, email)
+          user:users(name, email)
         `)
         .order('opened_at', { ascending: false });
 
@@ -121,35 +121,6 @@ export default function CashRegisterAudit() {
         let totalExpenses = 0;
         
         try {
-          // Get sales count and amount for this register - use cash_register_sales if it exists
-          const { data: salesData, error: salesError } = await supabase
-            .from('cash_register_sales')
-            .select('sale_id')
-            .eq('cash_register_id', register.id);
-          
-          if (!salesError && salesData) {
-            totalSalesCount = salesData.length;
-          }
-        } catch (error) {
-          console.warn('Could not load sales data for register:', register.id);
-        }
-        
-        try {
-          // Get installments count and amount for this register
-          const { data: installmentsData, error: installmentsError } = await supabase
-            .from('cash_register_installments')
-            .select('amount_paid')
-            .eq('cash_register_id', register.id);
-          
-          if (!installmentsError && installmentsData) {
-            totalInstallmentsCount = installmentsData.length;
-            totalInstallmentsAmount = installmentsData.reduce((sum, inst) => sum + inst.amount_paid, 0);
-          }
-        } catch (error) {
-          console.warn('Could not load installments data for register:', register.id);
-        }
-        
-        try {
           // Get movements for income and expenses
           const { data: movementsData, error: movementsError } = await supabase
             .from('cash_movements')
@@ -159,6 +130,7 @@ export default function CashRegisterAudit() {
           if (!movementsError && movementsData) {
             const movements = movementsData;
             totalSalesAmount = movements.filter(m => m.type === 'sale').reduce((sum, m) => sum + m.amount, 0);
+            totalSalesCount = movements.filter(m => m.type === 'sale').length;
             totalIncome = movements.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0);
             totalExpenses = movements.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0);
           }
@@ -172,7 +144,7 @@ export default function CashRegisterAudit() {
         const sessionDurationMinutes = Math.round((closedAt.getTime() - openedAt.getTime()) / (1000 * 60));
         
         // Calculate balance
-        const calculatedBalance = register.opening_amount + totalSalesAmount + totalInstallmentsAmount + totalIncome - totalExpenses;
+        const calculatedBalance = register.opening_amount + totalSalesAmount + totalIncome - totalExpenses;
         
         return {
           id: register.id,
@@ -183,15 +155,15 @@ export default function CashRegisterAudit() {
           operator_name: register.user?.name || 'Usuario desconocido',
           operator_email: register.user?.email || '',
           opening_amount: register.opening_amount,
-          closing_amount: register.closing_amount || 0,
+          closing_amount: register.actual_closing_amount || register.closing_amount || 0,
           expected_closing_amount: register.expected_closing_amount || calculatedBalance,
-          actual_closing_amount: register.actual_closing_amount || register.closing_amount || 0,
+          actual_closing_amount: register.actual_closing_amount || 0,
           discrepancy_amount: register.discrepancy_amount || 0,
           session_duration_minutes: sessionDurationMinutes,
           total_sales_count: totalSalesCount,
           total_sales_amount: totalSalesAmount,
-          total_installments_count: totalInstallmentsCount,
-          total_installments_amount: totalInstallmentsAmount,
+          total_installments_count: 0,
+          total_installments_amount: 0,
           total_income: totalIncome,
           total_expenses: totalExpenses,
           calculated_balance: calculatedBalance
@@ -201,15 +173,7 @@ export default function CashRegisterAudit() {
       setSessions(transformedSessions);
     } catch (error) {
       console.error('Error loading sessions:', error);
-      
-      // Handle network errors gracefully
-      const errorMessage = (error as Error).message;
-      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-        console.warn('Network error loading sessions. Please check your connection and Supabase configuration.');
-        setSessions([]); // Show empty state instead of crashing
-      } else {
-        console.error('Database error:', errorMessage);
-      }
+      setSessions([]);
     } finally {
       setLoading(false);
     }
@@ -239,53 +203,27 @@ export default function CashRegisterAudit() {
         .from('cash_registers')
         .select(`
           *,
-          user:users(name, email)
+          user:users!cash_registers_user_id_fkey(name, email)
         `)
         .eq('id', cashRegisterId)
         .single();
       
       if (registerError) throw registerError;
       
-      // Get sales detail
-      const { data: salesDetail } = await supabase
-        .from('cash_register_sales')
-        .select(`
-          *,
-          sale:sales!cash_register_sales_sale_id_fkey(
-            id,
-            total_amount,
-            created_at,
-            customer:customers!sales_customer_id_fkey(name)
-          )
-        `)
-        .eq('cash_register_id', cashRegisterId);
-      
-      // Get installments detail
-      const { data: installmentsDetail } = await supabase
-        .from('cash_register_installments')
-        .select(`
-          *,
-          sale:sales!cash_register_installments_sale_id_fkey(
-            id,
-            customer:customers!sales_customer_id_fkey(name)
-          )
-        `)
-        .eq('cash_register_id', cashRegisterId);
-      
       // Get movements detail
       const { data: movementsDetail } = await supabase
         .from('cash_movements')
         .select('*')
         .eq('cash_register_id', cashRegisterId)
-        .neq('type', 'sale'); // Exclude sales as they're shown separately
+        .order('created_at', { ascending: false });
       
       // Calculate totals
-      const totalSalesAmount = salesDetail?.reduce((sum, sale) => sum + (sale.sale?.total_amount || 0), 0) || 0;
-      const totalInstallmentsAmount = installmentsDetail?.reduce((sum, inst) => sum + inst.amount_paid, 0) || 0;
+      const salesMovements = movementsDetail?.filter(m => m.type === 'sale') || [];
+      const totalSalesAmount = salesMovements.reduce((sum, m) => sum + m.amount, 0);
       const totalIncome = movementsDetail?.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0) || 0;
       const totalExpenses = movementsDetail?.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0) || 0;
       
-      const calculatedBalance = registerData.opening_amount + totalSalesAmount + totalInstallmentsAmount + totalIncome - totalExpenses;
+      const calculatedBalance = registerData.opening_amount + totalSalesAmount + totalIncome - totalExpenses;
       
       // Calculate session duration
       const openedAt = new Date(registerData.opened_at);
@@ -300,40 +238,34 @@ export default function CashRegisterAudit() {
           status: registerData.status,
           operator_name: registerData.user?.name || 'Usuario desconocido',
           opening_amount: registerData.opening_amount,
-          closing_amount: registerData.closing_amount || 0,
+          closing_amount: registerData.actual_closing_amount || 0,
           calculated_balance: calculatedBalance,
           discrepancy_amount: registerData.discrepancy_amount || 0,
           session_duration_minutes: sessionDurationMinutes,
-          total_sales_count: salesDetail?.length || 0,
+          total_sales_count: salesMovements.length,
           total_sales_amount: totalSalesAmount,
-          total_installments_count: installmentsDetail?.length || 0,
-          total_installments_amount: totalInstallmentsAmount,
+          total_installments_count: 0,
+          total_installments_amount: 0,
           total_income: totalIncome,
           total_expenses: totalExpenses
         },
-        sales_detail: salesDetail?.map(sale => ({
-          sale_number: sale.sale?.id?.slice(-8) || 'N/A',
-          customer_name: sale.sale?.customer?.name || 'Sin cliente',
+        sales_detail: salesMovements.map(movement => ({
+          sale_number: movement.reference_id?.slice(-8) || 'N/A',
+          customer_name: 'Cliente',
           payment_type: 'cash',
-          items_count: 1, // We don't have this data easily available
-          total_amount: sale.sale?.total_amount || 0,
-          created_at: sale.created_at
-        })) || [],
-        installments_detail: installmentsDetail?.map(inst => ({
-          sale_number: inst.sale?.id?.slice(-8) || 'N/A',
-          customer_name: inst.sale?.customer?.name || 'Sin cliente',
-          payment_method: inst.payment_method,
-          amount_paid: inst.amount_paid,
-          payment_date: inst.created_at
-        })) || [],
+          items_count: 1,
+          total_amount: movement.amount,
+          created_at: movement.created_at
+        })),
+        installments_detail: [],
         movements_detail: movementsDetail?.map(movement => ({
           type: movement.type,
           category: movement.category,
           description: movement.description,
           amount: movement.amount,
-          created_by_name: 'Usuario', // We don't have this relationship
+          created_by_name: 'Usuario',
           created_at: movement.created_at
-        })) || [],
+        })).filter(m => m.type !== 'sale') || [],
         audit_trail: [],
         generated_at: new Date().toISOString()
       };

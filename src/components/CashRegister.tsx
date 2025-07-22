@@ -42,11 +42,10 @@ export default function CashRegister() {
         .from('cash_registers')
         .select(`
           *,
-          user:users (name, email)
+          user:users!cash_registers_user_id_fkey (name, email)
         `)
         .eq('user_id', user.id)
         .eq('status', 'open')
-        .gte('opened_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Solo últimas 24 horas
         .order('opened_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -62,8 +61,8 @@ export default function CashRegister() {
       }
     } catch (error) {
       console.error('Error loading cash register:', error);
-      // No mostrar alert aquí para evitar spam de errores
-      console.warn('No se pudo cargar la caja registradora:', (error as Error).message);
+      setCurrentRegister(null);
+      setMovements([]);
     } finally {
       setLoading(false);
     }
@@ -75,7 +74,7 @@ export default function CashRegister() {
         .from('cash_movements')
         .select(`
           *,
-          created_by_user:users(name)
+          created_by_user:users!cash_movements_created_by_fkey(name)
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
@@ -84,30 +83,7 @@ export default function CashRegister() {
       setMovements(data || []);
     } catch (error) {
       console.error('Error loading movements:', error);
-      
-      // If foreign key error, try loading without user data
-      const errorMessage = (error as Error).message;
-      if (errorMessage.includes('Could not find a relationship')) {
-        console.warn('Loading movements without user data due to missing foreign key');
-        try {
-          const { data: movementsOnly, error: simpleError } = await supabase
-            .from('cash_movements')
-            .select('*')
-            .eq('cash_register_id', registerId)
-            .order('created_at', { ascending: false });
-          
-          if (simpleError) throw simpleError;
-          setMovements(movementsOnly || []);
-        } catch (fallbackError) {
-          console.error('Error loading movements (fallback):', fallbackError);
-          setMovements([]);
-        }
-      } else {
-        setMovements([]);
-        if (!errorMessage.includes('Failed to fetch') && !errorMessage.includes('NetworkError')) {
-          console.warn('Database error loading movements:', errorMessage);
-        }
-      }
+      setMovements([]);
     }
   };
 
@@ -132,14 +108,11 @@ export default function CashRegister() {
         .select('id, opened_at, status')
         .eq('user_id', user.id)
         .eq('status', 'open')
-        .gte('opened_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         .limit(1)
         .maybeSingle();
 
       if (checkError) {
         console.error('Error checking existing register:', checkError);
-        // No fallar por este error, continuar
-        console.warn('No se pudo verificar cajas existentes, continuando...');
       }
 
       if (existingRegister) {
@@ -150,27 +123,17 @@ export default function CashRegister() {
       const insertData = {
         user_id: user.id,
         opening_amount: amount,
-        closing_amount: 0,
-        total_sales: 0,
         status: 'open' as const,
-        expected_closing_amount: 0,
-        actual_closing_amount: 0,
-        discrepancy_amount: 0,
-        discrepancy_reason: '',
         session_notes: sessionNotes || '',
-        opened_at: new Date().toISOString(),
-        closed_at: null,
-        last_movement_at: new Date().toISOString()
       };
 
-      console.log('Insertando nueva caja:', insertData);
 
       const { data, error } = await supabase
         .from('cash_registers')
         .insert([insertData])
         .select(`
           *,
-          user:users (name, email)
+          user:users!cash_registers_user_id_fkey (name, email)
         `)
         .single();
 
@@ -189,11 +152,8 @@ export default function CashRegister() {
       console.error('Error opening register:', error);
       
       const errorMessage = (error as Error).message;
-      if (errorMessage.includes('ya tiene una caja abierta') || errorMessage.includes('single_open_register')) {
+      if (errorMessage.includes('single_open_register') || errorMessage.includes('duplicate')) {
         alert('Ya tienes una caja abierta. Debes cerrarla antes de abrir una nueva.');
-      } else if (errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
-        alert('Error: Ya existe una caja con estos datos. Recargando...');
-        loadCurrentRegister();
       } else {
         alert('Error al abrir caja: ' + errorMessage);
       }
@@ -221,15 +181,12 @@ export default function CashRegister() {
       }
 
       const updateData = {
-        closing_amount: amount,
         actual_closing_amount: amount,
         expected_closing_amount: expectedAmount,
         discrepancy_amount: discrepancy,
         discrepancy_reason: discrepancyReason || '',
         session_notes: sessionNotes || '',
         status: 'closed' as const,
-        closed_at: new Date().toISOString(),
-        last_movement_at: new Date().toISOString()
       };
 
       const { error } = await supabase
@@ -240,7 +197,7 @@ export default function CashRegister() {
       if (error) throw error;
 
       // Si hay discrepancia significativa, registrarla
-      if (Math.abs(discrepancy) > 100) {
+      if (Math.abs(discrepancy) > 1) {
         try {
           const { error: discrepancyError } = await supabase
             .from('cash_register_discrepancies')
@@ -256,7 +213,6 @@ export default function CashRegister() {
           
           if (discrepancyError) {
             console.error('Error creating discrepancy record:', discrepancyError);
-            // No fallar el cierre por esto, solo registrar el error
           }
         } catch (discrepancyErr) {
           console.error('Error al registrar discrepancia:', discrepancyErr);
@@ -307,7 +263,6 @@ export default function CashRegister() {
         category: movementData.category || (movementData.type === 'income' ? 'otros_ingresos' : 'otros_gastos'),
         amount: amount,
         description: movementData.description.trim(),
-        created_by: user?.id
       };
 
       const { error } = await supabase
@@ -328,8 +283,6 @@ export default function CashRegister() {
       
       const errorMessage = (error as Error).message;
       alert('Error al agregar movimiento: ' + errorMessage);
-      // Recargar movimientos para mostrar el estado actual
-      loadMovements(currentRegister.id);
     }
   };
 
@@ -751,7 +704,6 @@ export default function CashRegister() {
                     rows={2}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Explica la razón de la diferencia..."
-                    required
                   />
                 </div>
               )}

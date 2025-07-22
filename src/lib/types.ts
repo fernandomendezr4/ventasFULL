@@ -317,7 +317,7 @@ export interface CashMovement {
   description: string;
   reference_id: string | null;
   created_at: string;
-  created_by: string | null;
+  created_by?: string | null;
   created_by_user?: { name: string } | null;
 }
 

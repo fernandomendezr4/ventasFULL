@@ -28,7 +28,9 @@ export default function CashRegister() {
   const [discrepancyReason, setDiscrepancyReason] = useState('');
 
   useEffect(() => {
-    loadCurrentRegister();
+    if (user) {
+      loadCurrentRegister();
+    }
   }, [user]);
 
   const loadCurrentRegister = async () => {
@@ -37,7 +39,7 @@ export default function CashRegister() {
     try {
       setLoading(true);
       
-      // Buscar caja abierta del usuario actual con mejor query
+      // Buscar caja abierta del usuario actual
       const { data: register, error: registerError } = await supabase
         .from('cash_registers')
         .select(`
@@ -50,12 +52,17 @@ export default function CashRegister() {
         .limit(1)
         .maybeSingle();
 
-      if (registerError) throw registerError;
+      if (registerError) {
+        console.error('Error loading register:', registerError);
+        throw registerError;
+      }
 
       if (register) {
+        console.log('Caja encontrada:', register);
         setCurrentRegister(register);
         await loadMovements(register.id);
       } else {
+        console.log('No hay caja abierta para el usuario');
         setCurrentRegister(null);
         setMovements([]);
       }
@@ -70,6 +77,8 @@ export default function CashRegister() {
 
   const loadMovements = async (registerId: string) => {
     try {
+      console.log('Cargando movimientos para caja:', registerId);
+      
       const { data, error } = await supabase
         .from('cash_movements')
         .select(`
@@ -79,7 +88,12 @@ export default function CashRegister() {
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading movements:', error);
+        throw error;
+      }
+      
+      console.log('Movimientos cargados:', data?.length || 0);
       setMovements(data || []);
     } catch (error) {
       console.error('Error loading movements:', error);
@@ -88,7 +102,10 @@ export default function CashRegister() {
   };
 
   const openRegister = async () => {
-    if (!user || !openingAmount) return;
+    if (!user || !openingAmount) {
+      alert('Debe ingresar el monto de apertura');
+      return;
+    }
 
     try {
       const amount = parseFloat(openingAmount);
@@ -101,6 +118,8 @@ export default function CashRegister() {
         alert('El monto de apertura es demasiado grande. Máximo permitido: $9,999,999.99');
         return;
       }
+
+      console.log('Intentando abrir caja con monto:', amount);
 
       // Verificar que no haya otra caja abierta para este usuario
       const { data: existingRegister, error: checkError } = await supabase
@@ -125,8 +144,11 @@ export default function CashRegister() {
         opening_amount: amount,
         status: 'open' as const,
         session_notes: sessionNotes || '',
+        opened_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
       };
 
+      console.log('Datos para insertar:', insertData);
 
       const { data, error } = await supabase
         .from('cash_registers')
@@ -137,14 +159,18 @@ export default function CashRegister() {
         `)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting register:', error);
+        throw error;
+      }
 
+      console.log('Caja creada exitosamente:', data);
       setCurrentRegister(data);
       setShowOpenForm(false);
       setOpeningAmount('');
       setSessionNotes('');
       
-      // Cargar movimientos inmediatamente
+      // Cargar movimientos inmediatamente (debería incluir el movimiento de apertura)
       await loadMovements(data.id);
       alert('Caja abierta exitosamente');
       
@@ -161,7 +187,15 @@ export default function CashRegister() {
   };
 
   const closeRegister = async () => {
-    if (!currentRegister || !closingAmount) return;
+    if (!currentRegister) {
+      alert('No hay caja abierta para cerrar');
+      return;
+    }
+
+    if (!closingAmount) {
+      alert('Debe ingresar el monto de cierre');
+      return;
+    }
 
     try {
       const amount = parseFloat(closingAmount);
@@ -180,6 +214,13 @@ export default function CashRegister() {
         return;
       }
 
+      console.log('Cerrando caja:', {
+        registerId: currentRegister.id,
+        closingAmount: amount,
+        expectedAmount,
+        discrepancy
+      });
+
       const updateData = {
         actual_closing_amount: amount,
         expected_closing_amount: expectedAmount,
@@ -187,6 +228,7 @@ export default function CashRegister() {
         discrepancy_reason: discrepancyReason || '',
         session_notes: sessionNotes || '',
         status: 'closed' as const,
+        closed_at: new Date().toISOString()
       };
 
       const { error } = await supabase
@@ -194,7 +236,10 @@ export default function CashRegister() {
         .update(updateData)
         .eq('id', currentRegister.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating register:', error);
+        throw error;
+      }
 
       // Si hay discrepancia significativa, registrarla
       if (Math.abs(discrepancy) > 1) {
@@ -219,6 +264,7 @@ export default function CashRegister() {
         }
       }
 
+      console.log('Caja cerrada exitosamente');
       setCurrentRegister(null);
       setMovements([]);
       setShowCloseForm(false);
@@ -226,12 +272,10 @@ export default function CashRegister() {
       setSessionNotes('');
       setDiscrepancyReason('');
       
-      // Mostrar mensaje de éxito
       alert('Caja cerrada exitosamente');
     } catch (error) {
       console.error('Error closing register:', error);
       
-      // Mensaje de error más específico
       const errorMessage = (error as Error).message;
       if (errorMessage.includes('trigger') || errorMessage.includes('function')) {
         alert('Error en el sistema al cerrar la caja. Por favor, contacta al administrador.');
@@ -242,7 +286,15 @@ export default function CashRegister() {
   };
 
   const addMovement = async () => {
-    if (!currentRegister || !movementData.amount || !movementData.description) return;
+    if (!currentRegister) {
+      alert('No hay caja abierta');
+      return;
+    }
+
+    if (!movementData.amount || !movementData.description) {
+      alert('Debe completar todos los campos requeridos');
+      return;
+    }
 
     try {
       const amount = parseFloat(movementData.amount);
@@ -251,11 +303,17 @@ export default function CashRegister() {
         return;
       }
 
-      // Validar que el monto no exceda los límites de la base de datos
       if (amount > 9999999.99) {
         alert('El monto es demasiado grande. Máximo permitido: $9,999,999.99');
         return;
       }
+
+      console.log('Agregando movimiento:', {
+        registerId: currentRegister.id,
+        type: movementData.type,
+        amount,
+        description: movementData.description
+      });
 
       const movementInsertData = {
         cash_register_id: currentRegister.id,
@@ -263,14 +321,20 @@ export default function CashRegister() {
         category: movementData.category || (movementData.type === 'income' ? 'otros_ingresos' : 'otros_gastos'),
         amount: amount,
         description: movementData.description.trim(),
+        created_by: user?.id,
+        created_at: new Date().toISOString()
       };
 
       const { error } = await supabase
         .from('cash_movements')
         .insert([movementInsertData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting movement:', error);
+        throw error;
+      }
 
+      console.log('Movimiento agregado exitosamente');
       setShowMovementForm(false);
       setMovementData({ type: 'income', category: '', amount: '', description: '' });
       
@@ -519,6 +583,9 @@ export default function CashRegister() {
                 <div className="p-12 text-center">
                   <Activity className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                   <p className="text-slate-500">No hay movimientos registrados</p>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Los movimientos aparecerán aquí cuando realices ventas o agregues ingresos/gastos
+                  </p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-200">
@@ -587,6 +654,9 @@ export default function CashRegister() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Abrir Caja Registradora</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Ingresa el monto inicial con el que abres la caja
+              </p>
             </div>
             <div className="p-6 space-y-4">
               <div>
@@ -601,6 +671,9 @@ export default function CashRegister() {
                   min="0"
                   max="9999999"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  Ingresa el dinero en efectivo con el que inicias la caja
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -618,13 +691,17 @@ export default function CashRegister() {
             <div className="p-6 border-t border-slate-200 flex gap-3">
               <button
                 onClick={openRegister}
-                disabled={!openingAmount}
+                disabled={!openingAmount || parseFloat(openingAmount) < 0}
                 className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
               >
                 Abrir Caja
               </button>
               <button
-                onClick={() => setShowOpenForm(false)}
+                onClick={() => {
+                  setShowOpenForm(false);
+                  setOpeningAmount('');
+                  setSessionNotes('');
+                }}
                 className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cancelar
@@ -640,6 +717,9 @@ export default function CashRegister() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Cerrar Caja Registradora</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Cuenta el dinero físico en la caja y registra el monto real
+              </p>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-slate-50 p-4 rounded-lg">
@@ -680,6 +760,9 @@ export default function CashRegister() {
                   min="0"
                   max="9999999"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  Cuenta físicamente el dinero en la caja e ingresa el monto real
+                </p>
                 {closingAmount && (
                   <div className="mt-2 text-sm">
                     <span className={`font-medium ${
@@ -730,7 +813,12 @@ export default function CashRegister() {
                 Cerrar Caja
               </button>
               <button
-                onClick={() => setShowCloseForm(false)}
+                onClick={() => {
+                  setShowCloseForm(false);
+                  setClosingAmount('');
+                  setDiscrepancyReason('');
+                  setSessionNotes('');
+                }}
                 className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cancelar
@@ -746,6 +834,9 @@ export default function CashRegister() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Agregar Movimiento</h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Registra ingresos o gastos adicionales en la caja
+              </p>
             </div>
             <div className="p-6 space-y-4">
               <div>
@@ -844,7 +935,10 @@ export default function CashRegister() {
                 Agregar Movimiento
               </button>
               <button
-                onClick={() => setShowMovementForm(false)}
+                onClick={() => {
+                  setShowMovementForm(false);
+                  setMovementData({ type: 'income', category: '', amount: '', description: '' });
+                }}
                 className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cancelar

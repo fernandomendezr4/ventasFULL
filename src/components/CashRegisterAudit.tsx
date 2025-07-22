@@ -105,7 +105,7 @@ export default function CashRegisterAudit() {
           opened_at,
           closed_at,
           session_notes,
-          user:users(name, email)
+          user:users!cash_registers_user_id_fkey(name, email)
         `)
         .order('opened_at', { ascending: false });
 
@@ -113,32 +113,58 @@ export default function CashRegisterAudit() {
       
       // Transform data to match expected interface
       const transformedSessions = await Promise.all((data || []).map(async (register) => {
-        // Get sales count and amount for this register
-        const { data: salesData } = await supabase
-          .from('cash_register_sales')
-          .select('sale_id')
-          .eq('cash_register_id', register.id);
+        let totalSalesCount = 0;
+        let totalSalesAmount = 0;
+        let totalInstallmentsCount = 0;
+        let totalInstallmentsAmount = 0;
+        let totalIncome = 0;
+        let totalExpenses = 0;
         
-        // Get installments count and amount for this register
-        const { data: installmentsData } = await supabase
-          .from('cash_register_installments')
-          .select('amount_paid')
-          .eq('cash_register_id', register.id);
+        try {
+          // Get sales count and amount for this register - use cash_register_sales if it exists
+          const { data: salesData, error: salesError } = await supabase
+            .from('cash_register_sales')
+            .select('sale_id')
+            .eq('cash_register_id', register.id);
+          
+          if (!salesError && salesData) {
+            totalSalesCount = salesData.length;
+          }
+        } catch (error) {
+          console.warn('Could not load sales data for register:', register.id);
+        }
         
-        // Get movements for income and expenses
-        const { data: movementsData } = await supabase
-          .from('cash_movements')
-          .select('type, amount')
-          .eq('cash_register_id', register.id);
+        try {
+          // Get installments count and amount for this register
+          const { data: installmentsData, error: installmentsError } = await supabase
+            .from('cash_register_installments')
+            .select('amount_paid')
+            .eq('cash_register_id', register.id);
+          
+          if (!installmentsError && installmentsData) {
+            totalInstallmentsCount = installmentsData.length;
+            totalInstallmentsAmount = installmentsData.reduce((sum, inst) => sum + inst.amount_paid, 0);
+          }
+        } catch (error) {
+          console.warn('Could not load installments data for register:', register.id);
+        }
         
-        const totalSalesCount = salesData?.length || 0;
-        const totalInstallmentsCount = installmentsData?.length || 0;
-        const totalInstallmentsAmount = installmentsData?.reduce((sum, inst) => sum + inst.amount_paid, 0) || 0;
-        
-        const movements = movementsData || [];
-        const totalSalesAmount = movements.filter(m => m.type === 'sale').reduce((sum, m) => sum + m.amount, 0);
-        const totalIncome = movements.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0);
-        const totalExpenses = movements.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0);
+        try {
+          // Get movements for income and expenses
+          const { data: movementsData, error: movementsError } = await supabase
+            .from('cash_movements')
+            .select('type, amount')
+            .eq('cash_register_id', register.id);
+          
+          if (!movementsError && movementsData) {
+            const movements = movementsData;
+            totalSalesAmount = movements.filter(m => m.type === 'sale').reduce((sum, m) => sum + m.amount, 0);
+            totalIncome = movements.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0);
+            totalExpenses = movements.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0);
+          }
+        } catch (error) {
+          console.warn('Could not load movements data for register:', register.id);
+        }
         
         // Calculate session duration
         const openedAt = new Date(register.opened_at);
@@ -175,6 +201,15 @@ export default function CashRegisterAudit() {
       setSessions(transformedSessions);
     } catch (error) {
       console.error('Error loading sessions:', error);
+      
+      // Handle network errors gracefully
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        console.warn('Network error loading sessions. Please check your connection and Supabase configuration.');
+        setSessions([]); // Show empty state instead of crashing
+      } else {
+        console.error('Database error:', errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -216,11 +251,11 @@ export default function CashRegisterAudit() {
         .from('cash_register_sales')
         .select(`
           *,
-          sale:sales(
+          sale:sales!cash_register_sales_sale_id_fkey(
             id,
             total_amount,
             created_at,
-            customer:customers(name)
+            customer:customers!sales_customer_id_fkey(name)
           )
         `)
         .eq('cash_register_id', cashRegisterId);
@@ -230,9 +265,9 @@ export default function CashRegisterAudit() {
         .from('cash_register_installments')
         .select(`
           *,
-          sale:sales(
+          sale:sales!cash_register_installments_sale_id_fkey(
             id,
-            customer:customers(name)
+            customer:customers!sales_customer_id_fkey(name)
           )
         `)
         .eq('cash_register_id', cashRegisterId);

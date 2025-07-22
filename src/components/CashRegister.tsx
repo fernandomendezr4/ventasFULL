@@ -75,7 +75,7 @@ export default function CashRegister() {
         .from('cash_movements')
         .select(`
           *,
-          created_by_user:users(name)
+          created_by_user:users!cash_movements_created_by_fkey(name)
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
@@ -84,8 +84,14 @@ export default function CashRegister() {
       setMovements(data || []);
     } catch (error) {
       console.error('Error loading movements:', error);
-      // Fallback: mostrar movimientos vacíos en lugar de fallar
+      // Network error fallback: show empty movements and notify user
       setMovements([]);
+      
+      // Only show alert for non-network errors to avoid spam
+      const errorMessage = (error as Error).message;
+      if (!errorMessage.includes('Failed to fetch') && !errorMessage.includes('NetworkError')) {
+        console.warn('Database error loading movements:', errorMessage);
+      }
     }
   };
 

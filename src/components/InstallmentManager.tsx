@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, DollarSign, User, Calendar, Search, Filter, Plus, Eye, Printer, CheckCircle, Clock, AlertTriangle, Phone } from 'lucide-react';
+import { CreditCard, DollarSign, User, Calendar, Search, Filter, Plus, Eye, Printer, CheckCircle, Clock, AlertTriangle, Phone, Edit2, Trash2, Save } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems, PaymentInstallment } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -33,6 +33,13 @@ export default function InstallmentManager() {
   const [selectedSaleHistory, setSelectedSaleHistory] = useState<SaleWithItems | null>(null);
   const [saleInstallments, setSaleInstallments] = useState<InstallmentWithSale[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showEditInstallmentModal, setShowEditInstallmentModal] = useState(false);
+  const [editingInstallment, setEditingInstallment] = useState<InstallmentWithSale | null>(null);
+  const [editInstallmentData, setEditInstallmentData] = useState({
+    amount_paid: '',
+    payment_method: 'cash',
+    notes: ''
+  });
 
   useEffect(() => {
     loadInstallmentSales();
@@ -210,6 +217,156 @@ export default function InstallmentManager() {
       );
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const handleEditInstallment = (installment: InstallmentWithSale) => {
+    setEditingInstallment(installment);
+    setEditInstallmentData({
+      amount_paid: installment.amount_paid.toString(),
+      payment_method: installment.payment_method,
+      notes: installment.notes || ''
+    });
+    setShowEditInstallmentModal(true);
+  };
+
+  const handleUpdateInstallment = async () => {
+    if (!editingInstallment || !selectedSaleHistory) return;
+
+    const newAmount = parseFloat(editInstallmentData.amount_paid);
+    if (newAmount <= 0) {
+      showError('Monto Inválido', 'El monto debe ser mayor a cero');
+      return;
+    }
+
+    // Calcular el total pagado sin este abono
+    const otherInstallmentsTotal = saleInstallments
+      .filter(inst => inst.id !== editingInstallment.id)
+      .reduce((sum, inst) => sum + inst.amount_paid, 0);
+
+    // Verificar que el nuevo monto no exceda el total de la venta
+    if (otherInstallmentsTotal + newAmount > selectedSaleHistory.total_amount) {
+      const maxAllowed = selectedSaleHistory.total_amount - otherInstallmentsTotal;
+      showError(
+        'Monto Excesivo', 
+        `El monto no puede ser mayor a ${formatCurrency(maxAllowed)} (saldo disponible)`
+      );
+      return;
+    }
+
+    try {
+      // Actualizar el abono
+      const { error: installmentError } = await supabase
+        .from('payment_installments')
+        .update({
+          amount_paid: newAmount,
+          payment_method: editInstallmentData.payment_method,
+          notes: editInstallmentData.notes
+        })
+        .eq('id', editingInstallment.id);
+
+      if (installmentError) throw installmentError;
+
+      // Recalcular el total pagado de la venta
+      const newTotalPaid = otherInstallmentsTotal + newAmount;
+      const newPaymentStatus = newTotalPaid >= selectedSaleHistory.total_amount ? 'paid' : 
+                              newTotalPaid > 0 ? 'partial' : 'pending';
+
+      const { error: saleError } = await supabase
+        .from('sales')
+        .update({
+          total_paid: newTotalPaid,
+          payment_status: newPaymentStatus
+        })
+        .eq('id', selectedSaleHistory.id);
+
+      if (saleError) throw saleError;
+
+      // Actualizar el estado local
+      setSelectedSaleHistory({
+        ...selectedSaleHistory,
+        total_paid: newTotalPaid,
+        payment_status: newPaymentStatus
+      });
+
+      setShowEditInstallmentModal(false);
+      setEditingInstallment(null);
+      
+      // Recargar datos
+      await viewInstallmentHistory(selectedSaleHistory);
+      loadInstallmentSales();
+      
+      showSuccess(
+        '¡Abono Actualizado!',
+        `El abono ha sido actualizado a ${formatCurrency(newAmount)}`
+      );
+    } catch (error) {
+      console.error('Error updating installment:', error);
+      showError(
+        'Error al Actualizar Abono',
+        'No se pudo actualizar el abono: ' + (error as Error).message
+      );
+    }
+  };
+
+  const handleDeleteInstallment = (installment: InstallmentWithSale) => {
+    if (!selectedSaleHistory) return;
+
+    const confirmMessage = `¿Estás seguro de que quieres eliminar este abono de ${formatCurrency(installment.amount_paid)}?\n\nEsta acción no se puede deshacer y afectará el saldo de la venta.`;
+    
+    if (window.confirm(confirmMessage)) {
+      deleteInstallment(installment);
+    }
+  };
+
+  const deleteInstallment = async (installment: InstallmentWithSale) => {
+    if (!selectedSaleHistory) return;
+
+    try {
+      // Eliminar el abono
+      const { error: deleteError } = await supabase
+        .from('payment_installments')
+        .delete()
+        .eq('id', installment.id);
+
+      if (deleteError) throw deleteError;
+
+      // Recalcular el total pagado de la venta
+      const newTotalPaid = (selectedSaleHistory.total_paid || 0) - installment.amount_paid;
+      const newPaymentStatus = newTotalPaid >= selectedSaleHistory.total_amount ? 'paid' : 
+                              newTotalPaid > 0 ? 'partial' : 'pending';
+
+      const { error: saleError } = await supabase
+        .from('sales')
+        .update({
+          total_paid: Math.max(0, newTotalPaid),
+          payment_status: newPaymentStatus
+        })
+        .eq('id', selectedSaleHistory.id);
+
+      if (saleError) throw saleError;
+
+      // Actualizar el estado local
+      setSelectedSaleHistory({
+        ...selectedSaleHistory,
+        total_paid: Math.max(0, newTotalPaid),
+        payment_status: newPaymentStatus
+      });
+
+      // Recargar datos
+      await viewInstallmentHistory(selectedSaleHistory);
+      loadInstallmentSales();
+      
+      showSuccess(
+        '¡Abono Eliminado!',
+        `El abono de ${formatCurrency(installment.amount_paid)} ha sido eliminado`
+      );
+    } catch (error) {
+      console.error('Error deleting installment:', error);
+      showError(
+        'Error al Eliminar Abono',
+        'No se pudo eliminar el abono: ' + (error as Error).message
+      );
     }
   };
 
@@ -628,6 +785,24 @@ export default function InstallmentManager() {
                               {index === 0 ? 'Último abono' : `Hace ${index === 1 ? '1 abono' : `${index} abonos`}`}
                             </p>
                           </div>
+                          
+                          {/* Botones de acción para cada abono */}
+                          <div className="flex flex-col gap-1 ml-3">
+                            <button
+                              onClick={() => handleEditInstallment(installment)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                              title="Editar abono"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteInstallment(installment)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                              title="Eliminar abono"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -949,6 +1124,122 @@ export default function InstallmentManager() {
                   Continuar sin Imprimir
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Installment Modal */}
+      {showEditInstallmentModal && editingInstallment && selectedSaleHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Editar Abono
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Venta #{selectedSaleHistory.id.slice(-8)} • Cliente: {selectedSaleHistory.customer?.name || 'Sin cliente'}
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 p-4 rounded-lg">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-slate-600">Total venta:</span>
+                    <p className="font-bold text-slate-900">{formatCurrency(selectedSaleHistory.total_amount)}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Otros abonos:</span>
+                    <p className="font-bold text-blue-600">
+                      {formatCurrency(
+                        saleInstallments
+                          .filter(inst => inst.id !== editingInstallment.id)
+                          .reduce((sum, inst) => sum + inst.amount_paid, 0)
+                      )}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-slate-600">Monto máximo permitido:</span>
+                    <p className="font-bold text-green-600">
+                      {formatCurrency(
+                        selectedSaleHistory.total_amount - 
+                        saleInstallments
+                          .filter(inst => inst.id !== editingInstallment.id)
+                          .reduce((sum, inst) => sum + inst.amount_paid, 0)
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Monto del Abono *
+                </label>
+                <FormattedNumberInput
+                  value={editInstallmentData.amount_paid}
+                  onChange={(value) => setEditInstallmentData({ ...editInstallmentData, amount_paid: value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                  min="0"
+                  max={(
+                    selectedSaleHistory.total_amount - 
+                    saleInstallments
+                      .filter(inst => inst.id !== editingInstallment.id)
+                      .reduce((sum, inst) => sum + inst.amount_paid, 0)
+                  ).toString()}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Método de Pago *
+                </label>
+                <select
+                  value={editInstallmentData.payment_method}
+                  onChange={(e) => setEditInstallmentData({ ...editInstallmentData, payment_method: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="other">Otro</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Notas (opcional)
+                </label>
+                <textarea
+                  value={editInstallmentData.notes}
+                  onChange={(e) => setEditInstallmentData({ ...editInstallmentData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Notas sobre este abono..."
+                />
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleUpdateInstallment}
+                disabled={!editInstallmentData.amount_paid || parseFloat(editInstallmentData.amount_paid) <= 0}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
+              >
+                <Save className="h-4 w-4" />
+                Actualizar Abono
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditInstallmentModal(false);
+                  setEditingInstallment(null);
+                }}
+                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>

@@ -75,7 +75,7 @@ export default function CashRegister() {
         .from('cash_movements')
         .select(`
           *,
-          created_by_user:users!created_by(name)
+          created_by_user:users(name)
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
@@ -84,13 +84,29 @@ export default function CashRegister() {
       setMovements(data || []);
     } catch (error) {
       console.error('Error loading movements:', error);
-      // Network error fallback: show empty movements and notify user
-      setMovements([]);
       
-      // Only show alert for non-network errors to avoid spam
+      // If foreign key error, try loading without user data
       const errorMessage = (error as Error).message;
-      if (!errorMessage.includes('Failed to fetch') && !errorMessage.includes('NetworkError')) {
-        console.warn('Database error loading movements:', errorMessage);
+      if (errorMessage.includes('Could not find a relationship')) {
+        console.warn('Loading movements without user data due to missing foreign key');
+        try {
+          const { data: movementsOnly, error: simpleError } = await supabase
+            .from('cash_movements')
+            .select('*')
+            .eq('cash_register_id', registerId)
+            .order('created_at', { ascending: false });
+          
+          if (simpleError) throw simpleError;
+          setMovements(movementsOnly || []);
+        } catch (fallbackError) {
+          console.error('Error loading movements (fallback):', fallbackError);
+          setMovements([]);
+        }
+      } else {
+        setMovements([]);
+        if (!errorMessage.includes('Failed to fetch') && !errorMessage.includes('NetworkError')) {
+          console.warn('Database error loading movements:', errorMessage);
+        }
       }
     }
   };

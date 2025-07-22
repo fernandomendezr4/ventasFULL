@@ -74,7 +74,7 @@ export default function CashRegister() {
         .from('cash_movements')
         .select(`
           *,
-          created_by_user:users(name)
+          created_by_user:users!cash_movements_created_by_fkey(name)
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });

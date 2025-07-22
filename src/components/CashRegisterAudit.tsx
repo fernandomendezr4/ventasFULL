@@ -123,7 +123,7 @@ export default function CashRegisterAudit() {
         .from('cash_movements')
         .select(`
           *,
-          created_by_user:users!cash_movements_created_by_fkey(name)
+          users!inner(name)
         `)
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
@@ -136,7 +136,7 @@ export default function CashRegisterAudit() {
       for (const movement of movements || []) {
         const enrichedMovement: MovementWithDetails = {
           ...movement,
-          created_by_name: movement.created_by_user?.name || 'Sistema'
+          created_by_name: movement.users?.name || 'Sistema'
         };
 
         // Si es una venta, cargar detalles completos

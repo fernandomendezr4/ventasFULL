@@ -152,21 +152,9 @@ export default function InstallmentManager() {
         payment_amount: amount,
         payment_date: installment.payment_date,
         payment_method_name: paymentMethod === 'cash' ? 'Efectivo' : 
-      const amountValue = parseFloat(formData.amount);
-      
-      // Validar que el monto no sea mayor al saldo pendiente
-      if (selectedSale && amountValue > (selectedSale.total_amount - (selectedSale.total_paid || 0))) {
-        const remainingBalance = selectedSale.total_amount - (selectedSale.total_paid || 0);
-        showError(
-          'Monto Excesivo',
-          `El monto del abono (${formatCurrency(amountValue)}) no puede ser mayor al saldo pendiente (${formatCurrency(remainingBalance)})`
-        );
-        return;
-      }
-      
                             paymentMethod === 'card' ? 'Tarjeta' :
                             paymentMethod === 'transfer' ? 'Transferencia' : 'Otro',
-        amount_paid: amountValue,
+        amount_paid: amount,
         total_paid_after: newTotalPaid,
         remaining_balance: selectedSale.total_amount - newTotalPaid
       };

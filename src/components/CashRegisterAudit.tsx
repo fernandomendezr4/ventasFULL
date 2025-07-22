@@ -151,7 +151,7 @@ export default function CashRegisterAudit() {
                 product:products(
                   *,
                   category:categories(name),
-                  supplier:suppliers(name, contact_person, phone, email)
+                  supplier:suppliers(name, contact_person)
                 )
               ),
               payments(payment_method, notes)

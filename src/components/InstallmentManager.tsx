@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, DollarSign, User, Calendar, Search, Filter, Plus, Eye, Printer, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { CreditCard, DollarSign, User, Calendar, Search, Filter, Plus, Eye, Printer, CheckCircle, Clock, AlertTriangle, Phone } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SaleWithItems, PaymentInstallment } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -29,6 +29,10 @@ export default function InstallmentManager() {
   const [paymentNotes, setPaymentNotes] = useState('');
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [completedPayment, setCompletedPayment] = useState<any>(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedSaleHistory, setSelectedSaleHistory] = useState<SaleWithItems | null>(null);
+  const [saleInstallments, setSaleInstallments] = useState<InstallmentWithSale[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     loadInstallmentSales();
@@ -172,6 +176,40 @@ export default function InstallmentManager() {
         'Error al Procesar Abono',
         'No se pudo procesar el abono: ' + (error as Error).message
       );
+    }
+  };
+
+  const viewInstallmentHistory = async (sale: SaleWithItems) => {
+    try {
+      setLoadingHistory(true);
+      setSelectedSaleHistory(sale);
+      
+      // Cargar todos los abonos de esta venta
+      const { data, error } = await supabase
+        .from('payment_installments')
+        .select(`
+          *,
+          sale:sales (
+            *,
+            customer:customers (name, phone, email),
+            user:users (name, email)
+          )
+        `)
+        .eq('sale_id', sale.id)
+        .order('payment_date', { ascending: false });
+
+      if (error) throw error;
+      
+      setSaleInstallments(data as InstallmentWithSale[]);
+      setShowHistoryModal(true);
+    } catch (error) {
+      console.error('Error loading installment history:', error);
+      showError(
+        'Error al Cargar Historial',
+        'No se pudo cargar el historial de abonos: ' + (error as Error).message
+      );
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -452,13 +490,17 @@ export default function InstallmentManager() {
                       )}
                       <button
                         onClick={() => {
-                          // Ver historial de abonos
-                          console.log('Ver historial de abonos para venta:', sale.id);
+                          viewInstallmentHistory(sale);
                         }}
+                        disabled={loadingHistory}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
                         title="Ver historial"
                       >
-                        <Eye className="h-4 w-4" />
+                        {loadingHistory ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -468,6 +510,249 @@ export default function InstallmentManager() {
           </div>
         )}
       </div>
+
+      {/* Installment History Modal */}
+      {showHistoryModal && selectedSaleHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900">
+                    Historial de Abonos - Venta #{selectedSaleHistory.id.slice(-8)}
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Cliente: {selectedSaleHistory.customer?.name || 'Sin cliente'} • 
+                    Total: {formatCurrency(selectedSaleHistory.total_amount)}
+                  </p>
+                  <div className="flex items-center gap-4 mt-2 text-sm">
+                    <span className="text-green-600">
+                      Pagado: {formatCurrency(selectedSaleHistory.total_paid || 0)}
+                    </span>
+                    <span className="text-red-600">
+                      Saldo: {formatCurrency(selectedSaleHistory.total_amount - (selectedSaleHistory.total_paid || 0))}
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedSaleHistory.payment_status)}`}>
+                      {getStatusIcon(selectedSaleHistory.payment_status)}
+                      <span className="ml-1">{getStatusLabel(selectedSaleHistory.payment_status)}</span>
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowHistoryModal(false);
+                    setSelectedSaleHistory(null);
+                    setSaleInstallments([]);
+                  }}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              {/* Progress Bar */}
+              <div className="mb-6">
+                <div className="flex justify-between text-sm text-slate-600 mb-2">
+                  <span>Progreso de pago</span>
+                  <span>{(((selectedSaleHistory.total_paid || 0) / selectedSaleHistory.total_amount) * 100).toFixed(1)}%</span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-3">
+                  <div 
+                    className="bg-green-600 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${((selectedSaleHistory.total_paid || 0) / selectedSaleHistory.total_amount) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Installments List */}
+              <div>
+                <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+                  <CreditCard className="h-5 w-5 mr-2 text-blue-600" />
+                  Historial de Abonos ({saleInstallments.length})
+                </h4>
+                
+                {saleInstallments.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CreditCard className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <p className="text-slate-500">No hay abonos registrados para esta venta</p>
+                    <p className="text-xs text-slate-400 mt-2">
+                      Los abonos aparecerán aquí cuando se registren pagos
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {saleInstallments.map((installment, index) => (
+                      <div key={installment.id} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 rounded-lg">
+                                <DollarSign className="h-4 w-4 text-green-600" />
+                              </div>
+                              <div>
+                                <h5 className="font-medium text-slate-900">
+                                  Abono #{index + 1}
+                                </h5>
+                                <p className="text-sm text-slate-600">
+                                  {new Date(installment.payment_date).toLocaleDateString('es-ES', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </p>
+                                <div className="flex items-center gap-4 mt-1 text-sm text-slate-600">
+                                  <span className="flex items-center">
+                                    <CreditCard className="h-3 w-3 mr-1" />
+                                    {installment.payment_method === 'cash' ? 'Efectivo' : 
+                                     installment.payment_method === 'card' ? 'Tarjeta' :
+                                     installment.payment_method === 'transfer' ? 'Transferencia' : 'Otro'}
+                                  </span>
+                                  {installment.notes && (
+                                    <span className="text-slate-500">
+                                      {installment.notes}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-green-600">
+                              {formatCurrency(installment.amount_paid)}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {index === 0 ? 'Último abono' : `Hace ${index === 1 ? '1 abono' : `${index} abonos`}`}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Summary */}
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h4 className="font-medium text-slate-900 mb-4">Resumen de Pagos</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <p className="text-sm font-medium text-blue-600">Total de la Venta</p>
+                    <p className="text-xl font-bold text-blue-900">
+                      {formatCurrency(selectedSaleHistory.total_amount)}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-green-600">Total Pagado</p>
+                    <p className="text-xl font-bold text-green-900">
+                      {formatCurrency(selectedSaleHistory.total_paid || 0)}
+                    </p>
+                    <p className="text-xs text-green-700 mt-1">
+                      {saleInstallments.length} abono{saleInstallments.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <p className="text-sm font-medium text-orange-600">Saldo Pendiente</p>
+                    <p className="text-xl font-bold text-orange-900">
+                      {formatCurrency(selectedSaleHistory.total_amount - (selectedSaleHistory.total_paid || 0))}
+                    </p>
+                    <p className="text-xs text-orange-700 mt-1">
+                      {selectedSaleHistory.payment_status === 'paid' ? 'Completado' : 'Por pagar'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sale Details */}
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h4 className="font-medium text-slate-900 mb-4">Detalles de la Venta Original</h4>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-slate-600">Fecha de venta:</span>
+                      <p className="font-medium text-slate-900">
+                        {new Date(selectedSaleHistory.created_at).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Vendedor:</span>
+                      <p className="font-medium text-slate-900">
+                        {selectedSaleHistory.user?.name || 'No especificado'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Productos:</span>
+                      <p className="font-medium text-slate-900">
+                        {selectedSaleHistory.sale_items?.length || 0} artículos
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Tipo de pago:</span>
+                      <p className="font-medium text-slate-900">Venta a crédito</p>
+                    </div>
+                  </div>
+                  
+                  {selectedSaleHistory.customer && (
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <span className="text-slate-600 text-sm">Información del cliente:</span>
+                      <div className="mt-2 space-y-1">
+                        <p className="font-medium text-slate-900">{selectedSaleHistory.customer.name}</p>
+                        {selectedSaleHistory.customer.phone && (
+                          <p className="text-sm text-slate-600 flex items-center">
+                            <Phone className="h-3 w-3 mr-1" />
+                            {selectedSaleHistory.customer.phone}
+                          </p>
+                        )}
+                        {selectedSaleHistory.customer.email && (
+                          <p className="text-sm text-slate-600">{selectedSaleHistory.customer.email}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex-shrink-0">
+              <div className="flex gap-3">
+                {selectedSaleHistory.payment_status !== 'paid' && (
+                  <button
+                    onClick={() => {
+                      setShowHistoryModal(false);
+                      setSelectedSale(selectedSaleHistory);
+                      setPaymentAmount('');
+                      setPaymentMethod('cash');
+                      setPaymentNotes('');
+                      setShowPaymentModal(true);
+                    }}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar Nuevo Abono
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowHistoryModal(false);
+                    setSelectedSaleHistory(null);
+                    setSaleInstallments([]);
+                  }}
+                  className="flex-1 bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Modal */}
       {showPaymentModal && selectedSale && (

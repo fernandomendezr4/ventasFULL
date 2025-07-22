@@ -600,7 +600,8 @@ export default function CashRegister() {
                             <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
                               <span className="flex items-center">
                                 <Clock className="h-3 w-3 mr-1" />
-                                {movement.created_by === user?.id ? user.name : 'Usuario'}
+                                {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
                               {movement.created_by && (
                                 <span className="flex items-center">
                                   <User className="h-3 w-3 mr-1" />

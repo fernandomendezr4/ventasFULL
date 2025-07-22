@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Calendar, User, Package, DollarSign, TrendingUp, TrendingDown, Eye, Edit2, Trash2, Search, Filter, Download, Printer, Building2, Users, Truck, ShoppingCart, CreditCard, AlertTriangle, CheckCircle, Clock, X, Save } from 'lucide-react';
+import { FileText, Calendar, User, Package, DollarSign, TrendingUp, TrendingDown, Eye, Edit2, Trash2, Search, Filter, Download, Printer, Building2, Users, Truck, ShoppingCart, CreditCard, AlertTriangle, CheckCircle, Clock, X, Save, Phone, Mail, MapPin, Tag, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,13 +9,95 @@ import ConfirmationModal from './ConfirmationModal';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
 
-interface DetailedCashRegisterReport {
-  register_info: any;
-  movements_summary: any;
-  sales_detail: any;
-  installments_detail: any;
-  discrepancy_analysis: any;
-  audit_trail: any;
+interface CashRegisterSummary {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  opening_amount: number;
+  closing_amount: number;
+  actual_closing_amount: number;
+  expected_closing_amount: number;
+  discrepancy_amount: number;
+  status: string;
+  opened_at: string;
+  closed_at: string | null;
+  session_notes: string;
+  total_sales_amount: number;
+  total_sales_count: number;
+  cash_sales_amount: number;
+  cash_sales_count: number;
+  total_installments_amount: number;
+  total_installments_count: number;
+  total_income: number;
+  total_expenses: number;
+  total_movements: number;
+  calculated_balance: number;
+  session_duration_minutes: number;
+}
+
+interface DetailedSale {
+  id: string;
+  total_amount: number;
+  subtotal: number;
+  discount_amount: number;
+  payment_type: string;
+  payment_status: string;
+  created_at: string;
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    email: string;
+    cedula: string;
+    address: string;
+  } | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  sale_items: Array<{
+    id: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+    product: {
+      id: string;
+      name: string;
+      barcode: string;
+      purchase_price: number;
+      category: {
+        name: string;
+      } | null;
+      supplier: {
+        name: string;
+        contact_person: string;
+        phone: string;
+      } | null;
+    };
+  }>;
+  payments: Array<{
+    payment_method: string;
+    notes: string;
+  }>;
+}
+
+interface DetailedInstallment {
+  id: string;
+  amount_paid: number;
+  payment_date: string;
+  payment_method: string;
+  notes: string;
+  sale: {
+    id: string;
+    total_amount: number;
+    customer: {
+      name: string;
+      phone: string;
+      email: string;
+    } | null;
+  };
 }
 
 interface MovementWithDetails {
@@ -29,42 +111,6 @@ interface MovementWithDetails {
   created_by: string;
   created_by_name: string;
   reference_id?: string;
-  // Detalles de venta
-  sale_details?: {
-    sale_id: string;
-    customer_name: string;
-    customer_phone: string;
-    customer_email: string;
-    customer_cedula: string;
-    payment_method: string;
-    total_amount: number;
-    discount_amount: number;
-    items: Array<{
-      product_id: string;
-      product_name: string;
-      product_barcode: string;
-      category_name: string;
-      supplier_name: string;
-      supplier_contact: string;
-      quantity: number;
-      unit_price: number;
-      total_price: number;
-      purchase_price: number;
-      profit_per_unit: number;
-      total_profit: number;
-    }>;
-  };
-  // Detalles de abono
-  installment_details?: {
-    installment_id: string;
-    sale_id: string;
-    customer_name: string;
-    customer_phone: string;
-    payment_method: string;
-    original_sale_amount: number;
-    total_paid_before: number;
-    remaining_balance: number;
-  };
 }
 
 export default function CashRegisterAudit() {
@@ -72,24 +118,17 @@ export default function CashRegisterAudit() {
   const { notification, showSuccess, showError, hideNotification } = useNotification();
   const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   
-  const [registers, setRegisters] = useState<any[]>([]);
-  const [selectedRegister, setSelectedRegister] = useState<any>(null);
-  const [detailedReport, setDetailedReport] = useState<DetailedCashRegisterReport | null>(null);
-  const [movementsWithDetails, setMovementsWithDetails] = useState<MovementWithDetails[]>([]);
+  const [registers, setRegisters] = useState<CashRegisterSummary[]>([]);
+  const [selectedRegister, setSelectedRegister] = useState<CashRegisterSummary | null>(null);
+  const [detailedSales, setDetailedSales] = useState<DetailedSale[]>([]);
+  const [detailedInstallments, setDetailedInstallments] = useState<DetailedInstallment[]>([]);
+  const [movements, setMovements] = useState<MovementWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingReport, setLoadingReport] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [movementTypeFilter, setMovementTypeFilter] = useState<string>('all');
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingMovement, setEditingMovement] = useState<MovementWithDetails | null>(null);
-  const [editFormData, setEditFormData] = useState({
-    type: '',
-    category: '',
-    amount: '',
-    description: ''
-  });
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'sales' | 'installments' | 'movements' | 'products'>('overview');
 
   useEffect(() => {
     loadCashRegisters();
@@ -114,12 +153,60 @@ export default function CashRegisterAudit() {
     }
   };
 
-  const loadDetailedReport = async (registerId: string) => {
+  const loadRegisterDetails = async (registerId: string) => {
     try {
-      setLoadingReport(true);
+      setLoadingDetails(true);
       
-      // Cargar movimientos con detalles completos
-      const { data: movements, error: movementsError } = await supabase
+      // Cargar ventas detalladas
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select(`
+          *,
+          customer:customers(*),
+          user:users(id, name, email),
+          sale_items(
+            *,
+            product:products(
+              *,
+              category:categories(name),
+              supplier:suppliers(name, contact_person, phone)
+            )
+          ),
+          payments(payment_method, notes)
+        `)
+        .in('id', 
+          await supabase
+            .from('cash_register_sales')
+            .select('sale_id')
+            .eq('cash_register_id', registerId)
+            .then(({ data }) => data?.map(item => item.sale_id) || [])
+        );
+
+      if (salesError) throw salesError;
+
+      // Cargar abonos detallados
+      const { data: installmentsData, error: installmentsError } = await supabase
+        .from('payment_installments')
+        .select(`
+          *,
+          sale:sales(
+            id,
+            total_amount,
+            customer:customers(name, phone, email)
+          )
+        `)
+        .in('id',
+          await supabase
+            .from('cash_register_installments')
+            .select('installment_id')
+            .eq('cash_register_id', registerId)
+            .then(({ data }) => data?.map(item => item.installment_id) || [])
+        );
+
+      if (installmentsError) throw installmentsError;
+
+      // Cargar movimientos
+      const { data: movementsData, error: movementsError } = await supabase
         .from('cash_movements')
         .select(`
           *,
@@ -130,207 +217,28 @@ export default function CashRegisterAudit() {
 
       if (movementsError) throw movementsError;
 
-      // Enriquecer movimientos con detalles de ventas y abonos
-      const enrichedMovements: MovementWithDetails[] = [];
+      const enrichedMovements: MovementWithDetails[] = (movementsData || []).map(movement => ({
+        ...movement,
+        created_by_name: movement.users?.name || 'Sistema'
+      }));
 
-      for (const movement of movements || []) {
-        const enrichedMovement: MovementWithDetails = {
-          ...movement,
-          created_by_name: movement.users?.name || 'Sistema'
-        };
-
-        // Si es una venta, cargar detalles completos
-        if (movement.type === 'sale' && movement.reference_id) {
-          const { data: saleData, error: saleError } = await supabase
-            .from('sales')
-            .select(`
-              *,
-              customer:customers(*),
-              sale_items(
-                *,
-                product:products(
-                  *,
-                  category:categories(name),
-                  supplier:suppliers(name, contact_person)
-                )
-              ),
-              payments(payment_method, notes)
-            `)
-            .eq('id', movement.reference_id)
-            .single();
-
-          if (!saleError && saleData) {
-            const paymentMethod = saleData.payments?.[0]?.payment_method || 'cash';
-            const paymentNotes = saleData.payments?.[0]?.notes || '';
-            
-            enrichedMovement.sale_details = {
-              sale_id: saleData.id,
-              customer_name: saleData.customer?.name || 'Cliente genérico',
-              customer_phone: saleData.customer?.phone || '',
-              customer_email: saleData.customer?.email || '',
-              customer_cedula: saleData.customer?.cedula || '',
-              payment_method: paymentMethod === 'other' && paymentNotes.includes('NEQUI') ? 'NEQUI' : 
-                            paymentMethod === 'cash' ? 'Efectivo' :
-                            paymentMethod === 'card' ? 'Tarjeta' :
-                            paymentMethod === 'transfer' ? 'Transferencia' : paymentMethod,
-              total_amount: saleData.total_amount,
-              discount_amount: saleData.discount_amount || 0,
-              items: saleData.sale_items?.map((item: any) => ({
-                product_id: item.product.id,
-                product_name: item.product.name,
-                product_barcode: item.product.barcode || '',
-                category_name: item.product.category?.name || 'Sin categoría',
-                supplier_name: item.product.supplier?.name || 'Sin proveedor',
-                supplier_contact: item.product.supplier?.contact_person || '',
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-                total_price: item.total_price,
-                purchase_price: item.product.purchase_price || 0,
-                profit_per_unit: item.unit_price - (item.product.purchase_price || 0),
-                total_profit: (item.unit_price - (item.product.purchase_price || 0)) * item.quantity
-              })) || []
-            };
-          }
-        }
-
-        // Si es un abono, cargar detalles del abono y venta original
-        if (movement.type === 'sale' && movement.category === 'abono' && movement.reference_id) {
-          const { data: installmentData, error: installmentError } = await supabase
-            .from('payment_installments')
-            .select(`
-              *,
-              sale:sales(
-                *,
-                customer:customers(*)
-              )
-            `)
-            .eq('id', movement.reference_id)
-            .single();
-
-          if (!installmentError && installmentData) {
-            enrichedMovement.installment_details = {
-              installment_id: installmentData.id,
-              sale_id: installmentData.sale.id,
-              customer_name: installmentData.sale.customer?.name || 'Cliente genérico',
-              customer_phone: installmentData.sale.customer?.phone || '',
-              payment_method: installmentData.payment_method === 'cash' ? 'Efectivo' :
-                            installmentData.payment_method === 'card' ? 'Tarjeta' :
-                            installmentData.payment_method === 'transfer' ? 'Transferencia' : 
-                            installmentData.payment_method,
-              original_sale_amount: installmentData.sale.total_amount,
-              total_paid_before: (installmentData.sale.total_paid || 0) - installmentData.amount_paid,
-              remaining_balance: installmentData.sale.total_amount - (installmentData.sale.total_paid || 0)
-            };
-          }
-        }
-
-        enrichedMovements.push(enrichedMovement);
-      }
-
-      setMovementsWithDetails(enrichedMovements);
-
-      // Cargar información del registro
-      const { data: registerInfo, error: registerError } = await supabase
-        .from('cash_register_session_details')
-        .select('*')
-        .eq('cash_register_id', registerId)
-        .single();
-
-      if (registerError) throw registerError;
-
-      setDetailedReport({
-        register_info: registerInfo,
-        movements_summary: {
-          total_movements: enrichedMovements.length,
-          total_sales: enrichedMovements.filter(m => m.type === 'sale').length,
-          total_income: enrichedMovements.filter(m => m.type === 'income').reduce((sum, m) => sum + m.amount, 0),
-          total_expenses: enrichedMovements.filter(m => m.type === 'expense').reduce((sum, m) => sum + m.amount, 0)
-        },
-        sales_detail: enrichedMovements.filter(m => m.sale_details),
-        installments_detail: enrichedMovements.filter(m => m.installment_details),
-        discrepancy_analysis: registerInfo,
-        audit_trail: enrichedMovements
-      });
+      setDetailedSales(salesData as DetailedSale[] || []);
+      setDetailedInstallments(installmentsData as DetailedInstallment[] || []);
+      setMovements(enrichedMovements);
 
     } catch (error) {
-      console.error('Error loading detailed report:', error);
-      showError('Error', 'No se pudo cargar el reporte detallado');
+      console.error('Error loading register details:', error);
+      showError('Error', 'No se pudieron cargar los detalles del registro');
     } finally {
-      setLoadingReport(false);
+      setLoadingDetails(false);
     }
-  };
-
-  const handleEditMovement = (movement: MovementWithDetails) => {
-    setEditingMovement(movement);
-    setEditFormData({
-      type: movement.type,
-      category: movement.category,
-      amount: movement.amount.toString(),
-      description: movement.description
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdateMovement = async () => {
-    if (!editingMovement) return;
-
-    try {
-      const amount = parseFloat(editFormData.amount);
-      if (amount <= 0) {
-        showError('Error', 'El monto debe ser mayor a cero');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('cash_movements')
-        .update({
-          type: editFormData.type,
-          category: editFormData.category,
-          amount: amount,
-          description: editFormData.description
-        })
-        .eq('id', editingMovement.id);
-
-      if (error) throw error;
-
-      setShowEditModal(false);
-      setEditingMovement(null);
-      loadDetailedReport(selectedRegister.cash_register_id);
-      showSuccess('Éxito', 'Movimiento actualizado correctamente');
-    } catch (error) {
-      console.error('Error updating movement:', error);
-      showError('Error', 'No se pudo actualizar el movimiento');
-    }
-  };
-
-  const handleDeleteMovement = (movement: MovementWithDetails) => {
-    showConfirmation(
-      'Eliminar Movimiento',
-      `¿Estás seguro de que quieres eliminar este movimiento de ${movement.type} por ${formatCurrency(movement.amount)}?`,
-      async () => {
-        try {
-          const { error } = await supabase
-            .from('cash_movements')
-            .delete()
-            .eq('id', movement.id);
-
-          if (error) throw error;
-
-          loadDetailedReport(selectedRegister.cash_register_id);
-          showSuccess('Éxito', 'Movimiento eliminado correctamente');
-        } catch (error) {
-          console.error('Error deleting movement:', error);
-          showError('Error', 'No se pudo eliminar el movimiento');
-        }
-      }
-    );
   };
 
   const filteredRegisters = registers.filter(register => {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      const operatorName = register.operator_name?.toLowerCase() || '';
-      const registerId = register.cash_register_id?.slice(-8) || '';
+      const operatorName = register.user_name?.toLowerCase() || '';
+      const registerId = register.id?.slice(-8) || '';
       
       if (!(operatorName.includes(searchLower) || registerId.includes(searchTerm))) {
         return false;
@@ -345,13 +253,6 @@ export default function CashRegisterAudit() {
       return false;
     }
     
-    return true;
-  });
-
-  const filteredMovements = movementsWithDetails.filter(movement => {
-    if (movementTypeFilter !== 'all' && movement.type !== movementTypeFilter) {
-      return false;
-    }
     return true;
   });
 
@@ -389,34 +290,126 @@ export default function CashRegisterAudit() {
     }
   };
 
+  const getPaymentMethodName = (sale: DetailedSale) => {
+    if (sale.payment_type === 'installment') return 'Abonos';
+    
+    if (sale.payments && sale.payments.length > 0) {
+      const payment = sale.payments[0];
+      if (payment.payment_method === 'other' && payment.notes?.includes('NEQUI')) {
+        return 'NEQUI';
+      }
+      switch (payment.payment_method) {
+        case 'cash': return 'Efectivo';
+        case 'card': return 'Tarjeta';
+        case 'transfer': return 'Transferencia';
+        default: return payment.payment_method;
+      }
+    }
+    
+    return 'Efectivo';
+  };
+
+  const calculateSaleProfit = (sale: DetailedSale) => {
+    return sale.sale_items.reduce((total, item) => {
+      const profit = (item.unit_price - (item.product.purchase_price || 0)) * item.quantity;
+      return total + profit;
+    }, 0);
+  };
+
   const exportToCSV = () => {
-    if (!detailedReport) return;
+    if (!selectedRegister) return;
 
-    const csvData = filteredMovements.map(movement => ({
-      'Fecha': new Date(movement.created_at).toLocaleDateString('es-ES'),
-      'Hora': new Date(movement.created_at).toLocaleTimeString('es-ES'),
-      'Tipo': getMovementTypeLabel(movement.type),
-      'Categoría': movement.category,
-      'Monto': movement.amount,
-      'Descripción': movement.description,
-      'Usuario': movement.created_by_name,
-      'Cliente': movement.sale_details?.customer_name || movement.installment_details?.customer_name || '',
-      'Teléfono Cliente': movement.sale_details?.customer_phone || movement.installment_details?.customer_phone || '',
-      'Método Pago': movement.sale_details?.payment_method || movement.installment_details?.payment_method || '',
-      'Productos': movement.sale_details?.items.map(item => `${item.product_name} (${item.quantity})`).join('; ') || '',
-      'Proveedores': movement.sale_details?.items.map(item => item.supplier_name).filter((v, i, a) => a.indexOf(v) === i).join('; ') || '',
-      'Ganancia Total': movement.sale_details?.items.reduce((sum, item) => sum + item.total_profit, 0) || 0
-    }));
+    const csvData = [
+      // Información general
+      ['INFORMACIÓN GENERAL'],
+      ['Caja ID', selectedRegister.id.slice(-8)],
+      ['Operador', selectedRegister.user_name],
+      ['Email Operador', selectedRegister.user_email],
+      ['Fecha Apertura', new Date(selectedRegister.opened_at).toLocaleDateString('es-ES')],
+      ['Hora Apertura', new Date(selectedRegister.opened_at).toLocaleTimeString('es-ES')],
+      ['Fecha Cierre', selectedRegister.closed_at ? new Date(selectedRegister.closed_at).toLocaleDateString('es-ES') : 'No cerrada'],
+      ['Hora Cierre', selectedRegister.closed_at ? new Date(selectedRegister.closed_at).toLocaleTimeString('es-ES') : 'No cerrada'],
+      ['Duración (minutos)', selectedRegister.session_duration_minutes || 0],
+      ['Estado', selectedRegister.status === 'open' ? 'Abierta' : 'Cerrada'],
+      [''],
+      
+      // Resumen financiero
+      ['RESUMEN FINANCIERO'],
+      ['Monto Apertura', selectedRegister.opening_amount],
+      ['Total Ventas', selectedRegister.total_sales_amount],
+      ['Total Abonos', selectedRegister.total_installments_amount],
+      ['Total Ingresos', selectedRegister.total_income],
+      ['Total Gastos', selectedRegister.total_expenses],
+      ['Balance Calculado', selectedRegister.calculated_balance],
+      ['Monto Cierre Real', selectedRegister.actual_closing_amount],
+      ['Discrepancia', selectedRegister.discrepancy_amount],
+      [''],
+      
+      // Ventas detalladas
+      ['VENTAS DETALLADAS'],
+      ['ID Venta', 'Fecha', 'Hora', 'Cliente', 'Teléfono Cliente', 'Vendedor', 'Método Pago', 'Subtotal', 'Descuento', 'Total', 'Estado', 'Productos', 'Ganancia Total'],
+      ...detailedSales.map(sale => [
+        sale.id.slice(-8),
+        new Date(sale.created_at).toLocaleDateString('es-ES'),
+        new Date(sale.created_at).toLocaleTimeString('es-ES'),
+        sale.customer?.name || 'Cliente genérico',
+        sale.customer?.phone || '',
+        sale.user?.name || '',
+        getPaymentMethodName(sale),
+        sale.subtotal || sale.total_amount,
+        sale.discount_amount || 0,
+        sale.total_amount,
+        sale.payment_status === 'paid' ? 'Pagada' : sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente',
+        sale.sale_items.length,
+        calculateSaleProfit(sale)
+      ]),
+      [''],
+      
+      // Productos vendidos
+      ['PRODUCTOS VENDIDOS'],
+      ['Producto', 'Código', 'Categoría', 'Proveedor', 'Cantidad', 'Precio Unitario', 'Precio Compra', 'Total Venta', 'Ganancia Unitaria', 'Ganancia Total', 'Cliente', 'Fecha Venta'],
+      ...detailedSales.flatMap(sale => 
+        sale.sale_items.map(item => [
+          item.product.name,
+          item.product.barcode || '',
+          item.product.category?.name || 'Sin categoría',
+          item.product.supplier?.name || 'Sin proveedor',
+          item.quantity,
+          item.unit_price,
+          item.product.purchase_price || 0,
+          item.total_price,
+          item.unit_price - (item.product.purchase_price || 0),
+          (item.unit_price - (item.product.purchase_price || 0)) * item.quantity,
+          sale.customer?.name || 'Cliente genérico',
+          new Date(sale.created_at).toLocaleDateString('es-ES')
+        ])
+      ),
+      [''],
+      
+      // Abonos
+      ['ABONOS RECIBIDOS'],
+      ['ID Abono', 'Fecha', 'Hora', 'Cliente', 'Teléfono', 'Monto', 'Método', 'Venta Original', 'Notas'],
+      ...detailedInstallments.map(installment => [
+        installment.id.slice(-8),
+        new Date(installment.payment_date).toLocaleDateString('es-ES'),
+        new Date(installment.payment_date).toLocaleTimeString('es-ES'),
+        installment.sale.customer?.name || 'Cliente genérico',
+        installment.sale.customer?.phone || '',
+        installment.amount_paid,
+        installment.payment_method === 'cash' ? 'Efectivo' : installment.payment_method,
+        installment.sale.id.slice(-8),
+        installment.notes || ''
+      ])
+    ];
 
-    const csvContent = [
-      Object.keys(csvData[0] || {}).join(','),
-      ...csvData.map(row => Object.values(row).map(val => `"${val}"`).join(','))
-    ].join('\n');
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${cell}"`).join(',')
+    ).join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `auditoria_caja_${selectedRegister?.cash_register_id?.slice(-8)}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `auditoria_detallada_caja_${selectedRegister?.id?.slice(-8)}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
 
@@ -431,16 +424,16 @@ export default function CashRegisterAudit() {
     );
   }
 
-  if (selectedRegister && detailedReport) {
+  if (selectedRegister) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-2xl font-bold text-slate-900">
-              Reporte Detallado - Caja #{selectedRegister.cash_register_id?.slice(-8)}
+              Auditoría Detallada - Caja #{selectedRegister.id?.slice(-8)}
             </h3>
             <p className="text-sm text-slate-600 mt-1">
-              Operador: {selectedRegister.operator_name} • 
+              Operador: {selectedRegister.user_name} • 
               {new Date(selectedRegister.opened_at).toLocaleDateString('es-ES')} • 
               {selectedRegister.status === 'open' ? 'Abierta' : 'Cerrada'}
             </p>
@@ -456,8 +449,9 @@ export default function CashRegisterAudit() {
             <button
               onClick={() => {
                 setSelectedRegister(null);
-                setDetailedReport(null);
-                setMovementsWithDetails([]);
+                setDetailedSales([]);
+                setDetailedInstallments([]);
+                setMovements([]);
               }}
               className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
             >
@@ -466,424 +460,604 @@ export default function CashRegisterAudit() {
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <DollarSign className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-blue-600">Apertura</p>
-                <p className="text-xl font-bold text-blue-900">
-                  {formatCurrency(selectedRegister.opening_amount || 0)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-green-600">Ventas + Ingresos</p>
-                <p className="text-xl font-bold text-green-900">
-                  {formatCurrency((selectedRegister.total_sales_amount || 0) + (selectedRegister.total_income || 0))}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <TrendingDown className="h-5 w-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm text-red-600">Gastos</p>
-                <p className="text-xl font-bold text-red-900">
-                  {formatCurrency(selectedRegister.total_expenses || 0)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Package className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-purple-600">Balance Final</p>
-                <p className="text-xl font-bold text-purple-900">
-                  {formatCurrency(selectedRegister.calculated_balance || 0)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Movement Type Filter */}
+        {/* Información del Operador */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-4">
-            <Filter className="h-5 w-5 text-slate-400" />
-            <select
-              value={movementTypeFilter}
-              onChange={(e) => setMovementTypeFilter(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">Todos los movimientos</option>
-              <option value="sale">Solo ventas</option>
-              <option value="income">Solo ingresos</option>
-              <option value="expense">Solo gastos</option>
-              <option value="opening">Solo apertura</option>
-              <option value="closing">Solo cierre</option>
-            </select>
-            <span className="text-sm text-slate-600">
-              Mostrando {filteredMovements.length} de {movementsWithDetails.length} movimientos
-            </span>
+          <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+            <User className="h-5 w-5 mr-2 text-blue-600" />
+            Información del Operador
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <User className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-blue-600">Operador</p>
+                  <p className="text-lg font-bold text-blue-900">{selectedRegister.user_name}</p>
+                  <p className="text-xs text-blue-700">{selectedRegister.user_email}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Clock className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-green-600">Duración Sesión</p>
+                  <p className="text-lg font-bold text-green-900">
+                    {Math.floor((selectedRegister.session_duration_minutes || 0) / 60)}h {(selectedRegister.session_duration_minutes || 0) % 60}m
+                  </p>
+                  <p className="text-xs text-green-700">
+                    {new Date(selectedRegister.opened_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - 
+                    {selectedRegister.closed_at ? new Date(selectedRegister.closed_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : 'Abierta'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Package className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-purple-600">Actividad</p>
+                  <p className="text-lg font-bold text-purple-900">
+                    {selectedRegister.total_sales_count + selectedRegister.total_installments_count}
+                  </p>
+                  <p className="text-xs text-purple-700">
+                    {selectedRegister.total_sales_count} ventas, {selectedRegister.total_installments_count} abonos
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Detailed Movements */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-200">
-            <h4 className="text-lg font-semibold text-slate-900 flex items-center">
-              <FileText className="h-5 w-5 mr-2 text-blue-600" />
-              Movimientos Detallados ({filteredMovements.length})
-            </h4>
+        {/* Resumen Financiero */}
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+            <DollarSign className="h-5 w-5 mr-2 text-green-600" />
+            Resumen Financiero
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-600">Apertura</p>
+              <p className="text-xl font-bold text-blue-900">{formatCurrency(selectedRegister.opening_amount || 0)}</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <p className="text-sm text-green-600">Ventas + Abonos</p>
+              <p className="text-xl font-bold text-green-900">
+                {formatCurrency((selectedRegister.total_sales_amount || 0) + (selectedRegister.total_installments_amount || 0))}
+              </p>
+            </div>
+            <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+              <p className="text-sm text-red-600">Gastos</p>
+              <p className="text-xl font-bold text-red-900">{formatCurrency(selectedRegister.total_expenses || 0)}</p>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <p className="text-sm text-purple-600">Balance Final</p>
+              <p className="text-xl font-bold text-purple-900">{formatCurrency(selectedRegister.calculated_balance || 0)}</p>
+              {selectedRegister.discrepancy_amount && Math.abs(selectedRegister.discrepancy_amount) > 0 && (
+                <p className={`text-xs font-medium ${selectedRegister.discrepancy_amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {selectedRegister.discrepancy_amount > 0 ? 'Sobrante' : 'Faltante'}: {formatCurrency(Math.abs(selectedRegister.discrepancy_amount))}
+                </p>
+              )}
+            </div>
           </div>
-          
-          {loadingReport ? (
-            <div className="p-12 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-slate-600">Cargando reporte detallado...</p>
-            </div>
-          ) : filteredMovements.length === 0 ? (
-            <div className="p-12 text-center">
-              <FileText className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-              <p className="text-slate-500">No hay movimientos que mostrar</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-200">
-              {filteredMovements.map((movement) => (
-                <div key={movement.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        {getMovementIcon(movement.type)}
-                        <div>
-                          <h5 className="font-medium text-slate-900">
-                            {getMovementTypeLabel(movement.type)}
-                            {movement.category && ` - ${movement.category}`}
-                          </h5>
-                          <p className="text-sm text-slate-600">{movement.description}</p>
-                          <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {new Date(movement.created_at).toLocaleDateString('es-ES')} {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            <span className="flex items-center">
-                              <User className="h-3 w-3 mr-1" />
-                              {movement.created_by_name}
+        </div>
+
+        {/* Tabs de Navegación */}
+        <div className="bg-white rounded-xl shadow-sm">
+          <div className="border-b border-slate-200">
+            <nav className="flex space-x-8 px-6">
+              {[
+                { id: 'overview', label: 'Resumen', icon: FileText },
+                { id: 'sales', label: `Ventas (${detailedSales.length})`, icon: ShoppingCart },
+                { id: 'installments', label: `Abonos (${detailedInstallments.length})`, icon: CreditCard },
+                { id: 'products', label: 'Productos Vendidos', icon: Package },
+                { id: 'movements', label: `Movimientos (${movements.length})`, icon: TrendingUp }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setSelectedTab(tab.id as any);
+                      if (detailedSales.length === 0 && detailedInstallments.length === 0) {
+                        loadRegisterDetails(selectedRegister.id);
+                      }
+                    }}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                      selectedTab === tab.id
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {loadingDetails ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-slate-600">Cargando detalles...</p>
+              </div>
+            ) : (
+              <>
+                {/* Tab: Resumen */}
+                {selectedTab === 'overview' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <h5 className="font-medium text-slate-900 mb-3">Estadísticas de Ventas</h5>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Ventas en efectivo:</span>
+                            <span className="font-medium">{selectedRegister.cash_sales_count} ({formatCurrency(selectedRegister.cash_sales_amount || 0)})</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Abonos recibidos:</span>
+                            <span className="font-medium">{selectedRegister.total_installments_count} ({formatCurrency(selectedRegister.total_installments_amount || 0)})</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Total transacciones:</span>
+                            <span className="font-medium">{selectedRegister.total_sales_count + selectedRegister.total_installments_count}</span>
+                          </div>
+                          <div className="flex justify-between border-t pt-2">
+                            <span>Ingresos totales:</span>
+                            <span className="font-bold text-green-600">
+                              {formatCurrency((selectedRegister.total_sales_amount || 0) + (selectedRegister.total_installments_amount || 0) + (selectedRegister.total_income || 0))}
                             </span>
                           </div>
                         </div>
                       </div>
+                      
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <h5 className="font-medium text-slate-900 mb-3">Información de Sesión</h5>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Fecha apertura:</span>
+                            <span className="font-medium">{new Date(selectedRegister.opened_at).toLocaleDateString('es-ES')}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Hora apertura:</span>
+                            <span className="font-medium">{new Date(selectedRegister.opened_at).toLocaleTimeString('es-ES')}</span>
+                          </div>
+                          {selectedRegister.closed_at && (
+                            <>
+                              <div className="flex justify-between">
+                                <span>Fecha cierre:</span>
+                                <span className="font-medium">{new Date(selectedRegister.closed_at).toLocaleDateString('es-ES')}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Hora cierre:</span>
+                                <span className="font-medium">{new Date(selectedRegister.closed_at).toLocaleTimeString('es-ES')}</span>
+                              </div>
+                            </>
+                          )}
+                          <div className="flex justify-between">
+                            <span>Estado:</span>
+                            <span className={`font-medium ${selectedRegister.status === 'open' ? 'text-green-600' : 'text-slate-600'}`}>
+                              {selectedRegister.status === 'open' ? 'Abierta' : 'Cerrada'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {selectedRegister.session_notes && (
+                      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <h5 className="font-medium text-blue-900 mb-2">Notas de Sesión</h5>
+                        <p className="text-blue-800">{selectedRegister.session_notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                      {/* Detalles de Venta */}
-                      {movement.sale_details && (
-                        <div className="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
-                          <h6 className="font-medium text-green-900 mb-3 flex items-center">
-                            <ShoppingCart className="h-4 w-4 mr-2" />
-                            Detalles de Venta
-                          </h6>
-                          
-                          {/* Información del Cliente */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div className="bg-white p-3 rounded border">
-                              <h7 className="text-sm font-medium text-slate-700 mb-2 flex items-center">
-                                <Users className="h-3 w-3 mr-1" />
-                                Cliente
-                              </h7>
-                              <p className="text-sm text-slate-900 font-medium">{movement.sale_details.customer_name}</p>
-                              {movement.sale_details.customer_phone && (
-                                <p className="text-xs text-slate-600">Tel: {movement.sale_details.customer_phone}</p>
-                              )}
-                              {movement.sale_details.customer_email && (
-                                <p className="text-xs text-slate-600">Email: {movement.sale_details.customer_email}</p>
-                              )}
-                              {movement.sale_details.customer_cedula && (
-                                <p className="text-xs text-slate-600">CC: {movement.sale_details.customer_cedula}</p>
-                              )}
+                {/* Tab: Ventas */}
+                {selectedTab === 'sales' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-medium text-slate-900">Ventas Realizadas ({detailedSales.length})</h5>
+                      <div className="text-sm text-slate-600">
+                        Total: {formatCurrency(detailedSales.reduce((sum, sale) => sum + sale.total_amount, 0))}
+                      </div>
+                    </div>
+                    
+                    {detailedSales.length === 0 ? (
+                      <div className="text-center py-8">
+                        <ShoppingCart className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-500">No hay ventas registradas en esta caja</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {detailedSales.map((sale) => (
+                          <div key={sale.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50">
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <h6 className="font-medium text-slate-900">
+                                  Venta #{sale.id.slice(-8)}
+                                  <span className={`ml-2 inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                    sale.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                                    sale.payment_status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {sale.payment_status === 'paid' ? 'Pagada' : 
+                                     sale.payment_status === 'partial' ? 'Parcial' : 'Pendiente'}
+                                  </span>
+                                </h6>
+                                <p className="text-sm text-slate-600">
+                                  {new Date(sale.created_at).toLocaleDateString('es-ES')} a las {new Date(sale.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-slate-900">{formatCurrency(sale.total_amount)}</p>
+                                <p className="text-sm text-green-600">
+                                  Ganancia: {formatCurrency(calculateSaleProfit(sale))}
+                                </p>
+                              </div>
                             </div>
-                            
-                            <div className="bg-white p-3 rounded border">
-                              <h7 className="text-sm font-medium text-slate-700 mb-2 flex items-center">
-                                <CreditCard className="h-3 w-3 mr-1" />
-                                Pago
-                              </h7>
-                              <p className="text-sm text-slate-900 font-medium">{movement.sale_details.payment_method}</p>
-                              <p className="text-xs text-slate-600">Total: {formatCurrency(movement.sale_details.total_amount)}</p>
-                              {movement.sale_details.discount_amount > 0 && (
-                                <p className="text-xs text-orange-600">Descuento: {formatCurrency(movement.sale_details.discount_amount)}</p>
+
+                            {/* Información del Cliente */}
+                            {sale.customer && (
+                              <div className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
+                                <h7 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+                                  <Users className="h-4 w-4 mr-1" />
+                                  Cliente
+                                </h7>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <span className="text-blue-700 font-medium">{sale.customer.name}</span>
+                                    {sale.customer.cedula && <p className="text-blue-600">CC: {sale.customer.cedula}</p>}
+                                  </div>
+                                  <div>
+                                    {sale.customer.phone && (
+                                      <p className="text-blue-600 flex items-center">
+                                        <Phone className="h-3 w-3 mr-1" />
+                                        {sale.customer.phone}
+                                      </p>
+                                    )}
+                                    {sale.customer.email && (
+                                      <p className="text-blue-600 flex items-center">
+                                        <Mail className="h-3 w-3 mr-1" />
+                                        {sale.customer.email}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Información del Vendedor */}
+                            {sale.user && (
+                              <div className="bg-green-50 p-3 rounded-lg mb-3 border border-green-200">
+                                <h7 className="text-sm font-medium text-green-900 mb-1 flex items-center">
+                                  <User className="h-4 w-4 mr-1" />
+                                  Vendedor: {sale.user.name}
+                                </h7>
+                                <p className="text-sm text-green-700">{sale.user.email}</p>
+                              </div>
+                            )}
+
+                            {/* Productos Vendidos */}
+                            <div className="bg-slate-50 rounded-lg border">
+                              <div className="p-3 border-b bg-slate-100 rounded-t-lg">
+                                <h7 className="text-sm font-medium text-slate-700 flex items-center">
+                                  <Package className="h-4 w-4 mr-1" />
+                                  Productos Vendidos ({sale.sale_items.length})
+                                </h7>
+                              </div>
+                              <div className="max-h-48 overflow-y-auto">
+                                {sale.sale_items.map((item, index) => (
+                                  <div key={index} className="p-3 border-b border-slate-200 last:border-b-0">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <h8 className="font-medium text-slate-900">{item.product.name}</h8>
+                                          {item.product.barcode && (
+                                            <span className="text-xs bg-slate-200 px-2 py-1 rounded font-mono">
+                                              {item.product.barcode}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-4 mt-1 text-xs text-slate-600">
+                                          <span className="flex items-center">
+                                            <Tag className="h-3 w-3 mr-1" />
+                                            {item.product.category?.name || 'Sin categoría'}
+                                          </span>
+                                          {item.product.supplier && (
+                                            <span className="flex items-center">
+                                              <Truck className="h-3 w-3 mr-1" />
+                                              {item.product.supplier.name}
+                                              {item.product.supplier.contact_person && ` (${item.product.supplier.contact_person})`}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-4 mt-1 text-xs">
+                                          <span className="text-slate-600">
+                                            {item.quantity} × {formatCurrency(item.unit_price)} = {formatCurrency(item.total_price)}
+                                          </span>
+                                          <span className="text-green-600">
+                                            Ganancia: {formatCurrency((item.unit_price - (item.product.purchase_price || 0)) * item.quantity)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Información de Pago */}
+                            <div className="mt-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center">
+                                  <CreditCard className="h-4 w-4 mr-2 text-purple-600" />
+                                  <span className="text-purple-700">Método de pago: {getPaymentMethodName(sale)}</span>
+                                </div>
+                                <div className="text-right">
+                                  {sale.discount_amount && sale.discount_amount > 0 && (
+                                    <p className="text-orange-600">Descuento: {formatCurrency(sale.discount_amount)}</p>
+                                  )}
+                                  <p className="font-bold text-purple-900">Total: {formatCurrency(sale.total_amount)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tab: Abonos */}
+                {selectedTab === 'installments' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-medium text-slate-900">Abonos Recibidos ({detailedInstallments.length})</h5>
+                      <div className="text-sm text-slate-600">
+                        Total: {formatCurrency(detailedInstallments.reduce((sum, inst) => sum + inst.amount_paid, 0))}
+                      </div>
+                    </div>
+                    
+                    {detailedInstallments.length === 0 ? (
+                      <div className="text-center py-8">
+                        <CreditCard className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-500">No hay abonos registrados en esta caja</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {detailedInstallments.map((installment) => (
+                          <div key={installment.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50">
+                            <div className="flex items-start justify-between mb-3">
+                              <div>
+                                <h6 className="font-medium text-slate-900">
+                                  Abono #{installment.id.slice(-8)}
+                                  <span className="ml-2 text-sm text-slate-600">
+                                    → Venta #{installment.sale.id.slice(-8)}
+                                  </span>
+                                </h6>
+                                <p className="text-sm text-slate-600">
+                                  {new Date(installment.payment_date).toLocaleDateString('es-ES')} a las {new Date(installment.payment_date).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-green-600">{formatCurrency(installment.amount_paid)}</p>
+                                <p className="text-sm text-slate-600">
+                                  {installment.payment_method === 'cash' ? 'Efectivo' : installment.payment_method}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Información del Cliente */}
+                            {installment.sale.customer && (
+                              <div className="bg-blue-50 p-3 rounded-lg mb-3 border border-blue-200">
+                                <h7 className="text-sm font-medium text-blue-900 mb-2 flex items-center">
+                                  <Users className="h-4 w-4 mr-1" />
+                                  Cliente
+                                </h7>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                  <div>
+                                    <span className="text-blue-700 font-medium">{installment.sale.customer.name}</span>
+                                  </div>
+                                  <div>
+                                    {installment.sale.customer.phone && (
+                                      <p className="text-blue-600 flex items-center">
+                                        <Phone className="h-3 w-3 mr-1" />
+                                        {installment.sale.customer.phone}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Información de la Venta Original */}
+                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-slate-600">Venta original:</span>
+                                <span className="font-medium">{formatCurrency(installment.sale.total_amount)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-slate-600">Este abono:</span>
+                                <span className="font-medium text-green-600">{formatCurrency(installment.amount_paid)}</span>
+                              </div>
+                              {installment.notes && (
+                                <div className="mt-2 text-xs text-slate-600">
+                                  <span className="font-medium">Notas:</span> {installment.notes}
+                                </div>
                               )}
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                          {/* Productos Vendidos */}
-                          <div className="bg-white rounded border">
-                            <div className="p-3 border-b bg-slate-50">
-                              <h7 className="text-sm font-medium text-slate-700 flex items-center">
-                                <Package className="h-3 w-3 mr-1" />
-                                Productos Vendidos ({movement.sale_details.items.length})
-                              </h7>
-                            </div>
-                            <div className="max-h-48 overflow-y-auto">
-                              {movement.sale_details.items.map((item, index) => (
-                                <div key={index} className="p-3 border-b border-slate-100 last:border-b-0">
-                                  <div className="flex items-center justify-between">
+                {/* Tab: Productos */}
+                {selectedTab === 'products' && (
+                  <div className="space-y-4">
+                    <h5 className="font-medium text-slate-900">Análisis de Productos Vendidos</h5>
+                    
+                    {detailedSales.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-500">No hay productos vendidos en esta caja</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {/* Resumen de productos */}
+                        {(() => {
+                          const productSummary = new Map();
+                          detailedSales.forEach(sale => {
+                            sale.sale_items.forEach(item => {
+                              const key = item.product.id;
+                              if (productSummary.has(key)) {
+                                const existing = productSummary.get(key);
+                                existing.quantity += item.quantity;
+                                existing.totalRevenue += item.total_price;
+                                existing.totalProfit += (item.unit_price - (item.product.purchase_price || 0)) * item.quantity;
+                                existing.sales += 1;
+                              } else {
+                                productSummary.set(key, {
+                                  product: item.product,
+                                  quantity: item.quantity,
+                                  totalRevenue: item.total_price,
+                                  totalProfit: (item.unit_price - (item.product.purchase_price || 0)) * item.quantity,
+                                  sales: 1,
+                                  unitPrice: item.unit_price
+                                });
+                              }
+                            });
+                          });
+
+                          const sortedProducts = Array.from(productSummary.values())
+                            .sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+                          return (
+                            <div className="grid grid-cols-1 gap-4">
+                              {sortedProducts.map((summary, index) => (
+                                <div key={summary.product.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50">
+                                  <div className="flex items-start justify-between">
                                     <div className="flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <h8 className="font-medium text-slate-900">{item.product_name}</h8>
-                                        {item.product_barcode && (
-                                          <span className="text-xs bg-slate-100 px-2 py-1 rounded font-mono">
-                                            {item.product_barcode}
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <h6 className="font-medium text-slate-900">{summary.product.name}</h6>
+                                        {summary.product.barcode && (
+                                          <span className="text-xs bg-slate-200 px-2 py-1 rounded font-mono">
+                                            {summary.product.barcode}
                                           </span>
                                         )}
-                                      </div>
-                                      <div className="flex items-center gap-4 mt-1 text-xs text-slate-600">
-                                        <span className="flex items-center">
-                                          <Package className="h-3 w-3 mr-1" />
-                                          {item.category_name}
-                                        </span>
-                                        <span className="flex items-center">
-                                          <Truck className="h-3 w-3 mr-1" />
-                                          {item.supplier_name}
-                                        </span>
-                                        {item.supplier_contact && (
-                                          <span>Contacto: {item.supplier_contact}</span>
+                                        {index < 3 && (
+                                          <Star className="h-4 w-4 text-yellow-500" />
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-4 mt-1 text-xs">
-                                        <span className="text-slate-600">
-                                          {item.quantity} × {formatCurrency(item.unit_price)} = {formatCurrency(item.total_price)}
+                                      
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div>
+                                          <span className="text-slate-600">Cantidad vendida:</span>
+                                          <p className="font-bold text-slate-900">{summary.quantity} unidades</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-slate-600">Ventas realizadas:</span>
+                                          <p className="font-bold text-slate-900">{summary.sales} ventas</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-slate-600">Ingresos totales:</span>
+                                          <p className="font-bold text-green-600">{formatCurrency(summary.totalRevenue)}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-slate-600">Ganancia total:</span>
+                                          <p className="font-bold text-blue-600">{formatCurrency(summary.totalProfit)}</p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="mt-3 flex items-center gap-4 text-xs text-slate-600">
+                                        <span className="flex items-center">
+                                          <Tag className="h-3 w-3 mr-1" />
+                                          {summary.product.category?.name || 'Sin categoría'}
                                         </span>
-                                        <span className="text-green-600">
-                                          Ganancia: {formatCurrency(item.total_profit)}
-                                        </span>
+                                        {summary.product.supplier && (
+                                          <span className="flex items-center">
+                                            <Truck className="h-3 w-3 mr-1" />
+                                            {summary.product.supplier.name}
+                                          </span>
+                                        )}
+                                        <span>Precio: {formatCurrency(summary.unitPrice)}</span>
+                                        <span>Costo: {formatCurrency(summary.product.purchase_price || 0)}</span>
                                       </div>
                                     </div>
                                   </div>
                                 </div>
                               ))}
                             </div>
-                            <div className="p-3 bg-green-50 border-t">
-                              <div className="flex justify-between text-sm">
-                                <span className="font-medium text-green-700">Ganancia Total:</span>
-                                <span className="font-bold text-green-900">
-                                  {formatCurrency(movement.sale_details.items.reduce((sum, item) => sum + item.total_profit, 0))}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Detalles de Abono */}
-                      {movement.installment_details && (
-                        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                          <h6 className="font-medium text-blue-900 mb-3 flex items-center">
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Detalles de Abono
-                          </h6>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="bg-white p-3 rounded border">
-                              <h7 className="text-sm font-medium text-slate-700 mb-2 flex items-center">
-                                <Users className="h-3 w-3 mr-1" />
-                                Cliente
-                              </h7>
-                              <p className="text-sm text-slate-900 font-medium">{movement.installment_details.customer_name}</p>
-                              {movement.installment_details.customer_phone && (
-                                <p className="text-xs text-slate-600">Tel: {movement.installment_details.customer_phone}</p>
-                              )}
-                            </div>
-                            
-                            <div className="bg-white p-3 rounded border">
-                              <h7 className="text-sm font-medium text-slate-700 mb-2">Estado del Pago</h7>
-                              <div className="space-y-1 text-xs">
-                                <div className="flex justify-between">
-                                  <span className="text-slate-600">Venta original:</span>
-                                  <span className="font-medium">{formatCurrency(movement.installment_details.original_sale_amount)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-slate-600">Pagado antes:</span>
-                                  <span className="font-medium">{formatCurrency(movement.installment_details.total_paid_before)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-slate-600">Este abono:</span>
-                                  <span className="font-medium text-green-600">{formatCurrency(movement.amount)}</span>
-                                </div>
-                                <div className="flex justify-between border-t pt-1">
-                                  <span className="text-slate-600">Saldo restante:</span>
-                                  <span className="font-bold text-orange-600">{formatCurrency(movement.installment_details.remaining_balance)}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex flex-col gap-2 ml-4">
-                      <div className="text-right">
-                        <p className={`text-xl font-bold ${
-                          movement.type === 'expense' ? 'text-red-600' : 'text-green-600'
-                        }`}>
-                          {movement.type === 'expense' ? '-' : '+'}{formatCurrency(movement.amount)}
-                        </p>
+                          );
+                        })()}
                       </div>
-                      
-                      {/* Botones de acción solo para admin */}
-                      {user?.role === 'admin' && movement.type !== 'opening' && movement.type !== 'closing' && (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleEditMovement(movement)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                            title="Editar movimiento"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteMovement(movement)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                            title="Eliminar movimiento"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Edit Movement Modal */}
-        {showEditModal && editingMovement && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
-              <div className="p-6 border-b border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-900">Editar Movimiento</h3>
-                <p className="text-sm text-slate-600 mt-1">
-                  Modificar detalles del movimiento de {getMovementTypeLabel(editingMovement.type).toLowerCase()}
-                </p>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Tipo de Movimiento
-                  </label>
-                  <select
-                    value={editFormData.type}
-                    onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    disabled={editingMovement.type === 'sale'} // No permitir cambiar ventas
-                  >
-                    <option value="income">Ingreso</option>
-                    <option value="expense">Gasto</option>
-                    {editingMovement.type === 'sale' && <option value="sale">Venta</option>}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Categoría
-                  </label>
-                  <select
-                    value={editFormData.category}
-                    onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {editFormData.type === 'income' ? (
-                      <>
-                        <option value="otros_ingresos">Otros Ingresos</option>
-                        <option value="devolucion_proveedor">Devolución Proveedor</option>
-                        <option value="ajuste_inventario">Ajuste Inventario</option>
-                        <option value="prestamo">Préstamo</option>
-                      </>
-                    ) : editFormData.type === 'expense' ? (
-                      <>
-                        <option value="otros_gastos">Otros Gastos</option>
-                        <option value="compra_productos">Compra Productos</option>
-                        <option value="servicios">Servicios</option>
-                        <option value="transporte">Transporte</option>
-                        <option value="mantenimiento">Mantenimiento</option>
-                        <option value="devolucion_cliente">Devolución Cliente</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="venta_efectivo">Venta Efectivo</option>
-                        <option value="abono">Abono</option>
-                      </>
                     )}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Monto
-                  </label>
-                  <FormattedNumberInput
-                    value={editFormData.amount}
-                    onChange={(value) => setEditFormData({ ...editFormData, amount: value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    min="0"
-                    max="9999999"
-                    disabled={editingMovement.type === 'sale'} // No permitir cambiar monto de ventas
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    value={editFormData.description}
-                    onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-              
-              <div className="p-6 border-t border-slate-200 flex gap-3">
-                <button
-                  onClick={handleUpdateMovement}
-                  className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center justify-center"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Guardar Cambios
-                </button>
-                <button
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingMovement(null);
-                  }}
-                  className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
+                  </div>
+                )}
+
+                {/* Tab: Movimientos */}
+                {selectedTab === 'movements' && (
+                  <div className="space-y-4">
+                    <h5 className="font-medium text-slate-900">Todos los Movimientos ({movements.length})</h5>
+                    
+                    {movements.length === 0 ? (
+                      <div className="text-center py-8">
+                        <TrendingUp className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-500">No hay movimientos registrados</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {movements.map((movement) => (
+                          <div key={movement.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {getMovementIcon(movement.type)}
+                                <div>
+                                  <h6 className="font-medium text-slate-900">
+                                    {getMovementTypeLabel(movement.type)}
+                                    {movement.category && ` - ${movement.category}`}
+                                  </h6>
+                                  <p className="text-sm text-slate-600">{movement.description}</p>
+                                  <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                                    <span className="flex items-center">
+                                      <Clock className="h-3 w-3 mr-1" />
+                                      {new Date(movement.created_at).toLocaleDateString('es-ES')} {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <span className="flex items-center">
+                                      <User className="h-3 w-3 mr-1" />
+                                      {movement.created_by_name}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className={`text-lg font-bold ${
+                                  movement.type === 'expense' ? 'text-red-600' : 'text-green-600'
+                                }`}>
+                                  {movement.type === 'expense' ? '-' : '+'}{formatCurrency(movement.amount)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Notification Modal */}
         <NotificationModal
@@ -971,13 +1145,13 @@ export default function CashRegisterAudit() {
         ) : (
           <div className="divide-y divide-slate-200">
             {filteredRegisters.map((register) => (
-              <div key={register.cash_register_id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
+              <div key={register.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-4">
                       <div>
                         <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                          Caja #{register.cash_register_id?.slice(-8)}
+                          Caja #{register.id?.slice(-8)}
                           <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                             register.status === 'open' 
                               ? 'bg-green-100 text-green-800' 
@@ -987,22 +1161,22 @@ export default function CashRegisterAudit() {
                           </span>
                         </h3>
                         <p className="text-sm text-slate-600">
-                          Operador: {register.operator_name} • 
+                          Operador: {register.user_name} ({register.user_email}) • 
                           {new Date(register.opened_at).toLocaleDateString('es-ES')} • 
-                          Duración: {Math.round((register.session_duration_hours || 0) * 60)} min
+                          Duración: {Math.round((register.session_duration_minutes || 0) / 60)}h {(register.session_duration_minutes || 0) % 60}m
                         </p>
                         <div className="flex items-center gap-6 mt-2 text-sm text-slate-600">
                           <span className="flex items-center">
                             <ShoppingCart className="h-4 w-4 mr-1 text-green-600" />
-                            {register.total_sales_count || 0} ventas
+                            {register.total_sales_count || 0} ventas ({formatCurrency(register.total_sales_amount || 0)})
                           </span>
                           <span className="flex items-center">
                             <CreditCard className="h-4 w-4 mr-1 text-blue-600" />
-                            {register.total_installments_count || 0} abonos
+                            {register.total_installments_count || 0} abonos ({formatCurrency(register.total_installments_amount || 0)})
                           </span>
                           <span className="flex items-center">
                             <FileText className="h-4 w-4 mr-1 text-purple-600" />
-                            {register.total_movements_count || 0} movimientos
+                            {register.total_movements || 0} movimientos
                           </span>
                         </div>
                       </div>
@@ -1026,10 +1200,11 @@ export default function CashRegisterAudit() {
                     <button
                       onClick={() => {
                         setSelectedRegister(register);
-                        loadDetailedReport(register.cash_register_id);
+                        setSelectedTab('overview');
+                        loadRegisterDetails(register.id);
                       }}
                       className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                      title="Ver reporte detallado"
+                      title="Ver auditoría detallada"
                     >
                       <Eye className="h-4 w-4" />
                     </button>

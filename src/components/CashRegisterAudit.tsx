@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Search, Eye, Edit2, Save, X, Calculator, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, User, Clock, Package, Activity, FileText, Filter } from 'lucide-react';
+import { Calendar, Search, Eye, Edit2, Save, X, Calculator, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, User, Clock, Package, Activity, FileText, Filter, ShoppingCart, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
+import { SaleWithItems, Product, Customer } from '../lib/types';
 
 interface CashRegisterSession {
   id: string;
@@ -42,18 +43,47 @@ interface CashMovement {
   created_by_user?: { name: string } | null;
 }
 
+interface SaleEditData {
+  customer_id: string;
+  discount_amount: string;
+  payment_type: 'cash' | 'installment';
+  payment_status: 'pending' | 'partial' | 'paid';
+  total_paid: string;
+  items: {
+    id?: string;
+    product_id: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }[];
+}
+
 export default function CashRegisterAudit() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<CashRegisterSession[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [sales, setSales] = useState<SaleWithItems[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedSession, setSelectedSession] = useState<CashRegisterSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [movementsLoading, setMovementsLoading] = useState(false);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [dateFilter, setDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [editingMovement, setEditingMovement] = useState<CashMovement | null>(null);
+  const [editingSale, setEditingSale] = useState<SaleWithItems | null>(null);
+  const [showSaleEditModal, setShowSaleEditModal] = useState(false);
+  const [saleEditData, setSaleEditData] = useState<SaleEditData>({
+    customer_id: '',
+    discount_amount: '0',
+    payment_type: 'cash',
+    payment_status: 'paid',
+    total_paid: '0',
+    items: []
+  });
   const [editFormData, setEditFormData] = useState({
     type: 'income' as 'income' | 'expense',
     category: '',
@@ -63,13 +93,44 @@ export default function CashRegisterAudit() {
 
   useEffect(() => {
     loadSessions();
+    loadProducts();
+    loadCustomers();
   }, []);
 
   useEffect(() => {
     if (selectedSession) {
       loadMovements(selectedSession.id);
+      loadSales(selectedSession.id);
     }
   }, [selectedSession]);
+
+  const loadProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Error loading products:', error);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setCustomers(data || []);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+    }
+  };
 
   const loadSessions = async () => {
     try {
@@ -135,6 +196,51 @@ export default function CashRegisterAudit() {
     }
   };
 
+  const loadSales = async (registerId: string) => {
+    try {
+      setSalesLoading(true);
+      
+      // Cargar ventas de la sesión de caja
+      const { data: salesData, error: salesError } = await supabase
+        .from('cash_register_sales')
+        .select(`
+          sale_id,
+          payment_method,
+          amount_received,
+          change_given,
+          created_at,
+          sale:sales (
+            *,
+            customer:customers (name, phone, email),
+            user:users (name, email),
+            sale_items (
+              *,
+              product:products (*)
+            )
+          )
+        `)
+        .eq('cash_register_id', registerId)
+        .order('created_at', { ascending: false });
+
+      if (salesError) throw salesError;
+      
+      // Transformar los datos para que coincidan con SaleWithItems
+      const transformedSales = (salesData || []).map(item => ({
+        ...item.sale,
+        cash_register_payment_method: item.payment_method,
+        amount_received: item.amount_received,
+        change_given: item.change_given
+      })) as SaleWithItems[];
+      
+      setSales(transformedSales);
+    } catch (error) {
+      console.error('Error loading sales:', error);
+      setSales([]);
+    } finally {
+      setSalesLoading(false);
+    }
+  };
+
   const refreshSessionDetails = async (registerId: string) => {
     try {
       // Recargar los detalles de la sesión específica
@@ -160,6 +266,7 @@ export default function CashRegisterAudit() {
 
       // Recargar movimientos para reflejar cambios
       await loadMovements(registerId);
+      await loadSales(registerId);
     } catch (error) {
       console.error('Error refreshing session details:', error);
     }
@@ -254,6 +361,171 @@ export default function CashRegisterAudit() {
         alert('Error al eliminar movimiento: ' + (error as Error).message);
       }
     }
+  };
+
+  const handleEditSale = (sale: SaleWithItems) => {
+    setEditingSale(sale);
+    setSaleEditData({
+      customer_id: sale.customer_id || '',
+      discount_amount: (sale.discount_amount || 0).toString(),
+      payment_type: sale.payment_type as 'cash' | 'installment',
+      payment_status: sale.payment_status as 'pending' | 'partial' | 'paid',
+      total_paid: (sale.total_paid || 0).toString(),
+      items: sale.sale_items.map(item => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price
+      }))
+    });
+    setShowSaleEditModal(true);
+  };
+
+  const handleSaveSale = async () => {
+    if (!editingSale || !selectedSession) return;
+
+    try {
+      const subtotal = saleEditData.items.reduce((sum, item) => sum + item.total_price, 0);
+      const discountAmount = parseFloat(saleEditData.discount_amount) || 0;
+      const totalAmount = subtotal - discountAmount;
+      const totalPaid = parseFloat(saleEditData.total_paid) || 0;
+
+      if (totalAmount <= 0) {
+        alert('El total de la venta debe ser mayor a cero');
+        return;
+      }
+
+      if (saleEditData.payment_type === 'cash' && totalPaid < totalAmount) {
+        alert('Para ventas en efectivo, el monto pagado debe ser igual al total');
+        return;
+      }
+
+      // Actualizar la venta
+      const { error: saleError } = await supabase
+        .from('sales')
+        .update({
+          customer_id: saleEditData.customer_id || null,
+          subtotal: subtotal,
+          discount_amount: discountAmount,
+          total_amount: totalAmount,
+          payment_type: saleEditData.payment_type,
+          payment_status: saleEditData.payment_status,
+          total_paid: totalPaid
+        })
+        .eq('id', editingSale.id);
+
+      if (saleError) throw saleError;
+
+      // Eliminar items existentes
+      const { error: deleteItemsError } = await supabase
+        .from('sale_items')
+        .delete()
+        .eq('sale_id', editingSale.id);
+
+      if (deleteItemsError) throw deleteItemsError;
+
+      // Insertar nuevos items
+      const { error: insertItemsError } = await supabase
+        .from('sale_items')
+        .insert(saleEditData.items.map(item => ({
+          sale_id: editingSale.id,
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price
+        })));
+
+      if (insertItemsError) throw insertItemsError;
+
+      // Cerrar modal y refrescar datos
+      setShowSaleEditModal(false);
+      setEditingSale(null);
+      setSaleEditData({
+        customer_id: '',
+        discount_amount: '0',
+        payment_type: 'cash',
+        payment_status: 'paid',
+        total_paid: '0',
+        items: []
+      });
+
+      await refreshSessionDetails(selectedSession.id);
+      alert('Venta actualizada exitosamente');
+    } catch (error) {
+      console.error('Error updating sale:', error);
+      alert('Error al actualizar venta: ' + (error as Error).message);
+    }
+  };
+
+  const handleDeleteSale = async (saleId: string) => {
+    if (!selectedSession) return;
+
+    if (window.confirm('¿Estás seguro de que quieres eliminar esta venta? Esta acción no se puede deshacer y afectará el balance de la caja.')) {
+      try {
+        // Eliminar la venta (esto eliminará automáticamente los items por CASCADE)
+        const { error } = await supabase
+          .from('sales')
+          .delete()
+          .eq('id', saleId);
+
+        if (error) throw error;
+
+        await refreshSessionDetails(selectedSession.id);
+        alert('Venta eliminada exitosamente');
+      } catch (error) {
+        console.error('Error deleting sale:', error);
+        alert('Error al eliminar venta: ' + (error as Error).message);
+      }
+    }
+  };
+
+  const addSaleItem = () => {
+    setSaleEditData(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        product_id: '',
+        quantity: 1,
+        unit_price: 0,
+        total_price: 0
+      }]
+    }));
+  };
+
+  const removeSaleItem = (index: number) => {
+    setSaleEditData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateSaleItem = (index: number, field: string, value: any) => {
+    setSaleEditData(prev => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      
+      // Recalcular total_price si cambia quantity o unit_price
+      if (field === 'quantity' || field === 'unit_price') {
+        newItems[index].total_price = newItems[index].quantity * newItems[index].unit_price;
+      }
+      
+      // Si cambia el producto, actualizar el precio
+      if (field === 'product_id') {
+        const product = products.find(p => p.id === value);
+        if (product) {
+          newItems[index].unit_price = product.sale_price;
+          newItems[index].total_price = newItems[index].quantity * product.sale_price;
+        }
+      }
+      
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const calculateSaleTotal = () => {
+    const subtotal = saleEditData.items.reduce((sum, item) => sum + item.total_price, 0);
+    const discount = parseFloat(saleEditData.discount_amount) || 0;
+    return subtotal - discount;
   };
 
   const getMovementIcon = (type: string) => {
@@ -707,6 +979,86 @@ export default function CashRegisterAudit() {
                   </div>
                 )}
               </div>
+
+              {/* Sales */}
+              <div className="p-6 border-t border-slate-200">
+                <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Ventas ({sales.length})
+                </h4>
+                
+                {salesLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : sales.length === 0 ? (
+                  <p className="text-slate-500 text-center py-4">No hay ventas registradas</p>
+                ) : (
+                  <div className="space-y-3">
+                    {sales.map((sale) => (
+                      <div key={sale.id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <ShoppingCart className="h-4 w-4 text-green-600" />
+                              <div>
+                                <h5 className="font-medium text-slate-900 text-sm">
+                                  Venta #{sale.id.slice(-8)}
+                                </h5>
+                                <p className="text-xs text-slate-600">
+                                  {sale.sale_items.length} productos • {formatCurrency(sale.total_amount)}
+                                </p>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                  <span className="flex items-center">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {new Date(sale.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  {sale.customer && (
+                                    <span className="flex items-center">
+                                      <User className="h-3 w-3 mr-1" />
+                                      {sale.customer.name}
+                                    </span>
+                                  )}
+                                  <span className={`px-2 py-1 rounded-full ${
+                                    sale.payment_type === 'cash' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          {user?.role === 'admin' && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleEditSale(sale)}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                                title="Editar venta"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSale(sale.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                                title="Eliminar venta"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="p-12 text-center">
@@ -716,6 +1068,229 @@ export default function CashRegisterAudit() {
           )}
         </div>
       </div>
+
+      {/* Sale Edit Modal */}
+      {showSaleEditModal && editingSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Editar Venta #{editingSale.id.slice(-8)}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Modifica los detalles de la venta
+              </p>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto space-y-6">
+              {/* Customer Selection */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Cliente
+                </label>
+                <select
+                  value={saleEditData.customer_id}
+                  onChange={(e) => setSaleEditData(prev => ({ ...prev, customer_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Cliente genérico</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name} - {customer.phone}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Payment Details */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Tipo de Pago
+                  </label>
+                  <select
+                    value={saleEditData.payment_type}
+                    onChange={(e) => setSaleEditData(prev => ({ ...prev, payment_type: e.target.value as 'cash' | 'installment' }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="installment">Abonos</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Estado de Pago
+                  </label>
+                  <select
+                    value={saleEditData.payment_status}
+                    onChange={(e) => setSaleEditData(prev => ({ ...prev, payment_status: e.target.value as 'pending' | 'partial' | 'paid' }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="partial">Parcial</option>
+                    <option value="paid">Pagada</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Total Pagado
+                  </label>
+                  <FormattedNumberInput
+                    value={saleEditData.total_paid}
+                    onChange={(value) => setSaleEditData(prev => ({ ...prev, total_paid: value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    min="0"
+                  />
+                </div>
+              </div>
+
+              {/* Discount */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Descuento
+                </label>
+                <FormattedNumberInput
+                  value={saleEditData.discount_amount}
+                  onChange={(value) => setSaleEditData(prev => ({ ...prev, discount_amount: value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  min="0"
+                />
+              </div>
+
+              {/* Sale Items */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-slate-900">Productos</h4>
+                  <button
+                    onClick={addSaleItem}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors duration-200 flex items-center"
+                  >
+                    <Package className="h-3 w-3 mr-1" />
+                    Agregar Producto
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {saleEditData.items.map((item, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-slate-50 rounded-lg">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Producto
+                        </label>
+                        <select
+                          value={item.product_id}
+                          onChange={(e) => updateSaleItem(index, 'product_id', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Seleccionar producto</option>
+                          {products.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name} - {formatCurrency(product.sale_price)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Cantidad
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateSaleItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Precio Unitario
+                        </label>
+                        <FormattedNumberInput
+                          value={item.unit_price.toString()}
+                          onChange={(value) => updateSaleItem(index, 'unit_price', parseFloat(value) || 0)}
+                          className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Total
+                        </label>
+                        <div className="px-2 py-1 text-sm bg-slate-100 rounded border">
+                          {formatCurrency(item.total_price)}
+                        </div>
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          onClick={() => removeSaleItem(index)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                          title="Eliminar producto"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sale Summary */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h4 className="font-medium text-blue-900 mb-3">Resumen de Venta</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700">Subtotal:</span>
+                    <p className="font-bold text-blue-900">
+                      {formatCurrency(saleEditData.items.reduce((sum, item) => sum + item.total_price, 0))}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Descuento:</span>
+                    <p className="font-bold text-blue-900">
+                      -{formatCurrency(parseFloat(saleEditData.discount_amount) || 0)}
+                    </p>
+                  </div>
+                  <div className="col-span-2 pt-2 border-t border-blue-200">
+                    <span className="text-blue-700">Total Final:</span>
+                    <p className="font-bold text-blue-900 text-lg">
+                      {formatCurrency(calculateSaleTotal())}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleSaveSale}
+                disabled={saleEditData.items.length === 0 || saleEditData.items.some(item => !item.product_id)}
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Guardar Cambios
+              </button>
+              <button
+                onClick={() => {
+                  setShowSaleEditModal(false);
+                  setEditingSale(null);
+                  setSaleEditData({
+                    customer_id: '',
+                    discount_amount: '0',
+                    payment_type: 'cash',
+                    payment_status: 'paid',
+                    total_paid: '0',
+                    items: []
+                  });
+                }}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

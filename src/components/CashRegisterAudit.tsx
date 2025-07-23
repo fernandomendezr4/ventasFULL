@@ -1,176 +1,75 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, Calendar, Filter, Eye, Edit2, Trash2, User, Package, 
-  DollarSign, Clock, AlertTriangle, CheckCircle, Activity, 
-  FileText, BarChart3, CreditCard, TrendingUp, TrendingDown,
-  X, Save, Plus, Minus
-} from 'lucide-react';
+import { Calendar, Search, Eye, Edit2, Save, X, Calculator, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, User, Clock, Package, Activity, FileText, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
-import NotificationModal from './NotificationModal';
-import ConfirmationModal from './ConfirmationModal';
-import { useNotification } from '../hooks/useNotification';
-import { useConfirmation } from '../hooks/useConfirmation';
 
 interface CashRegisterSession {
   id: string;
   user_id: string;
-  user_name: string;
   opening_amount: number;
   closing_amount: number;
-  actual_closing_amount: number;
   expected_closing_amount: number;
+  actual_closing_amount: number;
   discrepancy_amount: number;
+  discrepancy_reason: string;
+  session_notes: string;
   status: string;
   opened_at: string;
   closed_at: string | null;
-  session_notes: string;
-  total_sales_amount: number;
-  total_sales_count: number;
-  cash_sales_amount: number;
-  cash_sales_count: number;
-  total_installments_amount: number;
-  total_installments_count: number;
-  total_income: number;
-  total_expenses: number;
-  total_movements: number;
-  calculated_balance: number;
+  user: {
+    name: string;
+    email: string;
+  } | null;
+  total_sales_amount?: number;
+  total_sales_count?: number;
+  total_income?: number;
+  total_expenses?: number;
+  calculated_balance?: number;
 }
 
-interface SaleDetail {
+interface CashMovement {
   id: string;
-  total_amount: number;
-  customer_name: string | null;
-  customer_phone: string | null;
-  payment_type: string;
-  payment_method: string;
-  created_at: string;
-  items_count: number;
-  sale_items: Array<{
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>;
-}
-
-interface MovementDetail {
-  id: string;
-  type: string;
+  cash_register_id: string;
+  type: 'income' | 'expense' | 'sale' | 'opening' | 'closing';
   category: string;
   amount: number;
   description: string;
+  reference_id: string | null;
   created_at: string;
-  created_by_name: string;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  sale_price: number;
-  stock: number;
-}
-
-interface Customer {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
+  created_by: string | null;
+  created_by_user?: { name: string } | null;
 }
 
 export default function CashRegisterAudit() {
   const { user } = useAuth();
-  const { notification, showSuccess, showError, hideNotification } = useNotification();
-  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
-  
   const [sessions, setSessions] = useState<CashRegisterSession[]>([]);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
   const [selectedSession, setSelectedSession] = useState<CashRegisterSession | null>(null);
-  const [salesDetails, setSalesDetails] = useState<SaleDetail[]>([]);
-  const [movementsDetails, setMovementsDetails] = useState<MovementDetail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  
-  // Filters
-  const [searchTerm, setSearchTerm] = useState('');
+  const [movementsLoading, setMovementsLoading] = useState(false);
   const [dateFilter, setDateFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
-  
-  // Edit states
-  const [editingSession, setEditingSession] = useState<CashRegisterSession | null>(null);
-  const [editingMovement, setEditingMovement] = useState<MovementDetail | null>(null);
-  const [editingSale, setEditingSale] = useState<SaleDetail | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showMovementModal, setShowMovementModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showSaleEditModal, setShowSaleEditModal] = useState(false);
-  
-  // Form data
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingMovement, setEditingMovement] = useState<CashMovement | null>(null);
   const [editFormData, setEditFormData] = useState({
-    session_notes: '',
-    discrepancy_reason: '',
-    actual_closing_amount: ''
-  });
-  
-  const [movementFormData, setMovementFormData] = useState({
     type: 'income' as 'income' | 'expense',
     category: '',
     amount: '',
-    description: ''
-  });
-
-  const [saleEditFormData, setSaleEditFormData] = useState({
-    customer_id: '',
-    discount_amount: '',
-    items: [] as Array<{
-      id?: string;
-      product_id: string;
-      quantity: number;
-      unit_price: number;
-      total_price: number;
-      product_name?: string;
-      isNew?: boolean;
-    }>
+    description: '',
   });
 
   useEffect(() => {
     loadSessions();
-    loadProducts();
-    loadCustomers();
   }, []);
 
-  const loadProducts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, sale_price, stock')
-        .gt('stock', 0)
-        .order('name');
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (error) {
-      console.error('Error loading products:', error);
+  useEffect(() => {
+    if (selectedSession) {
+      loadMovements(selectedSession.id);
     }
-  };
-
-  const loadCustomers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('id, name, phone, email')
-        .order('name');
-
-      if (error) throw error;
-      setCustomers(data || []);
-    } catch (error) {
-      console.error('Error loading customers:', error);
-    }
-  };
+  }, [selectedSession]);
 
   const loadSessions = async () => {
     try {
@@ -184,237 +83,99 @@ export default function CashRegisterAudit() {
       setSessions(data || []);
     } catch (error) {
       console.error('Error loading sessions:', error);
-      showError('Error', 'No se pudieron cargar las sesiones de caja');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadSessionDetails = async (sessionId: string) => {
+  const loadMovements = async (registerId: string) => {
     try {
-      setLoadingDetails(true);
-      
-      // Cargar ventas de la sesión
-      const { data: salesData, error: salesError } = await supabase
-        .from('cash_register_sales')
-        .select(`
-          *,
-          sale:sales (
-            id,
-            total_amount,
-            payment_type,
-            created_at,
-            customer:customers (name, phone),
-            sale_items (
-              quantity,
-              unit_price,
-              total_price,
-              product:products (name)
-            )
-          )
-        `)
-        .eq('cash_register_id', sessionId);
-
-      if (salesError) throw salesError;
-
-      // Transformar datos de ventas
-      const transformedSales: SaleDetail[] = (salesData || []).map(item => ({
-        id: item.sale.id,
-        total_amount: item.sale.total_amount,
-        customer_name: item.sale.customer?.name || null,
-        customer_phone: item.sale.customer?.phone || null,
-        payment_type: item.sale.payment_type,
-        payment_method: item.payment_method,
-        created_at: item.sale.created_at,
-        items_count: item.sale.sale_items.length,
-        sale_items: item.sale.sale_items.map((saleItem: any) => ({
-          product_name: saleItem.product.name,
-          quantity: saleItem.quantity,
-          unit_price: saleItem.unit_price,
-          total_price: saleItem.total_price
-        }))
-      }));
-
-      setSalesDetails(transformedSales);
-
-      // Cargar movimientos de la sesión
-      const { data: movementsData, error: movementsError } = await supabase
+      setMovementsLoading(true);
+      const { data, error } = await supabase
         .from('cash_movements')
         .select(`
           *,
-          created_by
+          created_by_user:users!cash_movements_created_by_fkey (name)
         `)
-        .eq('cash_register_id', sessionId)
+        .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
 
-      if (movementsError) throw movementsError;
-
-      // Get user names for movements that have created_by
-      const userIds = [...new Set(movementsData?.map(m => m.created_by).filter(Boolean) || [])];
-      let usersData: any[] = [];
-      
-      if (userIds.length > 0) {
-        const { data: users, error: usersError } = await supabase
-          .from('users')
-          .select('id, name')
-          .in('id', userIds);
-        
-        if (!usersError) {
-          usersData = users || [];
-        }
-      }
-
-      // Create a map for quick user lookup
-      const userMap = new Map(usersData.map(user => [user.id, user.name]));
-      const transformedMovements: MovementDetail[] = (movementsData || []).map(movement => ({
-        id: movement.id,
-        type: movement.type,
-        category: movement.category,
-        amount: movement.amount,
-        description: movement.description,
-        created_at: movement.created_at,
-        created_by_name: movement.created_by ? (userMap.get(movement.created_by) || 'Usuario Desconocido') : 'Sistema'
-      }));
-
-      setMovementsDetails(transformedMovements);
-    } catch (error) {
-      console.error('Error loading session details:', error);
-      showError('Error', 'No se pudieron cargar los detalles de la sesión');
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
-
-  const handleViewDetails = async (session: CashRegisterSession) => {
-    setSelectedSession(session);
-    setShowDetailsModal(true);
-    await loadSessionDetails(session.id);
-  };
-
-  const handleEditSession = (session: CashRegisterSession) => {
-    setEditingSession(session);
-    setEditFormData({
-      session_notes: session.session_notes || '',
-      discrepancy_reason: '', // Se carga desde discrepancies si existe
-      actual_closing_amount: session.actual_closing_amount?.toString() || ''
-    });
-    setShowEditModal(true);
-  };
-
-  const handleDeleteSession = (session: CashRegisterSession) => {
-    showConfirmation(
-      'Eliminar Sesión de Caja',
-      `¿Estás seguro de que quieres eliminar la sesión de caja del ${new Date(session.opened_at).toLocaleDateString()}? Esta acción eliminará también todas las ventas y movimientos asociados.`,
-      async () => {
-        try {
-          const { error } = await supabase
-            .from('cash_registers')
-            .delete()
-            .eq('id', session.id);
-
-          if (error) throw error;
-          
-          await loadSessions();
-          showSuccess('Sesión Eliminada', 'La sesión de caja ha sido eliminada exitosamente');
-        } catch (error) {
-          console.error('Error deleting session:', error);
-          showError('Error', 'No se pudo eliminar la sesión: ' + (error as Error).message);
-        }
-      },
-      {
-        confirmText: 'Eliminar',
-        cancelText: 'Cancelar',
-        type: 'danger'
-      }
-    );
-  };
-
-  const handleSaveSessionEdit = async () => {
-    if (!editingSession) return;
-
-    try {
-      const updateData: any = {
-        session_notes: editFormData.session_notes
-      };
-
-      // Si se cambió el monto de cierre, recalcular discrepancia
-      if (editFormData.actual_closing_amount && 
-          parseFloat(editFormData.actual_closing_amount) !== editingSession.actual_closing_amount) {
-        const newAmount = parseFloat(editFormData.actual_closing_amount);
-        const expectedAmount = editingSession.expected_closing_amount;
-        updateData.actual_closing_amount = newAmount;
-        updateData.discrepancy_amount = newAmount - expectedAmount;
-      }
-
-      const { error } = await supabase
-        .from('cash_registers')
-        .update(updateData)
-        .eq('id', editingSession.id);
-
       if (error) throw error;
-
-      setShowEditModal(false);
-      setEditingSession(null);
-      await loadSessions();
-      showSuccess('Sesión Actualizada', 'Los datos de la sesión han sido actualizados exitosamente');
+      setMovements(data || []);
     } catch (error) {
-      console.error('Error updating session:', error);
-      showError('Error', 'No se pudo actualizar la sesión: ' + (error as Error).message);
+      console.error('Error loading movements:', error);
+      setMovements([]);
+    } finally {
+      setMovementsLoading(false);
     }
   };
 
-  const handleEditMovement = (movement: MovementDetail) => {
+  const refreshSessionDetails = async (registerId: string) => {
+    try {
+      // Recargar los detalles de la sesión específica
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('cash_register_history_summary')
+        .select('*')
+        .eq('id', registerId)
+        .single();
+
+      if (sessionError) throw sessionError;
+
+      // Actualizar la sesión en el estado
+      setSessions(prevSessions => 
+        prevSessions.map(session => 
+          session.id === registerId ? sessionData : session
+        )
+      );
+
+      // Actualizar la sesión seleccionada si es la misma
+      if (selectedSession && selectedSession.id === registerId) {
+        setSelectedSession(sessionData);
+      }
+
+      // Recargar movimientos para reflejar cambios
+      await loadMovements(registerId);
+    } catch (error) {
+      console.error('Error refreshing session details:', error);
+    }
+  };
+
+  const handleEditMovement = (movement: CashMovement) => {
+    // No permitir editar movimientos de apertura, cierre o ventas
+    if (['opening', 'closing', 'sale'].includes(movement.type)) {
+      alert('No se pueden editar movimientos de apertura, cierre o ventas automáticas.');
+      return;
+    }
+
     setEditingMovement(movement);
-    setMovementFormData({
+    setEditFormData({
       type: movement.type as 'income' | 'expense',
       category: movement.category,
       amount: movement.amount.toString(),
-      description: movement.description
+      description: movement.description,
     });
-    setShowMovementModal(true);
   };
 
-  const handleDeleteMovement = (movement: MovementDetail) => {
-    showConfirmation(
-      'Eliminar Movimiento',
-      `¿Estás seguro de que quieres eliminar este movimiento de ${movement.type === 'income' ? 'ingreso' : 'gasto'} por ${formatCurrency(movement.amount)}?`,
-      async () => {
-        try {
-          const { error } = await supabase
-            .from('cash_movements')
-            .delete()
-            .eq('id', movement.id);
-
-          if (error) throw error;
-
-          // Recargar detalles de la sesión
-          if (selectedSession) {
-            await loadSessionDetails(selectedSession.id);
-          }
-          await loadSessions();
-          showSuccess('Movimiento Eliminado', 'El movimiento ha sido eliminado exitosamente');
-        } catch (error) {
-          console.error('Error deleting movement:', error);
-          showError('Error', 'No se pudo eliminar el movimiento: ' + (error as Error).message);
-        }
-      },
-      {
-        confirmText: 'Eliminar',
-        cancelText: 'Cancelar',
-        type: 'danger'
-      }
-    );
-  };
-
-  const handleSaveMovementEdit = async () => {
+  const handleSaveMovement = async () => {
     if (!editingMovement || !selectedSession) return;
 
     try {
+      const amount = parseFloat(editFormData.amount);
+      if (amount <= 0) {
+        alert('El monto debe ser mayor a cero');
+        return;
+      }
+
+      if (amount > 9999999.99) {
+        alert('El monto es demasiado grande. Máximo permitido: $9,999,999.99');
+        return;
+      }
+
       const updateData = {
-        type: movementFormData.type,
-        category: movementFormData.category,
-        amount: parseFloat(movementFormData.amount),
-        description: movementFormData.description
+        type: editFormData.type,
+        category: editFormData.category || (editFormData.type === 'income' ? 'otros_ingresos' : 'otros_gastos'),
+        amount: amount,
+        description: editFormData.description.trim(),
       };
 
       const { error } = await supabase
@@ -424,231 +185,49 @@ export default function CashRegisterAudit() {
 
       if (error) throw error;
 
-      setShowMovementModal(false);
+      // Cerrar el formulario de edición
       setEditingMovement(null);
-      
-      // Recargar detalles de la sesión
-      await loadSessionDetails(selectedSession.id);
-      await loadSessions();
-      showSuccess('Movimiento Actualizado', 'El movimiento ha sido actualizado exitosamente');
+      setEditFormData({ type: 'income', category: '', amount: '', description: '' });
+
+      // Refrescar los detalles de la sesión y movimientos
+      await refreshSessionDetails(selectedSession.id);
+
+      alert('Movimiento actualizado exitosamente');
     } catch (error) {
       console.error('Error updating movement:', error);
-      showError('Error', 'No se pudo actualizar el movimiento: ' + (error as Error).message);
+      alert('Error al actualizar movimiento: ' + (error as Error).message);
     }
   };
 
-  const handleEditSale = (sale: SaleDetail) => {
-    setEditingSale(sale);
-    
-    // Find customer ID if exists
-    const customer = customers.find(c => c.name === sale.customer_name);
-    
-    setSaleEditFormData({
-      customer_id: customer?.id || '',
-      discount_amount: '0', // We'll need to get this from the sale record
-      items: sale.sale_items.map(item => ({
-        product_id: products.find(p => p.name === item.product_name)?.id || '',
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.total_price,
-        product_name: item.product_name,
-        isNew: false
-      }))
-    });
-    
-    setShowSaleEditModal(true);
-  };
+  const handleDeleteMovement = async (movementId: string) => {
+    if (!selectedSession) return;
 
-  const handleAddProductToSale = () => {
-    setSaleEditFormData(prev => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        {
-          product_id: '',
-          quantity: 1,
-          unit_price: 0,
-          total_price: 0,
-          isNew: true
-        }
-      ]
-    }));
-  };
+    const movement = movements.find(m => m.id === movementId);
+    if (!movement) return;
 
-  const handleRemoveProductFromSale = (index: number) => {
-    setSaleEditFormData(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleProductChange = (index: number, productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
-    setSaleEditFormData(prev => {
-      const newItems = [...prev.items];
-      newItems[index] = {
-        ...newItems[index],
-        product_id: productId,
-        unit_price: product.sale_price,
-        total_price: product.sale_price * newItems[index].quantity,
-        product_name: product.name
-      };
-      return { ...prev, items: newItems };
-    });
-  };
-
-  const handleQuantityChange = (index: number, quantity: number) => {
-    setSaleEditFormData(prev => {
-      const newItems = [...prev.items];
-      newItems[index] = {
-        ...newItems[index],
-        quantity: Math.max(1, quantity),
-        total_price: newItems[index].unit_price * Math.max(1, quantity)
-      };
-      return { ...prev, items: newItems };
-    });
-  };
-
-  const calculateSaleTotal = () => {
-    const subtotal = saleEditFormData.items.reduce((sum, item) => sum + item.total_price, 0);
-    const discount = parseFloat(saleEditFormData.discount_amount) || 0;
-    return subtotal - discount;
-  };
-
-  const handleSaveSaleEdit = async () => {
-    if (!editingSale || !selectedSession) return;
-
-    try {
-      // Validate that all items have products selected
-      const invalidItems = saleEditFormData.items.filter(item => !item.product_id);
-      if (invalidItems.length > 0) {
-        showError('Error de Validación', 'Todos los productos deben estar seleccionados');
-        return;
-      }
-
-      // Calculate totals
-      const subtotal = saleEditFormData.items.reduce((sum, item) => sum + item.total_price, 0);
-      const discountAmount = parseFloat(saleEditFormData.discount_amount) || 0;
-      const totalAmount = subtotal - discountAmount;
-
-      // Update sale
-      const { error: saleError } = await supabase
-        .from('sales')
-        .update({
-          customer_id: saleEditFormData.customer_id || null,
-          subtotal: subtotal,
-          discount_amount: discountAmount,
-          total_amount: totalAmount
-        })
-        .eq('id', editingSale.id);
-
-      if (saleError) throw saleError;
-
-      // Delete existing sale items
-      const { error: deleteError } = await supabase
-        .from('sale_items')
-        .delete()
-        .eq('sale_id', editingSale.id);
-
-      if (deleteError) throw deleteError;
-
-      // Insert new sale items
-      const newSaleItems = saleEditFormData.items.map(item => ({
-        sale_id: editingSale.id,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.total_price
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(newSaleItems);
-
-      if (itemsError) throw itemsError;
-
-      // Update cash register sale record
-      const { error: cashRegisterSaleError } = await supabase
-        .from('cash_register_sales')
-        .update({
-          amount_received: totalAmount // Assuming cash sale
-        })
-        .eq('sale_id', editingSale.id);
-
-      if (cashRegisterSaleError) {
-        console.warn('Could not update cash register sale:', cashRegisterSaleError);
-      }
-
-      setShowSaleEditModal(false);
-      setEditingSale(null);
-      
-      // Reload session details and sessions
-      await loadSessionDetails(selectedSession.id);
-      await loadSessions();
-      showSuccess('Venta Actualizada', 'La venta ha sido actualizada exitosamente');
-    } catch (error) {
-      console.error('Error updating sale:', error);
-      showError('Error', 'No se pudo actualizar la venta: ' + (error as Error).message);
+    // No permitir eliminar movimientos de apertura, cierre o ventas
+    if (['opening', 'closing', 'sale'].includes(movement.type)) {
+      alert('No se pueden eliminar movimientos de apertura, cierre o ventas automáticas.');
+      return;
     }
-  };
 
-  const handleDeleteSale = (sale: SaleDetail) => {
-    showConfirmation(
-      'Eliminar Venta',
-      `¿Estás seguro de que quieres eliminar la venta #${sale.id.slice(-8)} por ${formatCurrency(sale.total_amount)}? Esta acción también eliminará todos los items de la venta.`,
-      async () => {
-        try {
-          const { error } = await supabase
-            .from('sales')
-            .delete()
-            .eq('id', sale.id);
+    if (window.confirm('¿Estás seguro de que quieres eliminar este movimiento? Esta acción no se puede deshacer.')) {
+      try {
+        const { error } = await supabase
+          .from('cash_movements')
+          .delete()
+          .eq('id', movementId);
 
-          if (error) throw error;
+        if (error) throw error;
 
-          // Recargar detalles de la sesión
-          if (selectedSession) {
-            await loadSessionDetails(selectedSession.id);
-          }
-          await loadSessions();
-          showSuccess('Venta Eliminada', 'La venta ha sido eliminada exitosamente');
-        } catch (error) {
-          console.error('Error deleting sale:', error);
-          showError('Error', 'No se pudo eliminar la venta: ' + (error as Error).message);
-        }
-      },
-      {
-        confirmText: 'Eliminar',
-        cancelText: 'Cancelar',
-        type: 'danger'
+        // Refrescar los detalles de la sesión y movimientos
+        await refreshSessionDetails(selectedSession.id);
+
+        alert('Movimiento eliminado exitosamente');
+      } catch (error) {
+        console.error('Error deleting movement:', error);
+        alert('Error al eliminar movimiento: ' + (error as Error).message);
       }
-    );
-  };
-
-  const filteredSessions = sessions.filter(session => {
-    const matchesSearch = !searchTerm || 
-      session.user_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      session.session_notes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      session.id.includes(searchTerm);
-    
-    const matchesDate = !dateFilter || 
-      new Date(session.opened_at).toDateString() === new Date(dateFilter).toDateString();
-    
-    const matchesStatus = !statusFilter || session.status === statusFilter;
-    const matchesUser = !userFilter || session.user_id === userFilter;
-
-    return matchesSearch && matchesDate && matchesStatus && matchesUser;
-  });
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'open':
-        return 'bg-green-100 text-green-800';
-      case 'closed':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -686,838 +265,432 @@ export default function CashRegisterAudit() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
-          <div className="h-8 bg-slate-200 rounded w-1/3 mb-4"></div>
-          <div className="h-4 bg-slate-200 rounded w-2/3"></div>
-        </div>
-      </div>
-    );
-  }
+  const getUserName = (createdBy: string | null | undefined, createdByUser: any) => {
+    if (!createdBy) return 'Sistema';
+    if (createdByUser?.name) return createdByUser.name;
+    if (createdBy === user?.id) return user.name || 'Tú';
+    return 'Usuario';
+  };
+
+  const filteredSessions = sessions.filter(session => {
+    // Filter by date
+    if (dateFilter && !session.opened_at.startsWith(dateFilter)) {
+      return false;
+    }
+    
+    // Filter by status
+    if (statusFilter !== 'all' && session.status !== statusFilter) {
+      return false;
+    }
+    
+    // Filter by user
+    if (userFilter !== 'all' && session.user_id !== userFilter) {
+      return false;
+    }
+    
+    // Filter by search term
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      const sessionId = session.id.slice(-8);
+      const userName = session.user?.name?.toLowerCase() || '';
+      
+      return (
+        sessionId.includes(searchTerm) ||
+        userName.includes(searchLower) ||
+        session.session_notes.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    return true;
+  });
+
+  const uniqueUsers = Array.from(new Set(sessions.map(s => s.user_id)))
+    .map(userId => sessions.find(s => s.user_id === userId))
+    .filter(Boolean);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-slate-900">Auditoría de Cajas</h2>
-        <button
-          onClick={loadSessions}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          Actualizar
-        </button>
-      </div>
-
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="relative">
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar por usuario, notas o ID..."
+              placeholder="Buscar por ID de sesión, usuario o notas..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          
-          <div className="relative">
-            <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los estados</option>
+              <option value="open">Abiertas</option>
+              <option value="closed">Cerradas</option>
+            </select>
+            <select
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">Todos los usuarios</option>
+              {uniqueUsers.map((session) => (
+                <option key={session?.user_id} value={session?.user_id}>
+                  {session?.user?.name || 'Usuario desconocido'}
+                </option>
+              ))}
+            </select>
           </div>
-          
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">Todos los estados</option>
-            <option value="open">Abierta</option>
-            <option value="closed">Cerrada</option>
-          </select>
-          
-          <button
-            onClick={() => {
-              setSearchTerm('');
-              setDateFilter('');
-              setStatusFilter('');
-              setUserFilter('');
-            }}
-            className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
-          >
-            <Filter className="h-4 w-4 mr-2 inline" />
-            Limpiar Filtros
-          </button>
         </div>
-        
-        {(searchTerm || dateFilter || statusFilter) && (
+        {(searchTerm || dateFilter || statusFilter !== 'all' || userFilter !== 'all') && (
           <div className="mt-3 text-sm text-slate-600">
             Mostrando {filteredSessions.length} de {sessions.length} sesiones
           </div>
         )}
       </div>
 
-      {/* Sessions Summary */}
-      {filteredSessions.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Resumen de Sesiones</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <p className="text-sm font-medium text-blue-600">Total Sesiones</p>
-              <p className="text-2xl font-bold text-blue-900">{filteredSessions.length}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <p className="text-sm font-medium text-green-600">Ventas Totales</p>
-              <p className="text-2xl font-bold text-green-900">
-                {formatCurrency(filteredSessions.reduce((sum, s) => sum + (s.total_sales_amount || 0), 0))}
-              </p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-              <p className="text-sm font-medium text-purple-600">Número de Ventas</p>
-              <p className="text-2xl font-bold text-purple-900">
-                {filteredSessions.reduce((sum, s) => sum + (s.total_sales_count || 0), 0)}
-              </p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-              <p className="text-sm font-medium text-orange-600">Discrepancias</p>
-              <p className="text-2xl font-bold text-orange-900">
-                {formatCurrency(filteredSessions.reduce((sum, s) => sum + Math.abs(s.discrepancy_amount || 0), 0))}
-              </p>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sessions List */}
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center">
+              <FileText className="h-5 w-5 mr-2 text-blue-600" />
+              Sesiones de Caja ({filteredSessions.length})
+            </h3>
           </div>
-        </div>
-      )}
-
-      {/* Sessions List */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {filteredSessions.length === 0 ? (
-          <div className="p-12 text-center">
-            <FileText className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <p className="text-slate-500">
-              {sessions.length === 0 
-                ? 'No hay sesiones de caja registradas' 
-                : 'No se encontraron sesiones que coincidan con los filtros aplicados'}
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-200">
-            {filteredSessions.map((session) => (
-              <div key={session.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-3">
-                      <div>
-                        <h3 className="font-semibold text-slate-900 flex items-center">
-                          <Activity className="h-5 w-5 mr-2 text-blue-600" />
-                          Sesión #{session.id.slice(-8)}
-                        </h3>
-                        <div className="flex items-center gap-4 text-sm text-slate-600 mt-1">
-                          <span className="flex items-center">
-                            <User className="h-4 w-4 mr-1" />
-                            {session.user_name}
-                          </span>
-                          <span className="flex items-center">
-                            <Clock className="h-4 w-4 mr-1" />
-                            {new Date(session.opened_at).toLocaleDateString('es-ES')} - 
-                            {new Date(session.opened_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(session.status)}`}>
-                            {session.status === 'open' ? 'Abierta' : 'Cerrada'}
-                          </span>
+          <div className="max-h-96 overflow-y-auto">
+            {loading ? (
+              <div className="p-6">
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="animate-pulse">
+                      <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : filteredSessions.length === 0 ? (
+              <div className="p-12 text-center">
+                <Calculator className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                <p className="text-slate-500">No se encontraron sesiones de caja</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-200">
+                {filteredSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    onClick={() => setSelectedSession(session)}
+                    className={`p-4 hover:bg-slate-50 cursor-pointer transition-colors duration-200 ${
+                      selectedSession?.id === session.id ? 'bg-blue-50 border-r-4 border-blue-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${
+                            session.status === 'open' ? 'bg-green-100' : 'bg-slate-100'
+                          }`}>
+                            <Calculator className={`h-4 w-4 ${
+                              session.status === 'open' ? 'text-green-600' : 'text-slate-600'
+                            }`} />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-slate-900">
+                              Sesión #{session.id.slice(-8)}
+                            </h4>
+                            <p className="text-sm text-slate-600">
+                              {session.user?.name || 'Usuario desconocido'}
+                            </p>
+                            <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                              <span className="flex items-center">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {new Date(session.opened_at).toLocaleDateString('es-ES')}
+                              </span>
+                              <span className={`px-2 py-1 rounded-full ${
+                                session.status === 'open' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                {session.status === 'open' ? 'Abierta' : 'Cerrada'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <span className="text-slate-600">Apertura:</span>
-                        <p className="font-semibold text-slate-900">{formatCurrency(session.opening_amount)}</p>
-                      </div>
-                      <div>
-                        <span className="text-slate-600">Ventas:</span>
-                        <p className="font-semibold text-green-600">
-                          {formatCurrency(session.total_sales_amount || 0)} ({session.total_sales_count || 0})
+                      <div className="text-right">
+                        <p className="font-bold text-slate-900">
+                          {formatCurrency(session.calculated_balance || 0)}
                         </p>
-                      </div>
-                      <div>
-                        <span className="text-slate-600">Balance:</span>
-                        <p className="font-semibold text-blue-600">{formatCurrency(session.calculated_balance || 0)}</p>
-                      </div>
-                      <div>
-                        <span className="text-slate-600">Discrepancia:</span>
-                        <p className={`font-semibold ${
-                          Math.abs(session.discrepancy_amount || 0) > 1 
-                            ? 'text-red-600' 
-                            : 'text-green-600'
-                        }`}>
-                          {formatCurrency(session.discrepancy_amount || 0)}
-                        </p>
+                        <p className="text-xs text-slate-500">Balance</p>
+                        {Math.abs(session.discrepancy_amount || 0) > 1 && (
+                          <div className="flex items-center text-xs text-orange-600 mt-1">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Discrepancia
+                          </div>
+                        )}
                       </div>
                     </div>
-                    
-                    {session.session_notes && (
-                      <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                        <p className="text-sm text-slate-700">
-                          <strong>Notas:</strong> {session.session_notes}
-                        </p>
-                      </div>
-                    )}
                   </div>
-                  
-                  <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => handleViewDetails(session)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                      title="Ver detalles"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    {user?.role === 'admin' && (
-                      <>
-                        <button
-                          onClick={() => handleEditSession(session)}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
-                          title="Editar sesión"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSession(session)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                          title="Eliminar sesión"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Session Details Modal */}
-      {showDetailsModal && selectedSession && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold text-slate-900">
-                    Detalles de Sesión #{selectedSession.id.slice(-8)}
-                  </h3>
-                  <p className="text-sm text-slate-600 mt-1">
-                    {selectedSession.user_name} • {new Date(selectedSession.opened_at).toLocaleDateString('es-ES')}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedSession(null);
-                    setSalesDetails([]);
-                    setMovementsDetails([]);
-                  }}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6">
-              {loadingDetails ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Session Summary */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                      <h4 className="font-medium text-blue-900 mb-2">Información de Sesión</h4>
-                      <div className="space-y-1 text-sm">
-                        <p><strong>Apertura:</strong> {formatCurrency(selectedSession.opening_amount)}</p>
-                        <p><strong>Cierre esperado:</strong> {formatCurrency(selectedSession.expected_closing_amount)}</p>
-                        <p><strong>Cierre real:</strong> {formatCurrency(selectedSession.actual_closing_amount)}</p>
-                        <p><strong>Discrepancia:</strong> 
-                          <span className={Math.abs(selectedSession.discrepancy_amount || 0) > 1 ? 'text-red-600' : 'text-green-600'}>
-                            {formatCurrency(selectedSession.discrepancy_amount || 0)}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <h4 className="font-medium text-green-900 mb-2">Ventas</h4>
-                      <div className="space-y-1 text-sm">
-                        <p><strong>Total ventas:</strong> {selectedSession.total_sales_count || 0}</p>
-                        <p><strong>Monto total:</strong> {formatCurrency(selectedSession.total_sales_amount || 0)}</p>
-                        <p><strong>Ventas efectivo:</strong> {selectedSession.cash_sales_count || 0}</p>
-                        <p><strong>Monto efectivo:</strong> {formatCurrency(selectedSession.cash_sales_amount || 0)}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                      <h4 className="font-medium text-purple-900 mb-2">Movimientos</h4>
-                      <div className="space-y-1 text-sm">
-                        <p><strong>Total movimientos:</strong> {selectedSession.total_movements || 0}</p>
-                        <p><strong>Ingresos:</strong> {formatCurrency(selectedSession.total_income || 0)}</p>
-                        <p><strong>Gastos:</strong> {formatCurrency(selectedSession.total_expenses || 0)}</p>
-                        <p><strong>Abonos:</strong> {formatCurrency(selectedSession.total_installments_amount || 0)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Sales Details */}
+        {/* Session Details */}
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center">
+              <Eye className="h-5 w-5 mr-2 text-green-600" />
+              {selectedSession ? `Detalles de Sesión #${selectedSession.id.slice(-8)}` : 'Selecciona una Sesión'}
+            </h3>
+          </div>
+          
+          {selectedSession ? (
+            <div className="max-h-96 overflow-y-auto">
+              {/* Session Summary */}
+              <div className="p-6 border-b border-slate-200">
+                <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
-                      <Package className="h-5 w-5 mr-2 text-green-600" />
-                      Ventas Realizadas ({salesDetails.length})
-                    </h4>
-                    {salesDetails.length === 0 ? (
-                      <div className="text-center py-8 bg-slate-50 rounded-lg">
-                        <Package className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                        <p className="text-slate-500">No hay ventas registradas en esta sesión</p>
+                    <span className="text-slate-600">Operador:</span>
+                    <p className="font-medium text-slate-900">{selectedSession.user?.name || 'Usuario desconocido'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Estado:</span>
+                    <p className={`font-medium ${
+                      selectedSession.status === 'open' ? 'text-green-600' : 'text-slate-900'
+                    }`}>
+                      {selectedSession.status === 'open' ? 'Abierta' : 'Cerrada'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Apertura:</span>
+                    <p className="font-bold text-blue-600">{formatCurrency(selectedSession.opening_amount)}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Ventas:</span>
+                    <p className="font-bold text-green-600">{formatCurrency(selectedSession.cash_sales_amount || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-600">Balance:</span>
+                    <p className="font-bold text-purple-600">{formatCurrency(selectedSession.calculated_balance || 0)}</p>
+                  </div>
+                  {selectedSession.status === 'closed' && (
+                    <div>
+                      <span className="text-slate-600">Discrepancia:</span>
+                      <p className={`font-bold ${
+                        Math.abs(selectedSession.discrepancy_amount || 0) > 1 
+                          ? 'text-orange-600' 
+                          : 'text-green-600'
+                      }`}>
+                        {formatCurrency(selectedSession.discrepancy_amount || 0)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {selectedSession.session_notes && (
+                  <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+                    <p className="text-sm text-slate-700">{selectedSession.session_notes}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Movements */}
+              <div className="p-6">
+                <h4 className="font-medium text-slate-900 mb-4 flex items-center">
+                  <Activity className="h-4 w-4 mr-2" />
+                  Movimientos ({movements.length})
+                </h4>
+                
+                {movementsLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse">
+                        <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+                        <div className="h-3 bg-slate-200 rounded w-1/2"></div>
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {salesDetails.map((sale) => (
-                          <div key={sale.id} className="border border-slate-200 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-3">
+                    ))}
+                  </div>
+                ) : movements.length === 0 ? (
+                  <p className="text-slate-500 text-center py-4">No hay movimientos registrados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {movements.map((movement) => (
+                      <div key={movement.id} className="p-3 bg-slate-50 rounded-lg">
+                        {editingMovement?.id === movement.id ? (
+                          /* Edit Form */
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setEditFormData({ ...editFormData, type: 'income' })}
+                                className={`p-2 rounded border-2 transition-colors duration-200 ${
+                                  editFormData.type === 'income'
+                                    ? 'border-green-500 bg-green-50 text-green-700'
+                                    : 'border-slate-300 hover:border-slate-400'
+                                }`}
+                              >
+                                <TrendingUp className="h-4 w-4 mx-auto mb-1" />
+                                <span className="text-xs">Ingreso</span>
+                              </button>
+                              <button
+                                onClick={() => setEditFormData({ ...editFormData, type: 'expense' })}
+                                className={`p-2 rounded border-2 transition-colors duration-200 ${
+                                  editFormData.type === 'expense'
+                                    ? 'border-red-500 bg-red-50 text-red-700'
+                                    : 'border-slate-300 hover:border-slate-400'
+                                }`}
+                              >
+                                <TrendingDown className="h-4 w-4 mx-auto mb-1" />
+                                <span className="text-xs">Gasto</span>
+                              </button>
+                            </div>
+                            
+                            <select
+                              value={editFormData.category}
+                              onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                              className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              <option value="">Seleccionar categoría</option>
+                              {editFormData.type === 'income' ? (
+                                <>
+                                  <option value="otros_ingresos">Otros Ingresos</option>
+                                  <option value="devolucion_proveedor">Devolución Proveedor</option>
+                                  <option value="ajuste_inventario">Ajuste Inventario</option>
+                                  <option value="prestamo">Préstamo</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="otros_gastos">Otros Gastos</option>
+                                  <option value="compra_productos">Compra Productos</option>
+                                  <option value="servicios">Servicios</option>
+                                  <option value="transporte">Transporte</option>
+                                  <option value="mantenimiento">Mantenimiento</option>
+                                  <option value="devolucion_cliente">Devolución Cliente</option>
+                                </>
+                              )}
+                            </select>
+                            
+                            <FormattedNumberInput
+                              value={editFormData.amount}
+                              onChange={(value) => setEditFormData({ ...editFormData, amount: value })}
+                              className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Monto"
+                              min="0"
+                              max="9999999"
+                            />
+                            
+                            <textarea
+                              value={editFormData.description}
+                              onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                              rows={2}
+                              className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Descripción"
+                            />
+                            
+                            <div className="flex gap-2">
+                              <button
+                                onClick={handleSaveMovement}
+                                disabled={!editFormData.amount || !editFormData.description}
+                                className="flex-1 bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+                              >
+                                <Save className="h-3 w-3 mr-1" />
+                                Guardar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingMovement(null);
+                                  setEditFormData({ type: 'income', category: '', amount: '', description: '' });
+                                }}
+                                className="flex-1 bg-slate-200 text-slate-700 px-3 py-1 rounded text-sm hover:bg-slate-300 transition-colors duration-200 flex items-center justify-center"
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Display Mode */
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              {getMovementIcon(movement.type)}
                               <div>
-                                <h5 className="font-medium text-slate-900">
-                                  Venta #{sale.id.slice(-8)} - {formatCurrency(sale.total_amount)}
+                                <h5 className="font-medium text-slate-900 text-sm">
+                                  {getMovementTypeLabel(movement.type)}
+                                  {movement.category && ` - ${movement.category}`}
                                 </h5>
-                                <div className="flex items-center gap-4 text-sm text-slate-600 mt-1">
-                                  <span>{new Date(sale.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>
-                                  <span>{sale.payment_type === 'cash' ? 'Efectivo' : 'Abonos'}</span>
-                                  <span>{sale.items_count} productos</span>
-                                  {sale.customer_name && (
-                                    <span className="flex items-center">
-                                      <User className="h-3 w-3 mr-1" />
-                                      {sale.customer_name}
-                                      {sale.customer_phone && ` (${sale.customer_phone})`}
-                                    </span>
-                                  )}
+                                <p className="text-xs text-slate-600">{movement.description}</p>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                                  <span className="flex items-center">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <span className="flex items-center">
+                                    <User className="h-3 w-3 mr-1" />
+                                    {getUserName(movement.created_by, movement.created_by_user)}
+                                  </span>
                                 </div>
                               </div>
-                              {user?.role === 'admin' && (
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <p className={`font-bold text-sm ${
+                                  movement.type === 'expense' ? 'text-red-600' : 'text-green-600'
+                                }`}>
+                                  {movement.type === 'expense' ? '-' : '+'}{formatCurrency(movement.amount)}
+                                </p>
+                              </div>
+                              {/* Solo mostrar botones de edición para movimientos editables */}
+                              {!['opening', 'closing', 'sale'].includes(movement.type) && user?.role === 'admin' && (
                                 <div className="flex gap-1">
                                   <button
-                                    onClick={() => handleEditSale(sale)}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                                    title="Editar venta"
+                                    onClick={() => handleEditMovement(movement)}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                                    title="Editar movimiento"
                                   >
-                                    <Edit2 className="h-4 w-4" />
+                                    <Edit2 className="h-3 w-3" />
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteSale(sale)}
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                                    title="Eliminar venta"
+                                    onClick={() => handleDeleteMovement(movement.id)}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                                    title="Eliminar movimiento"
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    <X className="h-3 w-3" />
                                   </button>
                                 </div>
                               )}
                             </div>
-                            
-                            {/* Sale Items */}
-                            <div className="bg-slate-50 rounded-lg p-3">
-                              <h6 className="text-sm font-medium text-slate-700 mb-2">Productos vendidos:</h6>
-                              <div className="space-y-1">
-                                {sale.sale_items.map((item, index) => (
-                                  <div key={index} className="flex justify-between text-sm">
-                                    <span>{item.product_name} x{item.quantity}</span>
-                                    <span>{formatCurrency(item.total_price)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Movements Details */}
-                  <div>
-                    <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
-                      <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
-                      Movimientos de Caja ({movementsDetails.length})
-                    </h4>
-                    {movementsDetails.length === 0 ? (
-                      <div className="text-center py-8 bg-slate-50 rounded-lg">
-                        <BarChart3 className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                        <p className="text-slate-500">No hay movimientos registrados en esta sesión</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {movementsDetails.map((movement) => (
-                          <div key={movement.id} className="border border-slate-200 rounded-lg p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                {getMovementIcon(movement.type)}
-                                <div>
-                                  <h5 className="font-medium text-slate-900">
-                                    {getMovementTypeLabel(movement.type)}
-                                    {movement.category && ` - ${movement.category}`}
-                                  </h5>
-                                  <p className="text-sm text-slate-600">{movement.description}</p>
-                                  <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
-                                    <span className="flex items-center">
-                                      <Clock className="h-3 w-3 mr-1" />
-                                      {new Date(movement.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                    <span className="flex items-center">
-                                      <User className="h-3 w-3 mr-1" />
-                                      {movement.created_by_name}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-right">
-                                  <p className={`font-bold text-lg ${
-                                    movement.type === 'expense' ? 'text-red-600' : 'text-green-600'
-                                  }`}>
-                                    {movement.type === 'expense' ? '-' : '+'}{formatCurrency(movement.amount)}
-                                  </p>
-                                </div>
-                                {user?.role === 'admin' && movement.type !== 'opening' && movement.type !== 'closing' && movement.type !== 'sale' && (
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => handleEditMovement(movement)}
-                                      className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors duration-200"
-                                      title="Editar movimiento"
-                                    >
-                                      <Edit2 className="h-3 w-3" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteMovement(movement)}
-                                      className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                                      title="Eliminar movimiento"
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Session Modal */}
-      {showEditModal && editingSession && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">
-                Editar Sesión #{editingSession.id.slice(-8)}
-              </h3>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Monto Real de Cierre
-                </label>
-                <FormattedNumberInput
-                  value={editFormData.actual_closing_amount}
-                  onChange={(value) => setEditFormData({ ...editFormData, actual_closing_amount: value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={editingSession.actual_closing_amount?.toString()}
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Esperado: {formatCurrency(editingSession.expected_closing_amount)}
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Notas de Sesión
-                </label>
-                <textarea
-                  value={editFormData.session_notes}
-                  onChange={(e) => setEditFormData({ ...editFormData, session_notes: e.target.value })}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Notas sobre esta sesión..."
-                />
-              </div>
-            </div>
-            
-            <div className="p-6 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={handleSaveSessionEdit}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
-              >
-                Guardar Cambios
-              </button>
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingSession(null);
-                }}
-                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Movement Modal */}
-      {showMovementModal && editingMovement && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">
-                Editar Movimiento
-              </h3>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Tipo de Movimiento
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setMovementFormData({ ...movementFormData, type: 'income' })}
-                    className={`p-3 rounded-lg border-2 transition-colors duration-200 ${
-                      movementFormData.type === 'income'
-                        ? 'border-green-500 bg-green-50 text-green-700'
-                        : 'border-slate-300 hover:border-slate-400'
-                    }`}
-                  >
-                    <TrendingUp className="h-5 w-5 mx-auto mb-1" />
-                    <span className="text-sm font-medium">Ingreso</span>
-                  </button>
-                  <button
-                    onClick={() => setMovementFormData({ ...movementFormData, type: 'expense' })}
-                    className={`p-3 rounded-lg border-2 transition-colors duration-200 ${
-                      movementFormData.type === 'expense'
-                        ? 'border-red-500 bg-red-50 text-red-700'
-                        : 'border-slate-300 hover:border-slate-400'
-                    }`}
-                  >
-                    <TrendingDown className="h-5 w-5 mx-auto mb-1" />
-                    <span className="text-sm font-medium">Gasto</span>
-                  </button>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Categoría
-                </label>
-                <select
-                  value={movementFormData.category}
-                  onChange={(e) => setMovementFormData({ ...movementFormData, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Seleccionar categoría</option>
-                  {movementFormData.type === 'income' ? (
-                    <>
-                      <option value="otros_ingresos">Otros Ingresos</option>
-                      <option value="devolucion_proveedor">Devolución Proveedor</option>
-                      <option value="ajuste_inventario">Ajuste Inventario</option>
-                      <option value="prestamo">Préstamo</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="otros_gastos">Otros Gastos</option>
-                      <option value="compra_productos">Compra Productos</option>
-                      <option value="servicios">Servicios</option>
-                      <option value="transporte">Transporte</option>
-                      <option value="mantenimiento">Mantenimiento</option>
-                      <option value="devolucion_cliente">Devolución Cliente</option>
-                    </>
-                  )}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Monto
-                </label>
-                <FormattedNumberInput
-                  value={movementFormData.amount}
-                  onChange={(value) => setMovementFormData({ ...movementFormData, amount: value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                  min="0"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Descripción
-                </label>
-                <textarea
-                  value={movementFormData.description}
-                  onChange={(e) => setMovementFormData({ ...movementFormData, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div className="p-6 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={handleSaveMovementEdit}
-                disabled={!movementFormData.amount || !movementFormData.description}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-              >
-                Guardar Cambios
-              </button>
-              <button
-                onClick={() => {
-                  setShowMovementModal(false);
-                  setEditingMovement(null);
-                }}
-                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Sale Modal */}
-      {showSaleEditModal && editingSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Editar Venta #{editingSale.id.slice(-8)}
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowSaleEditModal(false);
-                    setEditingSale(null);
-                  }}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
-                {/* Customer Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Cliente
-                  </label>
-                  <select
-                    value={saleEditFormData.customer_id}
-                    onChange={(e) => setSaleEditFormData(prev => ({ ...prev, customer_id: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Cliente genérico</option>
-                    {customers.map(customer => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name} {customer.phone && `(${customer.phone})`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Products */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <label className="block text-sm font-medium text-slate-700">
-                      Productos
-                    </label>
-                    <button
-                      onClick={handleAddProductToSale}
-                      className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center text-sm"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Agregar Producto
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {saleEditFormData.items.map((item, index) => (
-                      <div key={index} className="border border-slate-200 rounded-lg p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-medium text-slate-600 mb-1">
-                              Producto
-                            </label>
-                            <select
-                              value={item.product_id}
-                              onChange={(e) => handleProductChange(index, e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                              required
-                            >
-                              <option value="">Seleccionar producto</option>
-                              {products.map(product => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name} - {formatCurrency(product.sale_price)} (Stock: {product.stock})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">
-                              Cantidad
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleQuantityChange(index, item.quantity - 1)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                disabled={item.quantity <= 1}
-                              >
-                                <Minus className="h-4 w-4" />
-                              </button>
-                              <input
-                                type="number"
-                                min="1"
-                                value={item.quantity}
-                                onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 1)}
-                                className="w-16 px-2 py-1 border border-slate-300 rounded text-center text-sm"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleQuantityChange(index, item.quantity + 1)}
-                                className="p-1 text-green-600 hover:bg-green-50 rounded"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-end justify-between">
-                            <div>
-                              <label className="block text-xs font-medium text-slate-600 mb-1">
-                                Total
-                              </label>
-                              <p className="font-semibold text-slate-900">
-                                {formatCurrency(item.total_price)}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveProductFromSale(index)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                              title="Eliminar producto"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-
-                {/* Discount */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Descuento
-                  </label>
-                  <FormattedNumberInput
-                    value={saleEditFormData.discount_amount}
-                    onChange={(value) => setSaleEditFormData(prev => ({ ...prev, discount_amount: value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0"
-                    min="0"
-                  />
-                </div>
-
-                {/* Totals */}
-                <div className="bg-slate-50 p-4 rounded-lg">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Subtotal:</span>
-                      <span>{formatCurrency(saleEditFormData.items.reduce((sum, item) => sum + item.total_price, 0))}</span>
-                    </div>
-                    {parseFloat(saleEditFormData.discount_amount) > 0 && (
-                      <div className="flex justify-between text-sm text-red-600">
-                        <span>Descuento:</span>
-                        <span>-{formatCurrency(parseFloat(saleEditFormData.discount_amount))}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-2">
-                      <span>Total:</span>
-                      <span>{formatCurrency(calculateSaleTotal())}</span>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
-            
-            <div className="p-6 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={handleSaveSaleEdit}
-                disabled={saleEditFormData.items.length === 0 || saleEditFormData.items.some(item => !item.product_id)}
-                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-              >
-                Guardar Cambios
-              </button>
-              <button
-                onClick={() => {
-                  setShowSaleEditModal(false);
-                  setEditingSale(null);
-                }}
-                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
+          ) : (
+            <div className="p-12 text-center">
+              <Calculator className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-500">Selecciona una sesión para ver los detalles</p>
             </div>
-          </div>
+          )}
         </div>
-      )}
-
-      {/* Notification Modal */}
-      <NotificationModal
-        isOpen={notification.isOpen}
-        onClose={hideNotification}
-        type={notification.type}
-        title={notification.title}
-        message={notification.message}
-      />
-
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={confirmation.isOpen}
-        onClose={hideConfirmation}
-        onConfirm={handleConfirm}
-        title={confirmation.title}
-        message={confirmation.message}
-        confirmText={confirmation.confirmText}
-        cancelText={confirmation.cancelText}
-        type={confirmation.type}
-        loading={confirmation.loading}
-      />
+      </div>
     </div>
   );
 }

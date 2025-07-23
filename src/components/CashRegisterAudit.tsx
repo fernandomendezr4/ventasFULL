@@ -91,17 +91,42 @@ export default function CashRegisterAudit() {
   const loadMovements = async (registerId: string) => {
     try {
       setMovementsLoading(true);
-      const { data, error } = await supabase
+      
+      // Primero cargar los movimientos
+      const { data: movementsData, error: movementsError } = await supabase
         .from('cash_movements')
-        .select(`
-          *,
-          created_by_user:users!created_by (name)
-        `)
+        .select('*')
         .eq('cash_register_id', registerId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setMovements(data || []);
+      if (movementsError) throw movementsError;
+      
+      // Luego cargar los nombres de usuarios para los movimientos que tienen created_by
+      const movementsWithUsers = await Promise.all(
+        (movementsData || []).map(async (movement) => {
+          if (movement.created_by) {
+            try {
+              const { data: userData, error: userError } = await supabase
+                .from('users')
+                .select('name')
+                .eq('id', movement.created_by)
+                .single();
+              
+              if (!userError && userData) {
+                return {
+                  ...movement,
+                  created_by_user: userData
+                };
+              }
+            } catch (error) {
+              console.warn('Error loading user for movement:', error);
+            }
+          }
+          return movement;
+        })
+      );
+      
+      setMovements(movementsWithUsers);
     } catch (error) {
       console.error('Error loading movements:', error);
       setMovements([]);

@@ -179,13 +179,30 @@ export default function CashRegisterAudit() {
         .from('cash_movements')
         .select(`
           *,
-          created_by_user:users!cash_movements_created_by_fkey (name)
+          created_by
         `)
         .eq('cash_register_id', sessionId)
         .order('created_at', { ascending: false });
 
       if (movementsError) throw movementsError;
 
+      // Get user names for movements that have created_by
+      const userIds = [...new Set(movementsData?.map(m => m.created_by).filter(Boolean) || [])];
+      let usersData: any[] = [];
+      
+      if (userIds.length > 0) {
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id, name')
+          .in('id', userIds);
+        
+        if (!usersError) {
+          usersData = users || [];
+        }
+      }
+
+      // Create a map for quick user lookup
+      const userMap = new Map(usersData.map(user => [user.id, user.name]));
       const transformedMovements: MovementDetail[] = (movementsData || []).map(movement => ({
         id: movement.id,
         type: movement.type,
@@ -193,7 +210,7 @@ export default function CashRegisterAudit() {
         amount: movement.amount,
         description: movement.description,
         created_at: movement.created_at,
-        created_by_name: movement.created_by_user?.name || 'Sistema'
+        created_by_name: movement.created_by ? (userMap.get(movement.created_by) || 'Usuario Desconocido') : 'Sistema'
       }));
 
       setMovementsDetails(transformedMovements);

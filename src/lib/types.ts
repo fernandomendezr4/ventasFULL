@@ -302,7 +302,9 @@ export type Supplier = Database['public']['Tables']['suppliers']['Row'];
 export type Customer = Database['public']['Tables']['customers']['Row'];
 export type User = Database['public']['Tables']['users']['Row'];
 export type Product = Database['public']['Tables']['products']['Row'];
-export type Sale = Database['public']['Tables']['sales']['Row'];
+export type Sale = Database['public']['Tables']['sales']['Row'] & {
+  notes?: string;
+};
 export type SaleItem = Database['public']['Tables']['sale_items']['Row'];
 export type CashRegister = Database['public']['Tables']['cash_registers']['Row'];
 export type PaymentInstallment = Database['public']['Tables']['payment_installments']['Row'];

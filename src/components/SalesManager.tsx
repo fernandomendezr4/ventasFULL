@@ -17,6 +17,15 @@ export default function SalesManager() {
   const [sortBy, setSortBy] = useState<'created_at' | 'total_amount' | 'customer_name'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Estado para el modal de edición
+  const [editingSale, setEditingSale] = useState<SaleWithItems | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    total_amount: '',
+    discount_amount: '',
+    payment_status: '',
+    notes: ''
+  });
+
   // Load payment methods from localStorage
   const getPaymentMethods = () => {
     try {
@@ -84,6 +93,48 @@ export default function SalesManager() {
         console.error('Error deleting sale:', error);
         alert('Error al eliminar venta: ' + (error as Error).message);
       }
+    }
+  };
+
+  const handleEditSale = (sale: SaleWithItems) => {
+    setEditingSale(sale);
+    setEditFormData({
+      total_amount: sale.total_amount.toString(),
+      discount_amount: (sale.discount_amount || 0).toString(),
+      payment_status: sale.payment_status || 'pending',
+      notes: sale.notes || ''
+    });
+  };
+
+  const handleUpdateSale = async () => {
+    if (!editingSale) return;
+
+    try {
+      const updateData = {
+        total_amount: parseFloat(editFormData.total_amount) || 0,
+        discount_amount: parseFloat(editFormData.discount_amount) || 0,
+        payment_status: editFormData.payment_status,
+        notes: editFormData.notes
+      };
+
+      const { error } = await supabase
+        .from('sales')
+        .update(updateData)
+        .eq('id', editingSale.id);
+
+      if (error) throw error;
+
+      // Recargar ventas para reflejar los cambios
+      await loadSales();
+      
+      // Cerrar modal
+      setEditingSale(null);
+      setEditFormData({ total_amount: '', discount_amount: '', payment_status: '', notes: '' });
+      
+      alert('Venta actualizada exitosamente');
+    } catch (error) {
+      console.error('Error updating sale:', error);
+      alert('Error al actualizar venta: ' + (error as Error).message);
     }
   };
 
@@ -397,9 +448,22 @@ export default function SalesManager() {
                     <button
                       onClick={() => setSelectedSale(sale)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                      title="Ver detalles"
                     >
                       <Eye className="h-4 w-4" />
                     </button>
+                    {/* Botón de editar para admin y manager */}
+                    {(user?.role === 'admin' || user?.role === 'manager') && (
+                      <button
+                        onClick={() => handleEditSale(sale)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                        title="Editar venta"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
                     <PrintService
                       sale={sale}
                       settings={(() => {
@@ -465,6 +529,100 @@ export default function SalesManager() {
           </div>
         )}
       </div>
+
+      {/* Edit Sale Modal */}
+      {editingSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto animate-scale-in">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Editar Venta #{editingSale.id.slice(-8)}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Modifica los datos de la venta
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Total de la Venta
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editFormData.total_amount}
+                  onChange={(e) => setEditFormData({ ...editFormData, total_amount: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Descuento
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editFormData.discount_amount}
+                  onChange={(e) => setEditFormData({ ...editFormData, discount_amount: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              
+              {editingSale.payment_type === 'installment' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Estado de Pago
+                  </label>
+                  <select
+                    value={editFormData.payment_status}
+                    onChange={(e) => setEditFormData({ ...editFormData, payment_status: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="partial">Parcial</option>
+                    <option value="paid">Pagada</option>
+                  </select>
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Notas (opcional)
+                </label>
+                <textarea
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Notas sobre la modificación..."
+                />
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleUpdateSale}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
+              >
+                Actualizar Venta
+              </button>
+              <button
+                onClick={() => {
+                  setEditingSale(null);
+                  setEditFormData({ total_amount: '', discount_amount: '', payment_status: '', notes: '' });
+                }}
+                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sale Detail Modal */}
       {selectedSale && (

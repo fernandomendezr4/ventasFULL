@@ -66,6 +66,20 @@ interface MovementDetail {
   created_by_name: string;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  sale_price: number;
+  stock: number;
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+}
+
 export default function CashRegisterAudit() {
   const { user } = useAuth();
   const { notification, showSuccess, showError, hideNotification } = useNotification();
@@ -77,6 +91,8 @@ export default function CashRegisterAudit() {
   const [movementsDetails, setMovementsDetails] = useState<MovementDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,9 +103,11 @@ export default function CashRegisterAudit() {
   // Edit states
   const [editingSession, setEditingSession] = useState<CashRegisterSession | null>(null);
   const [editingMovement, setEditingMovement] = useState<MovementDetail | null>(null);
+  const [editingSale, setEditingSale] = useState<SaleDetail | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showSaleEditModal, setShowSaleEditModal] = useState(false);
   
   // Form data
   const [editFormData, setEditFormData] = useState({
@@ -105,9 +123,54 @@ export default function CashRegisterAudit() {
     description: ''
   });
 
+  const [saleEditFormData, setSaleEditFormData] = useState({
+    customer_id: '',
+    discount_amount: '',
+    items: [] as Array<{
+      id?: string;
+      product_id: string;
+      quantity: number;
+      unit_price: number;
+      total_price: number;
+      product_name?: string;
+      isNew?: boolean;
+    }>
+  });
+
   useEffect(() => {
     loadSessions();
+    loadProducts();
+    loadCustomers();
   }, []);
+
+  const loadProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, sale_price, stock')
+        .gt('stock', 0)
+        .order('name');
+
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Error loading products:', error);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name, phone, email')
+        .order('name');
+
+      if (error) throw error;
+      setCustomers(data || []);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+    }
+  };
 
   const loadSessions = async () => {
     try {
@@ -371,6 +434,163 @@ export default function CashRegisterAudit() {
     } catch (error) {
       console.error('Error updating movement:', error);
       showError('Error', 'No se pudo actualizar el movimiento: ' + (error as Error).message);
+    }
+  };
+
+  const handleEditSale = (sale: SaleDetail) => {
+    setEditingSale(sale);
+    
+    // Find customer ID if exists
+    const customer = customers.find(c => c.name === sale.customer_name);
+    
+    setSaleEditFormData({
+      customer_id: customer?.id || '',
+      discount_amount: '0', // We'll need to get this from the sale record
+      items: sale.sale_items.map(item => ({
+        product_id: products.find(p => p.name === item.product_name)?.id || '',
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price,
+        product_name: item.product_name,
+        isNew: false
+      }))
+    });
+    
+    setShowSaleEditModal(true);
+  };
+
+  const handleAddProductToSale = () => {
+    setSaleEditFormData(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          product_id: '',
+          quantity: 1,
+          unit_price: 0,
+          total_price: 0,
+          isNew: true
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveProductFromSale = (index: number) => {
+    setSaleEditFormData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleProductChange = (index: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+
+    setSaleEditFormData(prev => {
+      const newItems = [...prev.items];
+      newItems[index] = {
+        ...newItems[index],
+        product_id: productId,
+        unit_price: product.sale_price,
+        total_price: product.sale_price * newItems[index].quantity,
+        product_name: product.name
+      };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const handleQuantityChange = (index: number, quantity: number) => {
+    setSaleEditFormData(prev => {
+      const newItems = [...prev.items];
+      newItems[index] = {
+        ...newItems[index],
+        quantity: Math.max(1, quantity),
+        total_price: newItems[index].unit_price * Math.max(1, quantity)
+      };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const calculateSaleTotal = () => {
+    const subtotal = saleEditFormData.items.reduce((sum, item) => sum + item.total_price, 0);
+    const discount = parseFloat(saleEditFormData.discount_amount) || 0;
+    return subtotal - discount;
+  };
+
+  const handleSaveSaleEdit = async () => {
+    if (!editingSale || !selectedSession) return;
+
+    try {
+      // Validate that all items have products selected
+      const invalidItems = saleEditFormData.items.filter(item => !item.product_id);
+      if (invalidItems.length > 0) {
+        showError('Error de Validación', 'Todos los productos deben estar seleccionados');
+        return;
+      }
+
+      // Calculate totals
+      const subtotal = saleEditFormData.items.reduce((sum, item) => sum + item.total_price, 0);
+      const discountAmount = parseFloat(saleEditFormData.discount_amount) || 0;
+      const totalAmount = subtotal - discountAmount;
+
+      // Update sale
+      const { error: saleError } = await supabase
+        .from('sales')
+        .update({
+          customer_id: saleEditFormData.customer_id || null,
+          subtotal: subtotal,
+          discount_amount: discountAmount,
+          total_amount: totalAmount
+        })
+        .eq('id', editingSale.id);
+
+      if (saleError) throw saleError;
+
+      // Delete existing sale items
+      const { error: deleteError } = await supabase
+        .from('sale_items')
+        .delete()
+        .eq('sale_id', editingSale.id);
+
+      if (deleteError) throw deleteError;
+
+      // Insert new sale items
+      const newSaleItems = saleEditFormData.items.map(item => ({
+        sale_id: editingSale.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.total_price
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('sale_items')
+        .insert(newSaleItems);
+
+      if (itemsError) throw itemsError;
+
+      // Update cash register sale record
+      const { error: cashRegisterSaleError } = await supabase
+        .from('cash_register_sales')
+        .update({
+          amount_received: totalAmount // Assuming cash sale
+        })
+        .eq('sale_id', editingSale.id);
+
+      if (cashRegisterSaleError) {
+        console.warn('Could not update cash register sale:', cashRegisterSaleError);
+      }
+
+      setShowSaleEditModal(false);
+      setEditingSale(null);
+      
+      // Reload session details and sessions
+      await loadSessionDetails(selectedSession.id);
+      await loadSessions();
+      showSuccess('Venta Actualizada', 'La venta ha sido actualizada exitosamente');
+    } catch (error) {
+      console.error('Error updating sale:', error);
+      showError('Error', 'No se pudo actualizar la venta: ' + (error as Error).message);
     }
   };
 
@@ -792,13 +1012,22 @@ export default function CashRegisterAudit() {
                                 </div>
                               </div>
                               {user?.role === 'admin' && (
-                                <button
-                                  onClick={() => handleDeleteSale(sale)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                                  title="Eliminar venta"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleEditSale(sale)}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                                    title="Editar venta"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSale(sale)}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                                    title="Eliminar venta"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
                               )}
                             </div>
                             
@@ -1067,6 +1296,197 @@ export default function CashRegisterAudit() {
                 onClick={() => {
                   setShowMovementModal(false);
                   setEditingMovement(null);
+                }}
+                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Sale Modal */}
+      {showSaleEditModal && editingSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Editar Venta #{editingSale.id.slice(-8)}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowSaleEditModal(false);
+                    setEditingSale(null);
+                  }}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Customer Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Cliente
+                  </label>
+                  <select
+                    value={saleEditFormData.customer_id}
+                    onChange={(e) => setSaleEditFormData(prev => ({ ...prev, customer_id: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Cliente genérico</option>
+                    {customers.map(customer => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name} {customer.phone && `(${customer.phone})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Products */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Productos
+                    </label>
+                    <button
+                      onClick={handleAddProductToSale}
+                      className="bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center text-sm"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Agregar Producto
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {saleEditFormData.items.map((item, index) => (
+                      <div key={index} className="border border-slate-200 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                              Producto
+                            </label>
+                            <select
+                              value={item.product_id}
+                              onChange={(e) => handleProductChange(index, e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                              required
+                            >
+                              <option value="">Seleccionar producto</option>
+                              {products.map(product => (
+                                <option key={product.id} value={product.id}>
+                                  {product.name} - {formatCurrency(product.sale_price)} (Stock: {product.stock})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                              Cantidad
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleQuantityChange(index, item.quantity - 1)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                disabled={item.quantity <= 1}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 1)}
+                                className="w-16 px-2 py-1 border border-slate-300 rounded text-center text-sm"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleQuantityChange(index, item.quantity + 1)}
+                                className="p-1 text-green-600 hover:bg-green-50 rounded"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-end justify-between">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Total
+                              </label>
+                              <p className="font-semibold text-slate-900">
+                                {formatCurrency(item.total_price)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleRemoveProductFromSale(index)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                              title="Eliminar producto"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Discount */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Descuento
+                  </label>
+                  <FormattedNumberInput
+                    value={saleEditFormData.discount_amount}
+                    onChange={(value) => setSaleEditFormData(prev => ({ ...prev, discount_amount: value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+
+                {/* Totals */}
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Subtotal:</span>
+                      <span>{formatCurrency(saleEditFormData.items.reduce((sum, item) => sum + item.total_price, 0))}</span>
+                    </div>
+                    {parseFloat(saleEditFormData.discount_amount) > 0 && (
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span>Descuento:</span>
+                        <span>-{formatCurrency(parseFloat(saleEditFormData.discount_amount))}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-2">
+                      <span>Total:</span>
+                      <span>{formatCurrency(calculateSaleTotal())}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={handleSaveSaleEdit}
+                disabled={saleEditFormData.items.length === 0 || saleEditFormData.items.some(item => !item.product_id)}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              >
+                Guardar Cambios
+              </button>
+              <button
+                onClick={() => {
+                  setShowSaleEditModal(false);
+                  setEditingSale(null);
                 }}
                 className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, User, Mail, Shield, CheckCircle, XCircle, Search, Filter } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { User as UserType } from '../lib/types';
+import { useAuth } from '../contexts/AuthContext';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import { useNotification } from '../hooks/useNotification';

@@ -8,6 +8,7 @@ import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
 
 export default function UserManager() {
+  const { user } = useAuth();
   const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
   const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [users, setUsers] = useState<UserType[]>([]);
@@ -32,6 +33,25 @@ export default function UserManager() {
     loadUsers();
   }, []);
 
+  // Determinar qué roles puede crear el usuario actual
+  const getAvailableRoles = () => {
+    if (user?.role === 'admin') {
+      return [
+        { value: 'employee', label: 'Empleado' },
+        { value: 'manager', label: 'Gerente' },
+        { value: 'admin', label: 'Administrador' }
+      ];
+    } else if (user?.role === 'manager') {
+      return [
+        { value: 'employee', label: 'Empleado' },
+        { value: 'manager', label: 'Gerente' }
+      ];
+    }
+    return [];
+  };
+
+  const availableRoles = getAvailableRoles();
+
   const loadUsers = async () => {
     try {
       setLoading(true);
@@ -51,8 +71,27 @@ export default function UserManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar que el usuario actual puede crear el rol seleccionado
+    if (user?.role === 'manager' && formData.role === 'admin') {
+      showError(
+        'Permisos Insuficientes',
+        'Los gerentes no pueden crear usuarios administradores. Solo pueden crear gerentes y empleados.'
+      );
+      return;
+    }
+    
     try {
       if (editingUser) {
+        // Validar que no se esté intentando cambiar a admin si es manager
+        if (user?.role === 'manager' && formData.role === 'admin') {
+          showError(
+            'Permisos Insuficientes',
+            'Los gerentes no pueden asignar el rol de administrador.'
+          );
+          return;
+        }
+        
         // Actualizar usuario existente (sin contraseña)
         const { error } = await supabase
           .from('users')
@@ -141,6 +180,15 @@ export default function UserManager() {
   };
 
   const handleChangePassword = async (user: UserType) => {
+    // Validar que el gerente no pueda cambiar contraseñas de administradores
+    if (user?.role === 'manager' && user.role === 'admin') {
+      showError(
+        'Permisos Insuficientes',
+        'Los gerentes no pueden cambiar contraseñas de usuarios administradores.'
+      );
+      return;
+    }
+    
     showConfirmation(
       'Cambiar Contraseña',
       `¿Estás seguro de que quieres cambiar la contraseña de ${user.name}?`,
@@ -190,6 +238,15 @@ export default function UserManager() {
   };
 
   const handleEdit = (user: UserType) => {
+    // Validar que el gerente no pueda editar administradores
+    if (user?.role === 'manager' && user.role === 'admin') {
+      showError(
+        'Permisos Insuficientes',
+        'Los gerentes no pueden editar usuarios administradores.'
+      );
+      return;
+    }
+    
     setEditingUser(user);
     setFormData({
       name: user.name,
@@ -204,6 +261,15 @@ export default function UserManager() {
   const handleDelete = async (id: string) => {
     const user = users.find(u => u.id === id);
     if (!user) return;
+    
+    // Validar que el gerente no pueda eliminar administradores
+    if (user?.role === 'manager' && user.role === 'admin') {
+      showError(
+        'Permisos Insuficientes',
+        'Los gerentes no pueden eliminar usuarios administradores.'
+      );
+      return;
+    }
 
     showConfirmation(
       'Eliminar Usuario',
@@ -484,10 +550,17 @@ export default function UserManager() {
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="employee">Empleado</option>
-                  <option value="manager">Gerente</option>
-                  <option value="admin">Administrador</option>
+                  {availableRoles.map((role) => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
                 </select>
+                {user?.role === 'manager' && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Como gerente, solo puedes crear usuarios gerentes y empleados
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -579,6 +652,7 @@ export default function UserManager() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleEdit(user)}
+                    disabled={user?.role === 'manager' && user.role === 'admin'}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
                     title="Editar usuario"
                   >
@@ -586,6 +660,7 @@ export default function UserManager() {
                   </button>
                   <button
                     onClick={() => handleChangePassword(user)}
+                    disabled={user?.role === 'manager' && user.role === 'admin'}
                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
                     title="Cambiar contraseña"
                   >
@@ -593,13 +668,17 @@ export default function UserManager() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                     </svg>
                   </button>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                    title="Eliminar usuario"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {/* Solo admins pueden eliminar usuarios, y gerentes no pueden eliminar admins */}
+                  {(user?.role === 'admin' || (user?.role === 'manager' && user.role !== 'admin')) && (
+                    <button
+                      onClick={() => handleDelete(user.id)}
+                      disabled={user?.role === 'manager' && user.role === 'admin'}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                      title="Eliminar usuario"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
               

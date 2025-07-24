@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, TrendingUp, TrendingDown, Package, User, Clock, Eye, X, RefreshCw, AlertTriangle, CheckCircle, Activity, FileText, BarChart3, Calculator } from 'lucide-react';
+import { Calendar, DollarSign, TrendingUp, TrendingDown, Package, User, Clock, Eye, X, RefreshCw, AlertTriangle, CheckCircle, Activity, FileText, BarChart3, Calculator, Edit2, Save, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
+import FormattedNumberInput from './FormattedNumberInput';
+import ConfirmationModal from './ConfirmationModal';
+import NotificationModal from './NotificationModal';
+import { useNotification } from '../hooks/useNotification';
+import { useConfirmation } from '../hooks/useConfirmation';
 
 interface CashRegisterSession {
   id: string;
@@ -41,8 +46,25 @@ interface SessionDetail {
   installment_details?: any;
 }
 
+interface EditingSession {
+  id: string;
+  opening_amount: string;
+  actual_closing_amount: string;
+  session_notes: string;
+  discrepancy_reason: string;
+}
+
+interface EditingMovement {
+  id: string;
+  amount: string;
+  description: string;
+  category: string;
+}
+
 export default function CashRegisterAudit() {
   const { user } = useAuth();
+  const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
+  const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [sessions, setSessions] = useState<CashRegisterSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<CashRegisterSession | null>(null);
   const [sessionDetails, setSessionDetails] = useState<SessionDetail[]>([]);
@@ -52,6 +74,12 @@ export default function CashRegisterAudit() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userFilter, setUserFilter] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Estados para edición
+  const [editingSession, setEditingSession] = useState<EditingSession | null>(null);
+  const [editingMovement, setEditingMovement] = useState<EditingMovement | null>(null);
+  const [savingSession, setSavingSession] = useState(false);
+  const [savingMovement, setSavingMovement] = useState(false);
 
   useEffect(() => {
     loadSessions();
@@ -87,6 +115,7 @@ export default function CashRegisterAudit() {
     } catch (error) {
       console.error('Error loading cash register sessions:', error);
       setSessions([]);
+      showError('Error al Cargar Sesiones', 'No se pudieron cargar las sesiones de caja');
     } finally {
       setLoading(false);
     }
@@ -155,6 +184,8 @@ export default function CashRegisterAudit() {
 
   const handleSessionSelect = async (session: CashRegisterSession) => {
     setSelectedSession(session);
+    setEditingSession(null); // Cerrar cualquier edición activa
+    setEditingMovement(null);
     await loadSessionDetails(session.id);
   };
 
@@ -163,6 +194,181 @@ export default function CashRegisterAudit() {
     if (selectedSession) {
       await refreshSessionData();
     }
+  };
+
+  const startEditingSession = (session: CashRegisterSession) => {
+    setEditingSession({
+      id: session.id,
+      opening_amount: session.opening_amount.toString(),
+      actual_closing_amount: session.actual_closing_amount.toString(),
+      session_notes: session.session_notes || '',
+      discrepancy_reason: '' // Se cargaría desde la tabla de discrepancias si existe
+    });
+  };
+
+  const cancelEditingSession = () => {
+    setEditingSession(null);
+  };
+
+  const saveSessionChanges = async () => {
+    if (!editingSession || !selectedSession) return;
+
+    try {
+      setSavingSession(true);
+
+      const openingAmount = parseFloat(editingSession.opening_amount) || 0;
+      const actualClosingAmount = parseFloat(editingSession.actual_closing_amount) || 0;
+      
+      // Calcular nuevo balance esperado basado en movimientos
+      const expectedAmount = openingAmount + selectedSession.total_sales_amount + selectedSession.total_income - selectedSession.total_expenses;
+      const newDiscrepancy = actualClosingAmount - expectedAmount;
+
+      // Actualizar la caja registradora
+      const { error: updateError } = await supabase
+        .from('cash_registers')
+        .update({
+          opening_amount: openingAmount,
+          actual_closing_amount: actualClosingAmount,
+          expected_closing_amount: expectedAmount,
+          discrepancy_amount: newDiscrepancy,
+          session_notes: editingSession.session_notes,
+          discrepancy_reason: editingSession.discrepancy_reason
+        })
+        .eq('id', editingSession.id);
+
+      if (updateError) throw updateError;
+
+      // Si hay discrepancia significativa, actualizar o crear registro de discrepancia
+      if (Math.abs(newDiscrepancy) > 100) {
+        const { data: existingDiscrepancy } = await supabase
+          .from('cash_register_discrepancies')
+          .select('id')
+          .eq('cash_register_id', editingSession.id)
+          .maybeSingle();
+
+        const discrepancyData = {
+          cash_register_id: editingSession.id,
+          discrepancy_type: newDiscrepancy > 0 ? 'overage' : 'shortage',
+          expected_amount: expectedAmount,
+          actual_amount: actualClosingAmount,
+          difference_amount: Math.abs(newDiscrepancy),
+          reason: editingSession.discrepancy_reason || 'Editado desde auditoría',
+          created_by: user?.id
+        };
+
+        if (existingDiscrepancy) {
+          // Actualizar discrepancia existente
+          const { error: discrepancyError } = await supabase
+            .from('cash_register_discrepancies')
+            .update(discrepancyData)
+            .eq('id', existingDiscrepancy.id);
+          
+          if (discrepancyError) console.error('Error updating discrepancy:', discrepancyError);
+        } else {
+          // Crear nueva discrepancia
+          const { error: discrepancyError } = await supabase
+            .from('cash_register_discrepancies')
+            .insert([discrepancyData]);
+          
+          if (discrepancyError) console.error('Error creating discrepancy:', discrepancyError);
+        }
+      }
+
+      // Actualizar el movimiento de apertura si existe
+      const { error: movementError } = await supabase
+        .from('cash_movements')
+        .update({
+          amount: openingAmount,
+          description: `Apertura de caja - ${editingSession.session_notes || 'Sin notas'}`
+        })
+        .eq('cash_register_id', editingSession.id)
+        .eq('type', 'opening');
+
+      if (movementError) console.error('Error updating opening movement:', movementError);
+
+      setEditingSession(null);
+      await refreshSessionData();
+      showSuccess('Sesión Actualizada', 'Los cambios han sido guardados exitosamente');
+
+    } catch (error) {
+      console.error('Error saving session changes:', error);
+      showError('Error al Guardar', 'No se pudieron guardar los cambios: ' + (error as Error).message);
+    } finally {
+      setSavingSession(false);
+    }
+  };
+
+  const startEditingMovement = (movement: SessionDetail) => {
+    setEditingMovement({
+      id: movement.id,
+      amount: movement.amount.toString(),
+      description: movement.description,
+      category: movement.category
+    });
+  };
+
+  const cancelEditingMovement = () => {
+    setEditingMovement(null);
+  };
+
+  const saveMovementChanges = async () => {
+    if (!editingMovement || !selectedSession) return;
+
+    try {
+      setSavingMovement(true);
+
+      const amount = parseFloat(editingMovement.amount) || 0;
+
+      // Actualizar el movimiento
+      const { error: updateError } = await supabase
+        .from('cash_movements')
+        .update({
+          amount: amount,
+          description: editingMovement.description,
+          category: editingMovement.category
+        })
+        .eq('id', editingMovement.id);
+
+      if (updateError) throw updateError;
+
+      setEditingMovement(null);
+      await refreshSessionData();
+      showSuccess('Movimiento Actualizado', 'El movimiento ha sido actualizado exitosamente');
+
+    } catch (error) {
+      console.error('Error saving movement changes:', error);
+      showError('Error al Guardar', 'No se pudo actualizar el movimiento: ' + (error as Error).message);
+    } finally {
+      setSavingMovement(false);
+    }
+  };
+
+  const deleteMovement = async (movementId: string, movementDescription: string) => {
+    showConfirmation(
+      'Eliminar Movimiento',
+      `¿Estás seguro de que quieres eliminar el movimiento "${movementDescription}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('cash_movements')
+            .delete()
+            .eq('id', movementId);
+
+          if (error) throw error;
+
+          await refreshSessionData();
+          showSuccess('Movimiento Eliminado', 'El movimiento ha sido eliminado exitosamente');
+        } catch (error) {
+          console.error('Error deleting movement:', error);
+          showError('Error al Eliminar', 'No se pudo eliminar el movimiento: ' + (error as Error).message);
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
+      }
+    );
   };
 
   const filteredSessions = sessions.filter(session => {
@@ -355,9 +561,24 @@ export default function CashRegisterAudit() {
                           {session.user_name}
                         </p>
                       </div>
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(session.status)}`}>
-                        {session.status === 'open' ? 'Abierta' : 'Cerrada'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(session.status)}`}>
+                          {session.status === 'open' ? 'Abierta' : 'Cerrada'}
+                        </span>
+                        {user?.role === 'admin' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditingSession(session);
+                              setSelectedSession(session);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors duration-200"
+                            title="Editar sesión"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -424,40 +645,164 @@ export default function CashRegisterAudit() {
           
           {selectedSession ? (
             <div className="max-h-96 overflow-y-auto">
-              {/* Resumen de la Sesión */}
+              {/* Resumen de la Sesión - Editable */}
               <div className="p-6 border-b border-slate-200 bg-slate-50">
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <span className="text-sm text-slate-600">Estado:</span>
-                    <p className="font-bold text-slate-900">
-                      {selectedSession.status === 'open' ? 'Abierta' : 'Cerrada'}
-                    </p>
+                {editingSession?.id === selectedSession.id ? (
+                  /* Formulario de Edición de Sesión */
+                  <div className="space-y-4">
+                    <h5 className="font-medium text-slate-900 mb-4">Editando Sesión</h5>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Monto de Apertura
+                        </label>
+                        <FormattedNumberInput
+                          value={editingSession.opening_amount}
+                          onChange={(value) => setEditingSession({
+                            ...editingSession,
+                            opening_amount: value
+                          })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Monto de Cierre Real
+                        </label>
+                        <FormattedNumberInput
+                          value={editingSession.actual_closing_amount}
+                          onChange={(value) => setEditingSession({
+                            ...editingSession,
+                            actual_closing_amount: value
+                          })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Notas de Sesión
+                      </label>
+                      <textarea
+                        value={editingSession.session_notes}
+                        onChange={(e) => setEditingSession({
+                          ...editingSession,
+                          session_notes: e.target.value
+                        })}
+                        rows={2}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Notas sobre la sesión..."
+                      />
+                    </div>
+                    
+                    {Math.abs(parseFloat(editingSession.actual_closing_amount) - selectedSession.expected_closing_amount) > 100 && (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Razón de la Discrepancia
+                        </label>
+                        <textarea
+                          value={editingSession.discrepancy_reason}
+                          onChange={(e) => setEditingSession({
+                            ...editingSession,
+                            discrepancy_reason: e.target.value
+                          })}
+                          rows={2}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Explica la razón de la discrepancia..."
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveSessionChanges}
+                        disabled={savingSession}
+                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors duration-200 flex items-center text-sm"
+                      >
+                        {savingSession ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-3 w-3 mr-2" />
+                            Guardar
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={cancelEditingSession}
+                        disabled={savingSession}
+                        className="bg-slate-200 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-300 disabled:opacity-50 transition-colors duration-200 text-sm"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  /* Vista Normal de Sesión */
                   <div>
-                    <span className="text-sm text-slate-600">Operador:</span>
-                    <p className="font-bold text-slate-900">{selectedSession.user_name}</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <h5 className="font-medium text-slate-900">Resumen de Sesión</h5>
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={() => startEditingSession(selectedSession)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200 flex items-center text-sm"
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Editar
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <span className="text-sm text-slate-600">Estado:</span>
+                        <p className="font-bold text-slate-900">
+                          {selectedSession.status === 'open' ? 'Abierta' : 'Cerrada'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-600">Operador:</span>
+                        <p className="font-bold text-slate-900">{selectedSession.user_name}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-600">Apertura:</span>
+                        <p className="font-bold text-blue-600">{formatCurrency(selectedSession.opening_amount)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-600">Ventas:</span>
+                        <p className="font-bold text-green-600">
+                          {formatCurrency(selectedSession.total_sales_amount)} ({selectedSession.total_sales_count})
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-600">Balance:</span>
+                        <p className="font-bold text-purple-600">{formatCurrency(selectedSession.calculated_balance)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-600">Discrepancia:</span>
+                        <p className={`font-bold ${getDiscrepancyColor(selectedSession.discrepancy_amount)}`}>
+                          {formatCurrency(selectedSession.discrepancy_amount)}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {selectedSession.session_notes && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          <strong>Notas:</strong> {selectedSession.session_notes}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-sm text-slate-600">Apertura:</span>
-                    <p className="font-bold text-blue-600">{formatCurrency(selectedSession.opening_amount)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-slate-600">Ventas:</span>
-                    <p className="font-bold text-green-600">
-                      {formatCurrency(selectedSession.total_sales_amount)} ({selectedSession.total_sales_count})
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-slate-600">Balance:</span>
-                    <p className="font-bold text-purple-600">{formatCurrency(selectedSession.calculated_balance)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-slate-600">Discrepancia:</span>
-                    <p className={`font-bold ${getDiscrepancyColor(selectedSession.discrepancy_amount)}`}>
-                      {formatCurrency(selectedSession.discrepancy_amount)}
-                    </p>
-                  </div>
-                </div>
+                )}
                 
                 {selectedSession.discrepancy_amount !== 0 && Math.abs(selectedSession.discrepancy_amount) > 100 && (
                   <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -474,7 +819,7 @@ export default function CashRegisterAudit() {
                 )}
               </div>
 
-              {/* Movimientos */}
+              {/* Movimientos - Editables */}
               <div className="p-6">
                 <h5 className="font-medium text-slate-900 mb-4 flex items-center">
                   <Activity className="h-4 w-4 mr-2" />
@@ -499,38 +844,148 @@ export default function CashRegisterAudit() {
                   <div className="space-y-3">
                     {sessionDetails.map((detail) => (
                       <div key={detail.id} className="p-3 bg-slate-50 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {getMovementIcon(detail.type)}
-                            <div>
-                              <h6 className="font-medium text-slate-900">
-                                {getMovementTypeLabel(detail.type)}
-                                {detail.category && ` - ${detail.category}`}
-                              </h6>
-                              <p className="text-sm text-slate-600">{detail.description}</p>
-                              <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
-                                <span className="flex items-center">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  {new Date(detail.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                                <span className="flex items-center">
-                                  <User className="h-3 w-3 mr-1" />
-                                  {detail.created_by_name || 'Sistema'}
-                                </span>
+                        {editingMovement?.id === detail.id ? (
+                          /* Formulario de Edición de Movimiento */
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h6 className="font-medium text-slate-900">Editando Movimiento</h6>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={saveMovementChanges}
+                                  disabled={savingMovement}
+                                  className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 disabled:opacity-50 transition-colors duration-200 flex items-center"
+                                >
+                                  {savingMovement ? (
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                                  ) : (
+                                    <Save className="h-3 w-3" />
+                                  )}
+                                </button>
+                                <button
+                                  onClick={cancelEditingMovement}
+                                  disabled={savingMovement}
+                                  className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-300 disabled:opacity-50 transition-colors duration-200"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
                               </div>
                             </div>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">
+                                  Monto
+                                </label>
+                                <FormattedNumberInput
+                                  value={editingMovement.amount}
+                                  onChange={(value) => setEditingMovement({
+                                    ...editingMovement,
+                                    amount: value
+                                  })}
+                                  className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  min="0"
+                                />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">
+                                  Categoría
+                                </label>
+                                <select
+                                  value={editingMovement.category}
+                                  onChange={(e) => setEditingMovement({
+                                    ...editingMovement,
+                                    category: e.target.value
+                                  })}
+                                  className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                  <option value="">Sin categoría</option>
+                                  <option value="otros_ingresos">Otros Ingresos</option>
+                                  <option value="otros_gastos">Otros Gastos</option>
+                                  <option value="devolucion_proveedor">Devolución Proveedor</option>
+                                  <option value="devolucion_cliente">Devolución Cliente</option>
+                                  <option value="ajuste_inventario">Ajuste Inventario</option>
+                                  <option value="compra_productos">Compra Productos</option>
+                                  <option value="servicios">Servicios</option>
+                                  <option value="transporte">Transporte</option>
+                                  <option value="mantenimiento">Mantenimiento</option>
+                                </select>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700 mb-1">
+                                Descripción
+                              </label>
+                              <textarea
+                                value={editingMovement.description}
+                                onChange={(e) => setEditingMovement({
+                                  ...editingMovement,
+                                  description: e.target.value
+                                })}
+                                rows={2}
+                                className="w-full px-2 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Descripción del movimiento..."
+                              />
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className={`font-bold text-lg ${
-                              detail.type === 'expense' ? 'text-red-600' : 'text-green-600'
-                            }`}>
-                              {detail.type === 'expense' ? '-' : '+'}{formatCurrency(detail.amount)}
-                            </p>
+                        ) : (
+                          /* Vista Normal de Movimiento */
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              {getMovementIcon(detail.type)}
+                              <div className="flex-1">
+                                <h6 className="font-medium text-slate-900">
+                                  {getMovementTypeLabel(detail.type)}
+                                  {detail.category && ` - ${detail.category}`}
+                                </h6>
+                                <p className="text-sm text-slate-600">{detail.description}</p>
+                                <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                                  <span className="flex items-center">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {new Date(detail.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <span className="flex items-center">
+                                    <User className="h-3 w-3 mr-1" />
+                                    {detail.created_by_name || 'Sistema'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <p className={`font-bold text-lg ${
+                                  detail.type === 'expense' ? 'text-red-600' : 'text-green-600'
+                                }`}>
+                                  {detail.type === 'expense' ? '-' : '+'}{formatCurrency(detail.amount)}
+                                </p>
+                              </div>
+                              {user?.role === 'admin' && detail.type !== 'sale' && (
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => startEditingMovement(detail)}
+                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors duration-200"
+                                    title="Editar movimiento"
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </button>
+                                  {detail.type !== 'opening' && detail.type !== 'closing' && (
+                                    <button
+                                      onClick={() => deleteMovement(detail.id, detail.description)}
+                                      className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors duration-200"
+                                      title="Eliminar movimiento"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
                         
                         {/* Detalles adicionales para ventas */}
-                        {detail.sale_details && (
+                        {detail.sale_details && !editingMovement && (
                           <div className="mt-2 pt-2 border-t border-slate-200">
                             <p className="text-xs text-slate-600">
                               Venta: {detail.sale_details.items_count} productos • 
@@ -540,7 +995,7 @@ export default function CashRegisterAudit() {
                         )}
                         
                         {/* Detalles adicionales para abonos */}
-                        {detail.installment_details && (
+                        {detail.installment_details && !editingMovement && (
                           <div className="mt-2 pt-2 border-t border-slate-200">
                             <p className="text-xs text-slate-600">
                               Abono: {detail.installment_details.customer_name} • 
@@ -624,6 +1079,28 @@ export default function CashRegisterAudit() {
           </div>
         </div>
       )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

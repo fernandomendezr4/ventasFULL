@@ -87,6 +87,10 @@ const DEFAULT_PERMISSIONS = {
     'view_suppliers',
     'create_suppliers',
     'edit_suppliers',
+    'manage_users',
+    'view_users',
+    'create_users',
+    'edit_users',
     'manage_settings'
   ],
   employee: [

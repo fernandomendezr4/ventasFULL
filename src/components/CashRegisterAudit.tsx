@@ -866,6 +866,7 @@ export default function CashRegisterAudit() {
                           <Edit2 className="h-4 w-4 mr-1" />
                           Editar
                         </button>
+                        <div className="flex gap-2">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -876,6 +877,7 @@ export default function CashRegisterAudit() {
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
+                        </div>
                       )}
                     </div>
                     

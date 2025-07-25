@@ -371,6 +371,114 @@ export default function CashRegisterAudit() {
     );
   };
 
+  const deleteSession = async (session: CashRegisterSession) => {
+    showConfirmation(
+      'Eliminar Sesión de Caja',
+      `¿Estás seguro de que quieres eliminar completamente la sesión de caja #${session.id.slice(-8)}? Esta acción eliminará:
+      
+      • La sesión de caja registradora
+      • Todos los movimientos asociados (${session.total_movements})
+      • Registros de ventas de caja asociados
+      • Registros de abonos asociados
+      • Registros de auditoría relacionados
+      • Registros de discrepancias si existen
+      
+      ADVERTENCIA: Esta acción NO se puede deshacer y eliminará permanentemente todos los datos relacionados con esta sesión.`,
+      async () => {
+        try {
+          // Eliminar en orden para mantener integridad referencial
+          
+          // 1. Eliminar registros de auditoría
+          const { error: auditError } = await supabase
+            .from('cash_register_audit_logs')
+            .delete()
+            .eq('cash_register_id', session.id);
+          
+          if (auditError) {
+            console.error('Error deleting audit logs:', auditError);
+            // Continuar aunque falle, no es crítico
+          }
+          
+          // 2. Eliminar discrepancias
+          const { error: discrepancyError } = await supabase
+            .from('cash_register_discrepancies')
+            .delete()
+            .eq('cash_register_id', session.id);
+          
+          if (discrepancyError) {
+            console.error('Error deleting discrepancies:', discrepancyError);
+            // Continuar aunque falle, no es crítico
+          }
+          
+          // 3. Eliminar registros de abonos de caja
+          const { error: installmentsError } = await supabase
+            .from('cash_register_installments')
+            .delete()
+            .eq('cash_register_id', session.id);
+          
+          if (installmentsError) {
+            console.error('Error deleting cash register installments:', installmentsError);
+            // Continuar aunque falle, no es crítico
+          }
+          
+          // 4. Eliminar registros de ventas de caja
+          const { error: salesError } = await supabase
+            .from('cash_register_sales')
+            .delete()
+            .eq('cash_register_id', session.id);
+          
+          if (salesError) {
+            console.error('Error deleting cash register sales:', salesError);
+            // Continuar aunque falle, no es crítico
+          }
+          
+          // 5. Eliminar movimientos de caja (esto debería eliminar automáticamente por CASCADE)
+          const { error: movementsError } = await supabase
+            .from('cash_movements')
+            .delete()
+            .eq('cash_register_id', session.id);
+          
+          if (movementsError) {
+            console.error('Error deleting cash movements:', movementsError);
+            // Continuar aunque falle, se eliminará por CASCADE
+          }
+          
+          // 6. Finalmente, eliminar la sesión de caja (esto debería eliminar todo lo demás por CASCADE)
+          const { error: sessionError } = await supabase
+            .from('cash_registers')
+            .delete()
+            .eq('id', session.id);
+          
+          if (sessionError) throw sessionError;
+          
+          // Actualizar la lista de sesiones
+          await loadSessions();
+          
+          // Si la sesión eliminada era la seleccionada, limpiar la selección
+          if (selectedSession?.id === session.id) {
+            setSelectedSession(null);
+            setSessionDetails([]);
+          }
+          
+          showSuccess(
+            'Sesión Eliminada', 
+            `La sesión de caja #${session.id.slice(-8)} y todos sus datos asociados han sido eliminados permanentemente del historial.`
+          );
+        } catch (error) {
+          console.error('Error deleting session:', error);
+          showError(
+            'Error al Eliminar Sesión', 
+            'No se pudo eliminar la sesión de caja: ' + (error as Error).message
+          );
+        }
+      },
+      {
+        confirmText: 'Eliminar Permanentemente',
+        cancelText: 'Cancelar',
+        type: 'danger'
+      }
+    );
+  };
   const filteredSessions = sessions.filter(session => {
     // Filtro por fecha
     if (dateFilter && !session.opened_at.startsWith(dateFilter)) {
@@ -757,6 +865,16 @@ export default function CashRegisterAudit() {
                         >
                           <Edit2 className="h-4 w-4 mr-1" />
                           Editar
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteSession(session);
+                          }}
+                          className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors duration-200"
+                          title="Eliminar sesión permanentemente"
+                        >
+                          <Trash2 className="h-3 w-3" />
                         </button>
                       )}
                     </div>

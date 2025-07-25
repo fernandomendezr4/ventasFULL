@@ -361,6 +361,124 @@ export interface CashRegisterAudit {
   performed_at: string;
 }
 
+// Enhanced audit types
+export interface CashRegisterEnhancedAudit {
+  id: string;
+  cash_register_id: string;
+  action_type: 'open' | 'close' | 'sale' | 'installment' | 'income' | 'expense' | 'edit' | 'delete';
+  entity_type: 'cash_register' | 'sale' | 'installment' | 'movement' | 'product' | 'customer';
+  entity_id: string | null;
+  product_details: any;
+  customer_details: any;
+  sale_details: any;
+  movement_details: any;
+  amount: number;
+  previous_balance: number | null;
+  new_balance: number | null;
+  old_values: any;
+  new_values: any;
+  changes_summary: string;
+  description: string;
+  reason: string;
+  performed_by: string | null;
+  performed_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  session_id: string | null;
+  metadata: any;
+  tags: string[];
+  severity: 'low' | 'normal' | 'high' | 'critical';
+  created_at: string;
+}
+
+export interface CashRegisterSalesTracking {
+  id: string;
+  cash_register_id: string;
+  sale_id: string;
+  products_sold: any[];
+  total_items_count: number;
+  customer_id: string | null;
+  customer_snapshot: any;
+  payment_method: string;
+  amount_received: number;
+  change_given: number;
+  discount_applied: number;
+  sale_started_at: string;
+  sale_completed_at: string;
+  processing_duration_seconds: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  notes: string;
+  tags: string[];
+  metadata: any;
+}
+
+export interface CashRegisterComprehensiveAudit {
+  register_id: string;
+  user_id: string | null;
+  opening_amount: number;
+  closing_amount: number;
+  expected_closing_amount: number;
+  actual_closing_amount: number;
+  discrepancy_amount: number;
+  discrepancy_reason: string;
+  session_notes: string;
+  status: string;
+  opened_at: string;
+  closed_at: string | null;
+  register_created_at: string;
+  operator_name: string | null;
+  operator_email: string | null;
+  operator_role: string | null;
+  total_sales_count: number;
+  total_sales_amount: number;
+  cash_sales_count: number;
+  cash_sales_amount: number;
+  installment_sales_count: number;
+  installment_sales_amount: number;
+  unique_products_sold: number;
+  total_items_sold: number;
+  unique_customers_served: number;
+  total_movements_count: number;
+  total_income: number;
+  total_expenses: number;
+  calculated_balance: number;
+  session_duration_minutes: number;
+  audit_entries_count: number;
+  last_audit_entry: string | null;
+}
+
+export interface CashRegisterSalesDetail {
+  cash_register_id: string;
+  sale_id: string;
+  total_amount: number;
+  subtotal: number;
+  discount_amount: number;
+  payment_type: string;
+  payment_status: string;
+  total_paid: number;
+  sale_date: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_cedula: string | null;
+  customer_address: string | null;
+  seller_id: string | null;
+  seller_name: string | null;
+  seller_email: string | null;
+  seller_role: string | null;
+  products_detail: any[];
+  total_line_items: number;
+  total_items_quantity: number;
+  total_profit: number;
+  register_payment_method: string;
+  amount_received: number;
+  change_given: number;
+  payment_notes: string;
+}
+
 export interface CashRegisterDiscrepancyCalculation {
   expected_amount: number;
   calculated_amount: number;

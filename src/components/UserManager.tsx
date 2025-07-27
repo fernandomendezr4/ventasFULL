@@ -56,10 +56,15 @@ export default function UserManager() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('name');
+      
+      let query = supabase.from('users').select('*');
+      
+      // Si el usuario es gerente, filtrar para que solo vea empleados y gerentes
+      if (user?.role === 'manager') {
+        query = query.in('role', ['employee', 'manager']);
+      }
+      
+      const { data, error } = await query.order('name');
 
       if (error) throw error;
       setUsers(data);
@@ -319,6 +324,11 @@ export default function UserManager() {
   };
 
   const filteredUsers = users.filter(user => {
+    // Los gerentes no pueden ver administradores (filtro adicional por seguridad)
+    if (user?.role === 'manager' && user.role === 'admin') {
+      return false;
+    }
+    
     // Filter by search term
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -435,7 +445,8 @@ export default function UserManager() {
               className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">Todos los roles</option>
-              <option value="admin">Administrador</option>
+              {/* Solo mostrar opción de admin si el usuario actual es admin */}
+              {user?.role === 'admin' && <option value="admin">Administrador</option>}
               <option value="manager">Gerente</option>
               <option value="employee">Empleado</option>
             </select>

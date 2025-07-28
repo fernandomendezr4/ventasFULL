@@ -111,52 +111,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar sesión de Supabase Auth
-    checkSupabaseSession();
-  }, []);
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        
+        if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || 
+            (event === 'TOKEN_REFRESHED' && !session) ||
+            (event === 'INITIAL_SESSION' && !session)) {
+          // Clear user state when signed out or session is invalid
+          setUser(null);
+          setPermissions([]);
+          setLoading(false);
+          return;
+        }
+        
+        if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+          try {
+            // Buscar el usuario en la tabla users
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('email', session.user.email)
+              .single();
 
-  const checkSupabaseSession = async () => {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      // If there's an error with the session (like invalid refresh token), clear it
-      if (error) {
-        console.warn('Session error, clearing auth state:', error.message);
-        await supabase.auth.signOut();
-        setUser(null);
-        setPermissions([]);
-        setLoading(false);
-        return;
-      }
-      
-      if (!error && session?.user) {
-        // Buscar el usuario en la tabla users
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', session.user.email)
-          .single();
-
-        if (!userError && userData) {
-          setUser(userData);
-          loadDefaultPermissions(userData.role);
-        } else {
-          // Si no existe en users, crear un usuario admin por defecto
-          if (session.user.email === 'estivenmendezr@gmail.com') {
-            await createDefaultAdmin(session.user);
+            if (!userError && userData) {
+              setUser(userData);
+              loadDefaultPermissions(userData.role);
+            } else {
+              // Si no existe en users, crear un usuario admin por defecto
+              if (session.user.email === 'estivenmendezr@gmail.com') {
+                await createDefaultAdmin(session.user);
+              } else {
+                // Clear state if user doesn't exist and isn't the default admin
+                setUser(null);
+                setPermissions([]);
+              }
+            }
+          } catch (error) {
+            console.error('Error loading user data:', error);
+            setUser(null);
+            setPermissions([]);
           }
         }
+        
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error checking Supabase session:', error);
-      // Clear auth state on any session check error
-      await supabase.auth.signOut();
-      setUser(null);
-      setPermissions([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    );
+
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const createDefaultAdmin = async (authUser: any) => {
     try {

@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const [showInactiveMessage, setShowInactiveMessage] = React.useState(true);
   const [countdown, setCountdown] = React.useState(5);
 

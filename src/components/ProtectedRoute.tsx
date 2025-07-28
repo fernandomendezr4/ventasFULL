@@ -12,6 +12,24 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   const [showInactiveMessage, setShowInactiveMessage] = React.useState(true);
   const [countdown, setCountdown] = React.useState(5);
 
+  // Timer para redirigir al login después de mostrar el mensaje
+  React.useEffect(() => {
+    if (user && !user.is_active && showInactiveMessage) {
+      const timer = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            // Cerrar sesión y redirigir al login
+            signOut();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [user, showInactiveMessage, signOut]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
@@ -28,24 +46,6 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   }
 
   if (!user.is_active) {
-    // Timer para redirigir al login después de mostrar el mensaje
-    React.useEffect(() => {
-      if (showInactiveMessage) {
-        const timer = setInterval(() => {
-          setCountdown(prev => {
-            if (prev <= 1) {
-              // Cerrar sesión y redirigir al login
-              signOut();
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-
-        return () => clearInterval(timer);
-      }
-    }, [showInactiveMessage, signOut]);
-
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm p-8 max-w-md text-center">

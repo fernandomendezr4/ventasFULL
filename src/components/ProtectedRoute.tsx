@@ -9,6 +9,8 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
+  const [showInactiveMessage, setShowInactiveMessage] = React.useState(true);
+  const [countdown, setCountdown] = React.useState(5);
 
   if (loading) {
     return (
@@ -26,6 +28,24 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   }
 
   if (!user.is_active) {
+    // Timer para redirigir al login después de mostrar el mensaje
+    React.useEffect(() => {
+      if (showInactiveMessage) {
+        const timer = setInterval(() => {
+          setCountdown(prev => {
+            if (prev <= 1) {
+              // Cerrar sesión y redirigir al login
+              signOut();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        return () => clearInterval(timer);
+      }
+    }, [showInactiveMessage, signOut]);
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm p-8 max-w-md text-center">
@@ -38,6 +58,19 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
           <p className="text-slate-600 mb-4">
             Tu cuenta ha sido desactivada. Contacta al administrador para reactivarla.
           </p>
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              Serás redirigido al inicio de sesión en <span className="font-bold text-blue-900">{countdown}</span> segundos
+            </p>
+            <div className="mt-3">
+              <button
+                onClick={() => signOut()}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
+              >
+                Ir al Login Ahora
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );

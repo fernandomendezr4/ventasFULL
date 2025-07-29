@@ -52,6 +52,12 @@ export default function NewSale() {
     cedula: ''
   });
 
+  // IMEI/Serial tracking state
+  const [imeiSerialData, setImeiSerialData] = useState<{[key: string]: string[]}>({});
+  const [showImeiSerialModal, setShowImeiSerialModal] = useState(false);
+  const [currentProductForImei, setCurrentProductForImei] = useState<Product | null>(null);
+  const [currentQuantityForImei, setCurrentQuantityForImei] = useState(0);
+
   useEffect(() => {
     loadProducts();
     loadCustomers();
@@ -136,6 +142,20 @@ export default function NewSale() {
   const addToCart = (product: Product) => {
     const existingItem = cart.find(item => item.product.id === product.id);
     
+    // Check if product requires IMEI/Serial and handle accordingly
+    if (product.has_imei_serial && product.requires_imei_serial) {
+      const newQuantity = existingItem ? existingItem.quantity + 1 : 1;
+      if (newQuantity > product.stock) {
+        alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+        return;
+      }
+      
+      setCurrentProductForImei(product);
+      setCurrentQuantityForImei(newQuantity);
+      setShowImeiSerialModal(true);
+      return;
+    }
+    
     if (existingItem) {
       if (existingItem.quantity < product.stock) {
         setCart(cart.map(item =>
@@ -157,12 +177,27 @@ export default function NewSale() {
 
     if (newQuantity <= 0) {
       removeFromCart(productId);
+      // Remove IMEI/Serial data for this product
+      const newImeiSerialData = { ...imeiSerialData };
+      delete newImeiSerialData[productId];
+      setImeiSerialData(newImeiSerialData);
       return;
     }
 
     if (newQuantity > product.stock) {
       alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
       return;
+    }
+
+    // If product requires IMEI/Serial and quantity is increasing
+    if (product.has_imei_serial && product.requires_imei_serial) {
+      const currentQuantity = cart.find(item => item.product.id === productId)?.quantity || 0;
+      if (newQuantity > currentQuantity) {
+        setCurrentProductForImei(product);
+        setCurrentQuantityForImei(newQuantity);
+        setShowImeiSerialModal(true);
+        return;
+      }
     }
 
     setCart(cart.map(item =>
@@ -174,6 +209,36 @@ export default function NewSale() {
 
   const removeFromCart = (productId: string) => {
     setCart(cart.filter(item => item.product.id !== productId));
+    // Remove IMEI/Serial data for this product
+    const newImeiSerialData = { ...imeiSerialData };
+    delete newImeiSerialData[productId];
+    setImeiSerialData(newImeiSerialData);
+  };
+
+  const handleImeiSerialSubmit = (imeiSerials: string[]) => {
+    if (!currentProductForImei) return;
+    
+    // Update IMEI/Serial data
+    setImeiSerialData({
+      ...imeiSerialData,
+      [currentProductForImei.id]: imeiSerials
+    });
+    
+    // Update cart
+    const existingItem = cart.find(item => item.product.id === currentProductForImei.id);
+    if (existingItem) {
+      setCart(cart.map(item =>
+        item.product.id === currentProductForImei.id
+          ? { ...item, quantity: currentQuantityForImei }
+          : item
+      ));
+    } else {
+      setCart([...cart, { product: currentProductForImei, quantity: currentQuantityForImei }]);
+    }
+    
+    setShowImeiSerialModal(false);
+    setCurrentProductForImei(null);
+    setCurrentQuantityForImei(0);
   };
 
   const calculateSubtotal = () => {
@@ -403,6 +468,7 @@ export default function NewSale() {
 
       // Reset form
       setCart([]);
+      setImeiSerialData({});
       setSelectedCustomer(null);
       setAmountReceived('');
       setDiscount('');
@@ -616,6 +682,14 @@ export default function NewSale() {
                     <div className="flex-1">
                       <h4 className="font-medium text-slate-900">{item.product.name}</h4>
                       <p className="text-sm text-slate-600">{formatCurrency(item.product.sale_price)}</p>
+                      {item.product.has_imei_serial && imeiSerialData[item.product.id] && (
+                        <div className="text-xs text-purple-600 mt-1">
+                          <span className="flex items-center">
+                            <Hash className="h-3 w-3 mr-1" />
+                            {item.product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'}: {imeiSerialData[item.product.id].length} asignados
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -1053,6 +1127,35 @@ export default function NewSale() {
         </div>
       )}
 
+      {/* IMEI/Serial Modal */}
+      {showImeiSerialModal && currentProductForImei && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center">
+                <Hash className="h-5 w-5 mr-2 text-purple-600" />
+                Asignar {currentProductForImei.imei_serial_type === 'imei' ? 'IMEI' : 'Número de Serie'}
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
+                Producto: {currentProductForImei.name} (Cantidad: {currentQuantityForImei})
+              </p>
+            </div>
+            
+            <ImeiSerialAssignment
+              product={currentProductForImei}
+              quantity={currentQuantityForImei}
+              existingData={imeiSerialData[currentProductForImei.id] || []}
+              onSubmit={handleImeiSerialSubmit}
+              onCancel={() => {
+                setShowImeiSerialModal(false);
+                setCurrentProductForImei(null);
+                setCurrentQuantityForImei(0);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Print Modal */}
       {showPrintModal && completedSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1156,6 +1259,167 @@ export default function NewSale() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Component for IMEI/Serial assignment in sales
+interface ImeiSerialAssignmentProps {
+  product: Product;
+  quantity: number;
+  existingData: string[];
+  onSubmit: (imeiSerials: string[]) => void;
+  onCancel: () => void;
+}
+
+function ImeiSerialAssignment({ 
+  product, 
+  quantity, 
+  existingData, 
+  onSubmit, 
+  onCancel 
+}: ImeiSerialAssignmentProps) {
+  const [imeiSerials, setImeiSerials] = useState<string[]>(() => {
+    // Initialize with existing data or empty array
+    const initial = [...existingData];
+    while (initial.length < quantity) {
+      initial.push('');
+    }
+    return initial.slice(0, quantity);
+  });
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadAvailableItems();
+  }, [product.id]);
+
+  const loadAvailableItems = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('product_imei_serials')
+        .select('*')
+        .eq('product_id', product.id)
+        .eq('status', 'available')
+        .order('created_at');
+
+      if (error) throw error;
+      setAvailableItems(data || []);
+    } catch (error) {
+      console.error('Error loading available items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = () => {
+    // Validate that all required fields are filled
+    const filledItems = imeiSerials.filter(item => item.trim() !== '');
+    if (filledItems.length !== quantity) {
+      alert(`Debe asignar ${quantity} ${product.imei_serial_type === 'imei' ? 'IMEI' : 'números de serie'}`);
+      return;
+    }
+
+    // Validate IMEI format if needed
+    if (product.imei_serial_type === 'imei') {
+      for (const imei of filledItems) {
+        if (!/^\d{15}$/.test(imei)) {
+          alert(`IMEI inválido: ${imei}. Debe tener exactamente 15 dígitos.`);
+          return;
+        }
+      }
+    }
+
+    onSubmit(filledItems);
+  };
+
+  const selectFromAvailable = (index: number, item: any) => {
+    const newImeiSerials = [...imeiSerials];
+    newImeiSerials[index] = product.imei_serial_type === 'imei' ? item.imei_number : item.serial_number;
+    setImeiSerials(newImeiSerials);
+  };
+
+  return (
+    <div className="p-6">
+      {loading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Cargando...</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {availableItems.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-medium text-blue-900 mb-2">
+                {product.imei_serial_type === 'imei' ? 'IMEI' : 'Números de Serie'} Disponibles
+              </h4>
+              <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
+                {availableItems.map((item, itemIndex) => (
+                  <div key={item.id} className="flex items-center justify-between text-sm">
+                    <span className="font-mono">
+                      {product.imei_serial_type === 'imei' ? item.imei_number : item.serial_number}
+                    </span>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value !== '') {
+                          selectFromAvailable(parseInt(e.target.value), item);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 border border-slate-300 rounded"
+                    >
+                      <option value="">Asignar a...</option>
+                      {imeiSerials.map((_, index) => (
+                        <option key={index} value={index}>
+                          Unidad {index + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {imeiSerials.map((value, index) => (
+              <div key={index}>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  {product.imei_serial_type === 'imei' ? 'IMEI' : 'Número de Serie'} #{index + 1}
+                </label>
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(e) => {
+                    const newImeiSerials = [...imeiSerials];
+                    newImeiSerials[index] = e.target.value;
+                    setImeiSerials(newImeiSerials);
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+                  placeholder={product.imei_serial_type === 'imei' ? '15 dígitos' : 'Número de serie'}
+                  maxLength={product.imei_serial_type === 'imei' ? 15 : undefined}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <div className="flex gap-3 mt-6">
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
+        >
+          Confirmar
+        </button>
+        <button
+          onClick={onCancel}
+          className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }

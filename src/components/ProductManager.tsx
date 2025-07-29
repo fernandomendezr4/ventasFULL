@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Package, Search, Filter, TrendingUp, DollarSign } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Search, Filter, TrendingUp, DollarSign, Upload, Download, FileText, Smartphone, Hash } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { ProductWithCategory, Category, Supplier } from '../lib/types';
+import { ProductWithCategory, Category, Supplier, BulkProductData, BulkImportResult, ImeiSerialData } from '../lib/types';
 import { formatCurrency, calculateProfit, calculateProfitMargin } from '../lib/currency';
 import FormattedNumberInput from './FormattedNumberInput';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
+import BulkProductImport from './BulkProductImport';
+import ImeiSerialManager from './ImeiSerialManager';
 
 export default function ProductManager() {
   const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
@@ -20,6 +22,9 @@ export default function ProductManager() {
   const [editingProduct, setEditingProduct] = useState<ProductWithCategory | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showImeiSerialManager, setShowImeiSerialManager] = useState(false);
+  const [selectedProductForImei, setSelectedProductForImei] = useState<ProductWithCategory | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -29,6 +34,9 @@ export default function ProductManager() {
     barcode: '',
     category_id: '',
     supplier_id: '',
+    has_imei_serial: false,
+    imei_serial_type: 'serial' as 'imei' | 'serial' | 'both',
+    requires_imei_serial: false,
   });
 
   useEffect(() => {
@@ -98,6 +106,9 @@ export default function ProductManager() {
         barcode: formData.barcode,
         category_id: formData.category_id || null,
         supplier_id: formData.supplier_id || null,
+        has_imei_serial: formData.has_imei_serial,
+        imei_serial_type: formData.imei_serial_type,
+        requires_imei_serial: formData.requires_imei_serial,
       };
 
       if (editingProduct) {
@@ -117,7 +128,19 @@ export default function ProductManager() {
 
       setShowForm(false);
       setEditingProduct(null);
-      setFormData({ name: '', description: '', sale_price: '', purchase_price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
+      setFormData({ 
+        name: '', 
+        description: '', 
+        sale_price: '', 
+        purchase_price: '', 
+        stock: '', 
+        barcode: '', 
+        category_id: '', 
+        supplier_id: '',
+        has_imei_serial: false,
+        imei_serial_type: 'serial',
+        requires_imei_serial: false
+      });
       loadProducts();
       showSuccess(
         editingProduct ? '¡Producto Actualizado!' : '¡Producto Creado!',
@@ -145,6 +168,9 @@ export default function ProductManager() {
       barcode: product.barcode,
       category_id: product.category_id || '',
       supplier_id: product.supplier_id || '',
+      has_imei_serial: product.has_imei_serial,
+      imei_serial_type: product.imei_serial_type,
+      requires_imei_serial: product.requires_imei_serial,
     });
     setShowForm(true);
   };
@@ -200,6 +226,38 @@ export default function ProductManager() {
     setFormData({ ...formData, barcode });
   };
 
+  const handleImeiSerialManagement = (product: ProductWithCategory) => {
+    setSelectedProductForImei(product);
+    setShowImeiSerialManager(true);
+  };
+
+  const downloadTemplate = () => {
+    const template = [
+      {
+        name: 'Producto Ejemplo',
+        description: 'Descripción del producto',
+        sale_price: 100000,
+        purchase_price: 80000,
+        stock: 10,
+        barcode: '1234567890123',
+        category_id: '', // UUID de categoría (opcional)
+        supplier_id: '', // UUID de proveedor (opcional)
+        has_imei_serial: false,
+        imei_serial_type: 'serial', // 'imei', 'serial', o 'both'
+        requires_imei_serial: false,
+        import_notes: 'Notas de importación'
+      }
+    ];
+    
+    const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plantilla_productos.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -208,13 +266,41 @@ export default function ProductManager() {
           onClick={() => {
             setShowForm(true);
             setEditingProduct(null);
-            setFormData({ name: '', description: '', sale_price: '', purchase_price: '', stock: '', barcode: '', category_id: '', supplier_id: '' });
+            setFormData({ 
+              name: '', 
+              description: '', 
+              sale_price: '', 
+              purchase_price: '', 
+              stock: '', 
+              barcode: '', 
+              category_id: '', 
+              supplier_id: '',
+              has_imei_serial: false,
+              imei_serial_type: 'serial',
+              requires_imei_serial: false
+            });
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
         >
           <Plus className="h-4 w-4 mr-2" />
           Agregar Producto
         </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowBulkImport(true)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar Masivo
+          </button>
+          <button
+            onClick={downloadTemplate}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 flex items-center"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Plantilla
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -359,6 +445,63 @@ export default function ProductManager() {
                   min="0"
                 />
               </div>
+              
+              {/* IMEI/Serial Configuration */}
+              <div className="md:col-span-2">
+                <div className="border border-slate-300 rounded-lg p-4">
+                  <h4 className="font-medium text-slate-900 mb-3 flex items-center">
+                    <Smartphone className="h-4 w-4 mr-2" />
+                    Configuración IMEI/Serial
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="has_imei_serial"
+                        checked={formData.has_imei_serial}
+                        onChange={(e) => setFormData({ ...formData, has_imei_serial: e.target.checked })}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                      />
+                      <label htmlFor="has_imei_serial" className="ml-2 text-sm text-slate-700">
+                        Este producto requiere seguimiento de IMEI/Serial
+                      </label>
+                    </div>
+                    
+                    {formData.has_imei_serial && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Tipo de Identificador
+                          </label>
+                          <select
+                            value={formData.imei_serial_type}
+                            onChange={(e) => setFormData({ ...formData, imei_serial_type: e.target.value as 'imei' | 'serial' | 'both' })}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="serial">Solo Número de Serie</option>
+                            <option value="imei">Solo IMEI</option>
+                            <option value="both">IMEI y Número de Serie</option>
+                          </select>
+                        </div>
+                        
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="requires_imei_serial"
+                            checked={formData.requires_imei_serial}
+                            onChange={(e) => setFormData({ ...formData, requires_imei_serial: e.target.checked })}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                          />
+                          <label htmlFor="requires_imei_serial" className="ml-2 text-sm text-slate-700">
+                            IMEI/Serial es obligatorio para la venta
+                          </label>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             
             {/* Profit Calculator */}
@@ -451,8 +594,30 @@ export default function ProductManager() {
                       {product.category.name}
                     </span>
                   )}
+                  {product.has_imei_serial && (
+                    <span className="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full mt-2 ml-2">
+                      <Smartphone className="h-3 w-3 inline mr-1" />
+                      {product.imei_serial_type === 'imei' ? 'IMEI' : 
+                       product.imei_serial_type === 'serial' ? 'Serial' : 'IMEI+Serial'}
+                    </span>
+                  )}
+                  {product.bulk_import_batch && (
+                    <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full mt-2 ml-2">
+                      <Upload className="h-3 w-3 inline mr-1" />
+                      Lote: {product.bulk_import_batch.slice(-8)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
+                  {product.has_imei_serial && (
+                    <button
+                      onClick={() => handleImeiSerialManagement(product)}
+                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                      title="Gestionar IMEI/Serial"
+                    >
+                      <Hash className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEdit(product)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
@@ -544,6 +709,43 @@ export default function ProductManager() {
         type={confirmation.type}
         loading={confirmation.loading}
       />
+
+      {/* Bulk Import Modal */}
+      {showBulkImport && (
+        <BulkProductImport
+          isOpen={showBulkImport}
+          onClose={() => setShowBulkImport(false)}
+          onSuccess={() => {
+            setShowBulkImport(false);
+            loadProducts();
+            showSuccess(
+              '¡Importación Completada!',
+              'Los productos han sido importados exitosamente'
+            );
+          }}
+          categories={categories}
+          suppliers={suppliers}
+        />
+      )}
+
+      {/* IMEI/Serial Manager Modal */}
+      {showImeiSerialManager && selectedProductForImei && (
+        <ImeiSerialManager
+          isOpen={showImeiSerialManager}
+          onClose={() => {
+            setShowImeiSerialManager(false);
+            setSelectedProductForImei(null);
+          }}
+          product={selectedProductForImei}
+          onUpdate={() => {
+            loadProducts();
+            showSuccess(
+              '¡IMEI/Serial Actualizado!',
+              'Los números IMEI/Serial han sido actualizados exitosamente'
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

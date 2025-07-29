@@ -292,6 +292,74 @@ export interface Database {
           created_at?: string;
         };
       };
+      has_imei_serial: boolean;
+      imei_serial_type: 'imei' | 'serial' | 'both';
+      requires_imei_serial: boolean;
+      bulk_import_batch: string;
+      import_notes: string;
+      imported_at: string | null;
+      imported_by: string | null;
+      has_imei_serial?: boolean;
+      imei_serial_type?: 'imei' | 'serial' | 'both';
+      requires_imei_serial?: boolean;
+      bulk_import_batch?: string;
+      import_notes?: string;
+      imported_at?: string | null;
+      imported_by?: string | null;
+      has_imei_serial?: boolean;
+      imei_serial_type?: 'imei' | 'serial' | 'both';
+      requires_imei_serial?: boolean;
+      bulk_import_batch?: string;
+      import_notes?: string;
+      imported_at?: string | null;
+      imported_by?: string | null;
+    };
+  };
+  product_imei_serials: {
+    Row: {
+      id: string;
+      product_id: string;
+      imei_number: string;
+      serial_number: string;
+      status: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
+      sale_id: string | null;
+      sale_item_id: string | null;
+      sold_at: string | null;
+      notes: string;
+      created_at: string;
+      created_by: string | null;
+      updated_at: string;
+      updated_by: string | null;
+    };
+    Insert: {
+      id?: string;
+      product_id: string;
+      imei_number?: string;
+      serial_number?: string;
+      status?: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
+      sale_id?: string | null;
+      sale_item_id?: string | null;
+      sold_at?: string | null;
+      notes?: string;
+      created_at?: string;
+      created_by?: string | null;
+      updated_at?: string;
+      updated_by?: string | null;
+    };
+    Update: {
+      id?: string;
+      product_id?: string;
+      imei_number?: string;
+      serial_number?: string;
+      status?: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
+      sale_id?: string | null;
+      sale_item_id?: string | null;
+      sold_at?: string | null;
+      notes?: string;
+      created_at?: string;
+      created_by?: string | null;
+      updated_at?: string;
+      updated_by?: string | null;
     };
   };
 }
@@ -308,6 +376,7 @@ export type Sale = Database['public']['Tables']['sales']['Row'] & {
 export type SaleItem = Database['public']['Tables']['sale_items']['Row'];
 export type CashRegister = Database['public']['Tables']['cash_registers']['Row'];
 export type PaymentInstallment = Database['public']['Tables']['payment_installments']['Row'];
+export type ProductImeiSerial = Database['public']['Tables']['product_imei_serials']['Row'];
 
 // Nuevo tipo para movimientos de caja
 export interface CashMovement {
@@ -502,6 +571,10 @@ export interface DetailedCashRegisterReport {
 export interface ProductWithCategory extends Product {
   category: Category | null;
   supplier: Supplier | null;
+  imei_serials?: ProductImeiSerial[];
+  available_units?: number;
+  sold_units?: number;
+  defective_units?: number;
 }
 
 export interface SaleWithItems extends Sale {
@@ -543,6 +616,44 @@ export interface ProductFormData {
   category_id: string;
   supplier_id: string;
   barcode: string;
+  has_imei_serial: boolean;
+  imei_serial_type: 'imei' | 'serial' | 'both';
+  requires_imei_serial: boolean;
+}
+
+// Tipos para importación masiva
+export interface BulkProductData {
+  name: string;
+  description?: string;
+  sale_price: number;
+  purchase_price?: number;
+  stock: number;
+  barcode?: string;
+  category_id?: string;
+  supplier_id?: string;
+  has_imei_serial?: boolean;
+  imei_serial_type?: 'imei' | 'serial' | 'both';
+  requires_imei_serial?: boolean;
+  import_notes?: string;
+}
+
+export interface BulkImportResult {
+  success: boolean;
+  inserted_count: number;
+  error_count: number;
+  errors: Array<{
+    product_name: string;
+    error: string;
+  }>;
+  batch_id: string;
+}
+
+// Tipos para IMEI/Serial
+export interface ImeiSerialData {
+  id?: string;
+  imei_number?: string;
+  serial_number?: string;
+  notes?: string;
 }
 
 export interface CategoryFormData {

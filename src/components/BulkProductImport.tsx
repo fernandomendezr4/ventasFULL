@@ -671,11 +671,16 @@ Celular Samsung,Smartphone con IMEI,800000,600000,5,9876543210987,,,true,imei,tr
                   <AlertTriangle className="h-16 w-16 text-yellow-600 mx-auto mb-4" />
                 )}
                 <h3 className="text-xl font-semibold text-slate-900 mb-2">
-                  Importación Completada
+                  {singleProductMode ? 'Producto Creado Exitosamente' : 'Importación Completada'}
                 </h3>
                 <p className="text-slate-600">
                   Lote: {importResult.batch_id}
                 </p>
+                {singleProductMode && (
+                  <p className="text-green-600 mt-2">
+                    Se creó el producto "{singleProductData.name}" con {imeiSerialList.split('\n').filter(line => line.trim().length > 0).length} unidades
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">

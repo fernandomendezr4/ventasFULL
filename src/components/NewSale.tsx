@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2, UserPlus, AlertTriangle, Calculator } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2, UserPlus, AlertTriangle, Calculator, Hash } from 'lucide-react';
 import { Product, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';

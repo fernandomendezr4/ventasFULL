@@ -41,6 +41,24 @@ export default function BulkProductImport({
     }
   ]);
 
+  // Nuevo estado para modo de producto único con múltiples IMEI/Serial
+  const [singleProductMode, setSingleProductMode] = useState(false);
+  const [singleProductData, setSingleProductData] = useState<BulkProductData>({
+    name: '',
+    description: '',
+    sale_price: 0,
+    purchase_price: 0,
+    stock: 0,
+    barcode: '',
+    category_id: '',
+    supplier_id: '',
+    has_imei_serial: true,
+    imei_serial_type: 'serial',
+    requires_imei_serial: true,
+    import_notes: ''
+  });
+  const [imeiSerialList, setImeiSerialList] = useState('');
+
   if (!isOpen) return null;
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,15 +121,42 @@ export default function BulkProductImport({
     try {
       const batchId = `BULK_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      const { data, error } = await supabase.rpc('bulk_import_products', {
-        products_data: productsData,
-        batch_id: batchId,
-        imported_by_user: user?.id
-      });
+      // Si no existe la función RPC, usar inserción directa
+      let insertedCount = 0;
+      let errorCount = 0;
+      const errors: Array<{ product_name: string; error: string }> = [];
 
-      if (error) throw error;
+      for (const productData of productsData) {
+        try {
+          const { error } = await supabase
+            .from('products')
+            .insert([{
+              ...productData,
+              bulk_import_batch: batchId,
+              imported_by: user?.id,
+              imported_at: new Date().toISOString()
+            }]);
 
-      setImportResult(data as BulkImportResult);
+          if (error) throw error;
+          insertedCount++;
+        } catch (error) {
+          errorCount++;
+          errors.push({
+            product_name: productData.name,
+            error: (error as Error).message
+          });
+        }
+      }
+
+      const data: BulkImportResult = {
+        success: errorCount === 0,
+        inserted_count: insertedCount,
+        error_count: errorCount,
+        errors,
+        batch_id: batchId
+      };
+
+      setImportResult(data);
     } catch (error) {
       console.error('Error in bulk import:', error);
       alert('Error en importación masiva: ' + (error as Error).message);
@@ -119,15 +164,96 @@ export default function BulkProductImport({
   };
 
   const handleManualImport = async () => {
-    const validProducts = manualProducts.filter(p => p.name.trim() !== '');
-    if (validProducts.length === 0) {
-      alert('Debe agregar al menos un producto válido');
+    if (singleProductMode) {
+      await handleSingleProductWithImeiImport();
+    } else {
+      const validProducts = manualProducts.filter(p => p.name.trim() !== '');
+      if (validProducts.length === 0) {
+        alert('Debe agregar al menos un producto válido');
+        return;
+      }
+      setLoading(true);
+      await processBulkImport(validProducts);
+      setLoading(false);
+    }
+  };
+
+  const handleSingleProductWithImeiImport = async () => {
+    if (!singleProductData.name.trim()) {
+      alert('Debe ingresar el nombre del producto');
       return;
     }
 
-    setLoading(true);
-    await processBulkImport(validProducts);
-    setLoading(false);
+    if (!imeiSerialList.trim()) {
+      alert('Debe ingresar al menos un IMEI o número de serie');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const batchId = `BULK_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Procesar lista de IMEI/Serial
+      const imeiSerials = imeiSerialList
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+      if (imeiSerials.length === 0) {
+        alert('No se encontraron IMEI/Serial válidos');
+        return;
+      }
+
+      // Crear el producto base
+      const { data: productData, error: productError } = await supabase
+        .from('products')
+        .insert([{
+          ...singleProductData,
+          stock: imeiSerials.length, // Stock igual al número de IMEI/Serial
+          bulk_import_batch: batchId,
+          imported_by: user?.id,
+          imported_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (productError) throw productError;
+
+      // Agregar los IMEI/Serial
+      const imeiSerialRecords = imeiSerials.map(item => {
+        const isIMEI = /^\d{15}$/.test(item);
+        return {
+          product_id: productData.id,
+          imei_number: isIMEI ? item : '',
+          serial_number: isIMEI ? '' : item,
+          status: 'available' as const,
+          notes: `Importado masivamente - Lote: ${batchId}`,
+          created_by: user?.id,
+          updated_by: user?.id
+        };
+      });
+
+      const { error: imeiError } = await supabase
+        .from('product_imei_serials')
+        .insert(imeiSerialRecords);
+
+      if (imeiError) throw imeiError;
+
+      // Mostrar resultado exitoso
+      setImportResult({
+        success: true,
+        inserted_count: 1,
+        error_count: 0,
+        errors: [],
+        batch_id: batchId
+      });
+
+    } catch (error) {
+      console.error('Error in single product import:', error);
+      alert('Error al importar producto: ' + (error as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addManualProduct = () => {
@@ -244,7 +370,7 @@ Celular Samsung,Smartphone con IMEI,800000,600000,5,9876543210987,,,true,imei,tr
               {/* Import Method Selection */}
               <div className="mb-6">
                 <h4 className="font-medium text-slate-900 mb-3">Método de Importación</h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <button
                     onClick={() => setImportMethod('file')}
                     className={`p-4 border-2 rounded-lg transition-all duration-200 ${
@@ -268,6 +394,21 @@ Celular Samsung,Smartphone con IMEI,800000,600000,5,9876543210987,,,true,imei,tr
                     <Plus className="h-6 w-6 mx-auto mb-2" />
                     <h5 className="font-medium">Manual</h5>
                     <p className="text-sm text-slate-600 mt-1">Formulario</p>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setImportMethod('manual');
+                      setSingleProductMode(true);
+                    }}
+                    className={`p-4 border-2 rounded-lg transition-all duration-200 ${
+                      importMethod === 'manual' && singleProductMode
+                        ? 'border-purple-500 bg-purple-50 text-purple-700'
+                        : 'border-slate-300 hover:border-slate-400'
+                    }`}
+                  >
+                    <Smartphone className="h-6 w-6 mx-auto mb-2" />
+                    <h5 className="font-medium">Producto + IMEI/Serial</h5>
+                    <p className="text-sm text-slate-600 mt-1">Un producto, múltiples unidades</p>
                   </button>
                 </div>
               </div>

@@ -12,6 +12,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: false,
+    flowType: 'pkce'
   },
   global: {
     headers: {
@@ -23,4 +25,28 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
       eventsPerSecond: 10,
     },
   },
+  db: {
+    schema: 'public',
+  },
 });
+
+// Función para verificar la conexión
+export const testConnection = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('count')
+      .limit(1);
+    
+    if (error) {
+      console.error('Database connection error:', error);
+      return false;
+    }
+    
+    console.log('Database connection successful');
+    return true;
+  } catch (error) {
+    console.error('Connection test failed:', error);
+    return false;
+  }
+};

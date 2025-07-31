@@ -32,8 +32,13 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
     try {
       setLoading(true);
       
+      // Timeout para evitar carga infinita
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout loading dashboard data')), 10000);
+      });
+      
       // Cargar datos en paralelo
-      const [
+      const dataPromise = Promise.all([
         salesCountResult,
         productsCountResult,
         customersCountResult,
@@ -41,7 +46,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
         allSalesResult,
         recentSalesResult,
         lowStockResult
-      ] = await Promise.all([
+      ] = [
         supabase.from('sales').select('*', { count: 'exact', head: true }),
         supabase.from('products').select('*', { count: 'exact', head: true }),
         supabase.from('customers').select('*', { count: 'exact', head: true }),
@@ -57,6 +62,8 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
         `).order('created_at', { ascending: false }).limit(5),
         supabase.from('products').select('*').lte('stock', 10).order('stock', { ascending: true }).limit(5)
       ]);
+
+      const results = await Promise.race([dataPromise, timeoutPromise]);
 
       const todaySalesSum = todaySalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
       const totalRevenue = allSalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
@@ -74,6 +81,8 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
       setLowStockProducts(lowStockResult.data || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      
+      // En caso de error, mostrar datos por defecto en lugar de quedarse cargando
       setStats({
         totalSales: 0,
         totalProducts: 0,
@@ -84,6 +93,11 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
       });
       setRecentSales([]);
       setLowStockProducts([]);
+      
+      // Mostrar mensaje de error al usuario
+      if (error.message?.includes('Timeout')) {
+        alert('La carga de datos está tomando mucho tiempo. Verifica tu conexión a internet.');
+      }
     } finally {
       setLoading(false);
     }

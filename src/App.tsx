@@ -20,6 +20,7 @@ import Settings from './components/Settings';
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { user } = useAuth();
+  const [appError, setAppError] = useState<string | null>(null);
 
   // Reset to dashboard when user changes (login/logout)
   React.useEffect(() => {
@@ -28,7 +29,53 @@ function AppContent() {
     }
   }, [user]);
 
+  // Error boundary para capturar errores de la aplicación
+  React.useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Application error:', event.error);
+      setAppError('Error en la aplicación. Recarga la página para continuar.');
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      if (event.reason?.message?.includes('Failed to fetch') || 
+          event.reason?.message?.includes('NetworkError')) {
+        setAppError('Error de conexión. Verifica tu internet.');
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
+  if (appError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-sm p-8 max-w-md text-center">
+          <div className="text-red-600 mb-4">
+            <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900 mb-2">Error de Aplicación</h2>
+          <p className="text-slate-600 mb-4">{appError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+          >
+            Recargar Página
+          </button>
+        </div>
+      </div>
+    );
+  }
   const renderContent = () => {
+    try {
     switch (activeTab) {
       case 'dashboard':
         return (
@@ -102,6 +149,26 @@ function AppContent() {
             <Dashboard onTabChange={setActiveTab} />
           </ViewTransition>
         );
+    }
+    } catch (error) {
+      console.error('Error rendering content:', error);
+      return (
+        <div className="text-center py-12">
+          <div className="text-red-600 mb-4">
+            <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">Error al Cargar Contenido</h3>
+          <p className="text-slate-600 mb-4">Hubo un problema al cargar esta sección</p>
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+          >
+            Ir al Dashboard
+          </button>
+        </div>
+      );
     }
   };
 

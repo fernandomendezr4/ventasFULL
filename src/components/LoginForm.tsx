@@ -17,13 +17,33 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
+      // Verificar conexión antes de intentar login
+      const connectionOk = await import('../lib/supabase').then(module => module.testConnection());
+      if (!connectionOk) {
+        setError('Error de conexión con la base de datos. Verifica tu conexión a internet.');
+        setLoading(false);
+        return;
+      }
+
       const result = await signIn(email, password);
 
       if (result.error) {
-        setError(result.error.message || 'Error en la autenticación');
+        const errorMessage = result.error.message || 'Error en la autenticación';
+        
+        // Mensajes de error más amigables
+        if (errorMessage.includes('Invalid login credentials')) {
+          setError('Email o contraseña incorrectos');
+        } else if (errorMessage.includes('Email not confirmed')) {
+          setError('Debes confirmar tu email antes de iniciar sesión');
+        } else if (errorMessage.includes('Too many requests')) {
+          setError('Demasiados intentos. Espera unos minutos antes de intentar de nuevo');
+        } else {
+          setError(errorMessage);
+        }
       }
     } catch (error) {
-      setError('Error inesperado. Intenta de nuevo.');
+      console.error('Login error:', error);
+      setError('Error de conexión. Verifica tu internet e intenta de nuevo.');
     } finally {
       setLoading(false);
     }

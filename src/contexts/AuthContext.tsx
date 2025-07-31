@@ -109,12 +109,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+    
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email);
+        
+        if (!mounted) return;
         
         if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || 
             (event === 'TOKEN_REFRESHED' && !session) ||
@@ -123,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
           setPermissions([]);
           setLoading(false);
+          setInitialized(true);
           return;
         }
         
@@ -135,35 +141,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .eq('email', session.user.email)
               .single();
 
-            if (!userError && userData) {
+            if (!userError && userData && mounted) {
               setUser(userData);
               loadDefaultPermissions(userData.role);
             } else {
               // Si no existe en users, crear un usuario admin por defecto
               if (session.user.email === 'estivenmendezr@gmail.com') {
-                await createDefaultAdmin(session.user);
+                if (mounted) {
+                  await createDefaultAdmin(session.user);
+                }
               } else {
                 // Clear state if user doesn't exist and isn't the default admin
-                setUser(null);
-                setPermissions([]);
+                if (mounted) {
+                  setUser(null);
+                  setPermissions([]);
+                }
               }
             }
           } catch (error) {
             console.error('Error loading user data:', error);
-            setUser(null);
-            setPermissions([]);
+            if (mounted) {
+              setUser(null);
+              setPermissions([]);
+            }
           }
         }
         
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setInitialized(true);
+        }
       }
     );
 
+    // Timeout de seguridad para evitar carga infinita
+    const timeoutId = setTimeout(() => {
+      if (mounted && !initialized) {
+        console.log('Auth timeout - setting loading to false');
+        setLoading(false);
+        setInitialized(true);
+      }
+    }, 5000);
+
     // Cleanup subscription on unmount
     return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [initialized]);
 
   const createDefaultAdmin = async (authUser: any) => {
     try {
@@ -187,6 +213,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error creating default admin:', error);
+      // En caso de error, continuar sin bloquear la aplicación
+      setLoading(false);
+      setInitialized(true);
     }
   };
 
@@ -242,6 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      setLoading(true);
       // Cerrar sesión de Supabase Auth
       await supabase.auth.signOut();
     } catch (error) {
@@ -249,6 +279,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setUser(null);
       setPermissions([]);
+      setLoading(false);
+      setInitialized(true);
     }
   };
 

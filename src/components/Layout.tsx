@@ -146,6 +146,13 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               <p>Usuario: {user?.name}</p>
               <p>Rol: {user?.role}</p>
               <p>Permisos: {permissions.length}</p>
+              <p>Estado: {user ? 'Autenticado' : 'No autenticado'}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="mt-1 text-blue-600 underline"
+              >
+                Recargar si hay problemas
+              </button>
             </div>
           )}
           {renderTabGroup('Principal', mainTabs, 'bg-blue-600')}

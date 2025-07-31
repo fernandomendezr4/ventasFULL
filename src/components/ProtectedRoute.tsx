@@ -11,6 +11,19 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   const { user, loading, signOut } = useAuth();
   const [showInactiveMessage, setShowInactiveMessage] = React.useState(true);
   const [countdown, setCountdown] = React.useState(5);
+  const [timeoutReached, setTimeoutReached] = React.useState(false);
+
+  // Timeout de seguridad para evitar carga infinita
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.log('Loading timeout reached - forcing render');
+        setTimeoutReached(true);
+      }
+    }, 8000); // 8 segundos máximo de carga
+
+    return () => clearTimeout(timeoutId);
+  }, [loading]);
 
   // Timer para redirigir al login después de mostrar el mensaje
   React.useEffect(() => {
@@ -30,18 +43,21 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     }
   }, [user, showInactiveMessage, signOut]);
 
-  if (loading) {
+  if (loading && !timeoutReached) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-slate-600">Cargando...</p>
+          <p className="text-xs text-slate-400 mt-2">
+            Si la carga toma mucho tiempo, recarga la página
+          </p>
         </div>
       </div>
     );
   }
 
-  if (!user) {
+  if (!user || timeoutReached) {
     return <LoginForm />;
   }
 

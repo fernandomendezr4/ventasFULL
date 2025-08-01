@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
+import { isDemoMode } from './lib/supabase';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import ViewTransition from './components/ViewTransition';
@@ -23,6 +24,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const { user } = useAuth();
   const [appError, setAppError] = useState<string | null>(null);
+  const [showDemoNotice, setShowDemoNotice] = useState(isDemoMode);
 
   // Reset to dashboard when user changes (login/logout)
   React.useEffect(() => {
@@ -132,6 +134,30 @@ function AppContent() {
 
   return (
     <ProtectedRoute>
+      {/* Demo Notice */}
+      {showDemoNotice && isDemoMode && (
+        <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-yellow-900 p-3 z-50">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium">
+                Modo Demo Activo - Para usar la base de datos real, configura las variables de entorno de Supabase
+              </span>
+            </div>
+            <button
+              onClick={() => setShowDemoNotice(false)}
+              className="text-yellow-900 hover:text-yellow-700 transition-colors duration-200"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+      
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
         {renderContent()}
       </Layout>

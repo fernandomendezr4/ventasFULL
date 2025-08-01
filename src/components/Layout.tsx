@@ -3,6 +3,7 @@ import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, 
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import UserProfile from './UserProfile';
+import { isDemoMode } from '../lib/supabase';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -124,6 +125,11 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                   }
                   return 'VentasFULL';
                 })()}
+                {isDemoMode && (
+                  <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                    DEMO
+                  </span>
+                )}
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">Sistema de Ventas</p>
             </div>

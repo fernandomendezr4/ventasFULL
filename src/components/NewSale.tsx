@@ -1,11 +1,93 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, ShoppingCart, User, Search, Trash2, Calculator, CreditCard, Banknote, Building2, Smartphone } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, isDemoMode } from '../lib/supabase';
 import { Product, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
+
+// Datos demo
+const demoProducts: Product[] = [
+  {
+    id: 'demo-product-1',
+    name: 'iPhone 15 Pro',
+    description: 'Smartphone Apple último modelo',
+    sale_price: 4500000,
+    purchase_price: 3800000,
+    stock: 5,
+    barcode: '123456789',
+    category_id: null,
+    supplier_id: null,
+    created_at: new Date().toISOString(),
+    has_imei_serial: true,
+    imei_serial_type: 'imei',
+    requires_imei_serial: true,
+    bulk_import_batch: '',
+    import_notes: '',
+    imported_at: null,
+    imported_by: null
+  },
+  {
+    id: 'demo-product-2',
+    name: 'Samsung Galaxy S24',
+    description: 'Smartphone Samsung premium',
+    sale_price: 3200000,
+    purchase_price: 2600000,
+    stock: 8,
+    barcode: '987654321',
+    category_id: null,
+    supplier_id: null,
+    created_at: new Date().toISOString(),
+    has_imei_serial: true,
+    imei_serial_type: 'imei',
+    requires_imei_serial: true,
+    bulk_import_batch: '',
+    import_notes: '',
+    imported_at: null,
+    imported_by: null
+  },
+  {
+    id: 'demo-product-3',
+    name: 'Audífonos Bluetooth',
+    description: 'Audífonos inalámbricos premium',
+    sale_price: 250000,
+    purchase_price: 180000,
+    stock: 15,
+    barcode: '456789123',
+    category_id: null,
+    supplier_id: null,
+    created_at: new Date().toISOString(),
+    has_imei_serial: false,
+    imei_serial_type: 'serial',
+    requires_imei_serial: false,
+    bulk_import_batch: '',
+    import_notes: '',
+    imported_at: null,
+    imported_by: null
+  }
+];
+
+const demoCustomers: Customer[] = [
+  {
+    id: 'demo-customer-1',
+    name: 'Juan Pérez',
+    email: 'juan@email.com',
+    phone: '3001234567',
+    address: 'Calle 123 #45-67',
+    cedula: '12345678',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'demo-customer-2',
+    name: 'María García',
+    email: 'maria@email.com',
+    phone: '3009876543',
+    address: 'Carrera 89 #12-34',
+    cedula: '87654321',
+    created_at: new Date().toISOString()
+  }
+];
 
 export default function NewSale() {
   const { user } = useAuth();
@@ -58,10 +140,23 @@ export default function NewSale() {
   }, []);
 
   const checkCashRegister = async () => {
+    if (isDemoMode) {
+      // En modo demo, simular caja abierta
+      setCurrentCashRegister({
+        id: 'demo-cash-register',
+        user_id: user?.id,
+        opening_amount: 100000,
+        status: 'open',
+        opened_at: new Date().toISOString()
+      });
+      return;
+    }
+
     if (!user) return;
+    if (!supabase) return;
     
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from('cash_registers')
         .select('*')
         .eq('user_id', user.id)
@@ -80,8 +175,15 @@ export default function NewSale() {
   };
 
   const loadProducts = async () => {
+    if (isDemoMode) {
+      setProducts(demoProducts);
+      return;
+    }
+
+    if (!supabase) return;
+
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from('products')
         .select('*')
         .gt('stock', 0)
@@ -95,8 +197,15 @@ export default function NewSale() {
   };
 
   const loadCustomers = async () => {
+    if (isDemoMode) {
+      setCustomers(demoCustomers);
+      return;
+    }
+
+    if (!supabase) return;
+
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from('customers')
         .select('*')
         .order('name');
@@ -168,13 +277,28 @@ export default function NewSale() {
   };
 
   const createCustomer = async () => {
+    if (isDemoMode) {
+      const newCustomer = {
+        id: `demo-customer-${Date.now()}`,
+        ...customerFormData,
+        created_at: new Date().toISOString()
+      };
+      setSelectedCustomer(newCustomer);
+      setCustomers([...customers, newCustomer]);
+      setShowCustomerForm(false);
+      setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
+      return;
+    }
+
+    if (!supabase) return;
+
     if (!customerFormData.name.trim()) {
       alert('El nombre del cliente es requerido');
       return;
     }
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from('customers')
         .insert([customerFormData])
         .select()
@@ -193,6 +317,55 @@ export default function NewSale() {
   };
 
   const completeSale = async () => {
+    if (isDemoMode) {
+      // En modo demo, simular venta exitosa
+      const demoSale = {
+        id: `demo-sale-${Date.now()}`,
+        total_amount: getTotal(),
+        subtotal: getSubtotal(),
+        discount_amount: getDiscountAmount(),
+        customer: selectedCustomer,
+        user: user,
+        sale_items: cart.map(item => ({
+          id: `demo-item-${Date.now()}-${item.product.id}`,
+          sale_id: `demo-sale-${Date.now()}`,
+          product_id: item.product.id,
+          quantity: item.quantity,
+          unit_price: item.product.sale_price,
+          total_price: item.product.sale_price * item.quantity,
+          product: item.product
+        })),
+        created_at: new Date().toISOString(),
+        payment_type: paymentType,
+        total_paid: paymentType === 'cash' ? getTotal() : 0,
+        payment_status: paymentType === 'cash' ? 'paid' : 'pending'
+      };
+
+      setCompletedSale(demoSale);
+      
+      // Limpiar formulario
+      setCart([]);
+      setSelectedCustomer(null);
+      setAmountReceived('');
+      setDiscount('');
+      setPaymentType('cash');
+      setPaymentMethod('cash');
+      
+      // Actualizar stock demo
+      const updatedProducts = products.map(product => {
+        const cartItem = cart.find(item => item.product.id === product.id);
+        if (cartItem) {
+          return { ...product, stock: product.stock - cartItem.quantity };
+        }
+        return product;
+      });
+      setProducts(updatedProducts);
+      
+      return;
+    }
+
+    if (!supabase) return;
+
     if (cart.length === 0) {
       alert('Agregue productos al carrito');
       return;
@@ -221,7 +394,7 @@ export default function NewSale() {
         payment_status: paymentType === 'cash' ? 'paid' : 'pending'
       };
 
-      const { data: sale, error: saleError } = await supabase
+      const { data: sale, error: saleError } = await supabase!
         .from('sales')
         .insert([saleData])
         .select()
@@ -238,7 +411,7 @@ export default function NewSale() {
         total_price: item.product.sale_price * item.quantity
       }));
 
-      const { error: itemsError } = await supabase
+      const { error: itemsError } = await supabase!
         .from('sale_items')
         .insert(saleItems);
 
@@ -246,7 +419,7 @@ export default function NewSale() {
 
       // Actualizar stock de productos
       for (const item of cart) {
-        const { error: stockError } = await supabase
+        const { error: stockError } = await supabase!
           .from('products')
           .update({ stock: item.product.stock - item.quantity })
           .eq('id', item.product.id);
@@ -258,7 +431,7 @@ export default function NewSale() {
 
       // Registrar pago en efectivo si aplica
       if (paymentType === 'cash' && currentCashRegister) {
-        const { error: cashRegisterError } = await supabase
+        const { error: cashRegisterError } = await supabase!
           .from('cash_register_sales')
           .insert([{
             cash_register_id: currentCashRegister.id,

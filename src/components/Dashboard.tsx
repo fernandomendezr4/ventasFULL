@@ -1,10 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Package, ShoppingCart, DollarSign, Calendar, Users, AlertTriangle, CheckCircle, Plus, Calculator } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, isDemoMode } from '../lib/supabase';
 import { Product, SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import { ListTransition } from './ViewTransition';
+
+// Datos demo para cuando no hay conexión a Supabase
+const demoStats = {
+  totalSales: 156,
+  totalProducts: 89,
+  todaySales: 2450000,
+  totalRevenue: 45780000,
+  lowStockProducts: 5,
+  totalCustomers: 234,
+};
+
+const demoRecentSales = [
+  {
+    id: 'demo-sale-1',
+    total_amount: 125000,
+    created_at: new Date().toISOString(),
+    sale_items: [{ id: '1', product: { name: 'Producto Demo' } }],
+    customer: { name: 'Cliente Demo' },
+    user: null
+  },
+  {
+    id: 'demo-sale-2',
+    total_amount: 89000,
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+    sale_items: [{ id: '2', product: { name: 'Otro Producto' } }],
+    customer: { name: 'María García' },
+    user: null
+  }
+];
+
+const demoLowStockProducts = [
+  {
+    id: 'demo-product-1',
+    name: 'iPhone 15 Pro',
+    stock: 2,
+    sale_price: 4500000
+  },
+  {
+    id: 'demo-product-2',
+    name: 'Samsung Galaxy S24',
+    stock: 1,
+    sale_price: 3200000
+  }
+];
 
 interface DashboardProps {
   onTabChange?: (tab: string) => void;
@@ -29,6 +73,20 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
   }, []);
 
   const loadDashboardData = async () => {
+    // Si está en modo demo, usar datos de ejemplo
+    if (isDemoMode) {
+      setStats(demoStats);
+      setRecentSales(demoRecentSales as SaleWithItems[]);
+      setLowStockProducts(demoLowStockProducts as Product[]);
+      setLoading(false);
+      return;
+    }
+
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -37,21 +95,21 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
       
       // Cargar estadísticas básicas
       const [salesCount, productsCount, customersCount, todaySalesResult, lowStockResult, recentSalesResult] = await Promise.all([
-        supabase.from('sales').select('id', { count: 'exact', head: true }),
-        supabase.from('products').select('id', { count: 'exact', head: true }),
-        supabase.from('customers').select('id', { count: 'exact', head: true }),
-        supabase
+        supabase!.from('sales').select('id', { count: 'exact', head: true }),
+        supabase!.from('products').select('id', { count: 'exact', head: true }),
+        supabase!.from('customers').select('id', { count: 'exact', head: true }),
+        supabase!
           .from('sales')
           .select('total_amount')
           .gte('created_at', today)
           .lt('created_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-        supabase
+        supabase!
           .from('products')
           .select('id, name, stock, sale_price')
           .lte('stock', 10)
           .order('stock', { ascending: true })
           .limit(5),
-        supabase
+        supabase!
           .from('sales')
           .select(`
             id, 
@@ -65,7 +123,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
 
       // Calcular totales
       const todayTotal = todaySalesResult.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
-      const totalRevenue = await supabase
+      const totalRevenue = await supabase!
         .from('sales')
         .select('total_amount')
         .then(result => result.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0);

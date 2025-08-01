@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isDemoMode } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -112,10 +112,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    // Si está en modo demo, crear usuario demo inmediatamente
+    if (isDemoMode) {
+      const demoUser: User = {
+        id: 'demo-user-id',
+        email: 'demo@ventasfull.com',
+        name: 'Usuario Demo',
+        role: 'admin',
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+      setUser(demoUser);
+      loadDefaultPermissions('admin');
+      setLoading(false);
+      setInitialized(true);
+      return;
+    }
+
+    if (!supabase) {
+      setLoading(false);
+      setInitialized(true);
+      return;
+    }
+
     let mounted = true;
     
     // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = supabase!.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
         
@@ -133,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
           try {
             // Buscar el usuario en la tabla users de forma más eficiente
-            const { data: userData, error: userError } = await supabase
+            const { data: userData, error: userError } = await supabase!
               .from('users')
               .select('id, name, email, role, is_active, created_at')
               .eq('email', session.user.email)
@@ -219,18 +242,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    // Modo demo - permitir cualquier login
+    if (isDemoMode) {
+      const demoUser: User = {
+        id: 'demo-user-id',
+        email: email,
+        name: email.split('@')[0] || 'Usuario Demo',
+        role: 'admin',
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+      setUser(demoUser);
+      loadDefaultPermissions('admin');
+      return { error: null };
+    }
+
+    if (!supabase) {
+      return { error: { message: 'Supabase no configurado' } };
+    }
+
     try {
       setLoading(true);
       
       // Autenticación con Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase!.auth.signInWithPassword({
         email,
         password,
       });
 
       if (!authError && authData.user) {
         // Buscar el usuario en la tabla users
-        const { data: userData, error: userError } = await supabase
+        const { data: userData, error: userError } = await supabase!
           .from('users')
           .select('*')
           .eq('email', email)
@@ -259,10 +301,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (isDemoMode) {
+      setUser(null);
+      setPermissions([]);
+      setLoading(false);
+      setInitialized(true);
+      return;
+    }
+
+    if (!supabase) return;
+
     try {
       setLoading(true);
       // Cerrar sesión de Supabase Auth
-      await supabase.auth.signOut();
+      await supabase!.auth.signOut();
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {

@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://demo.supabase.co';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'demo-key';
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables');
+// Modo demo si no hay configuración de Supabase
+const isDemoMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (isDemoMode) {
+  console.warn('Ejecutando en modo demo - configura las variables de entorno de Supabase para usar la base de datos real');
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+export const supabase = isDemoMode ? null : createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -32,10 +35,14 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   }
 });
 
+export { isDemoMode };
+
 // Función para verificar la conexión
 export const testConnection = async () => {
+  if (isDemoMode) return false;
+  
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from('users')
       .select('count')
       .limit(1);

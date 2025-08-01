@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, LogIn, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isDemoMode } from '../lib/supabase';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
@@ -15,6 +16,16 @@ export default function LoginForm() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    // En modo demo, permitir cualquier login
+    if (isDemoMode) {
+      const result = await signIn(email, password);
+      if (result.error) {
+        setError('Error en modo demo');
+      }
+      setLoading(false);
+      return;
+    }
 
     try {
       // Verificar conexión antes de intentar login
@@ -52,6 +63,20 @@ export default function LoginForm() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 animate-scale-in">
+        {isDemoMode && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center">
+              <Shield className="h-5 w-5 text-yellow-600 mr-2" />
+              <div>
+                <h4 className="text-yellow-900 font-medium">Modo Demo</h4>
+                <p className="text-yellow-800 text-sm mt-1">
+                  Usa cualquier email y contraseña para acceder
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="text-center mb-8">
           <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4 animate-bounce-in">
             <Shield className="h-8 w-8 text-white" />
@@ -81,7 +106,7 @@ export default function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input-field pl-10"
-                placeholder="tu@email.com"
+                placeholder={isDemoMode ? "cualquier@email.com" : "tu@email.com"}
               />
             </div>
           </div>
@@ -98,8 +123,8 @@ export default function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field pl-10 pr-10"
-                placeholder="Tu contraseña"
-                minLength={6}
+                placeholder={isDemoMode ? "cualquier contraseña" : "Tu contraseña"}
+                minLength={isDemoMode ? 1 : 6}
               />
               <button
                 type="button"

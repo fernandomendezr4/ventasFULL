@@ -117,8 +117,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        
         if (!mounted) return;
         
         if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || 
@@ -134,29 +132,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
           try {
-            // Buscar el usuario en la tabla users
+            // Buscar el usuario en la tabla users de forma más eficiente
             const { data: userData, error: userError } = await supabase
               .from('users')
-              .select('*')
+              .select('id, name, email, role, is_active, created_at')
               .eq('email', session.user.email)
-              .single();
+              .maybeSingle();
 
-            if (!userError && userData && mounted) {
+            if (userData && mounted) {
               setUser(userData);
               loadDefaultPermissions(userData.role);
-            } else {
-              // Si no existe en users, crear un usuario admin por defecto
-              if (session.user.email === 'estivenmendezr@gmail.com') {
-                if (mounted) {
-                  await createDefaultAdmin(session.user);
-                }
-              } else {
-                // Clear state if user doesn't exist and isn't the default admin
-                if (mounted) {
-                  setUser(null);
-                  setPermissions([]);
-                }
-              }
+            } else if (session.user.email === 'estivenmendezr@gmail.com' && mounted) {
+              await createDefaultAdmin(session.user);
+            } else if (mounted) {
+              setUser(null);
+              setPermissions([]);
             }
           } catch (error) {
             console.error('Error loading user data:', error);
@@ -173,15 +163,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     );
+              .single();
 
-    // Timeout de seguridad para evitar carga infinita
+    // Timeout de seguridad reducido
     const timeoutId = setTimeout(() => {
       if (mounted && !initialized) {
-        console.log('Auth timeout - setting loading to false');
         setLoading(false);
         setInitialized(true);
       }
-    }, 5000);
+    }, 3000); // Reducido de 5 a 3 segundos
 
     // Cleanup subscription on unmount
     return () => {

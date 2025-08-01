@@ -132,21 +132,6 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
         {/* Navigation */}
         <div className="flex-1 p-4 overflow-y-auto scrollbar-hide space-y-6">
-          {/* Debug info - solo para desarrollo */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-              <p>Usuario: {user?.name}</p>
-              <p>Rol: {user?.role}</p>
-              <p>Permisos: {permissions.length}</p>
-              <p>Estado: {user ? 'Autenticado' : 'No autenticado'}</p>
-              <button 
-                onClick={() => window.location.reload()} 
-                className="mt-1 text-blue-600 underline"
-              >
-                Recargar si hay problemas
-              </button>
-            </div>
-          )}
           {renderTabGroup('Principal', mainTabs, 'bg-blue-600')}
           {renderTabGroup('Ventas', salesTabs, 'bg-green-600')}
           {renderTabGroup('Inventario', inventoryTabs, 'bg-purple-600')}

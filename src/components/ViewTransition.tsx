@@ -13,7 +13,7 @@ export default function ViewTransition({
   children,
   transitionKey,
   type = 'fade',
-  duration = 400,
+  duration = 200, // Reducir duración de animaciones
   delay = 0,
   className = ''
 }: ViewTransitionProps) {
@@ -29,7 +29,7 @@ export default function ViewTransition({
       const timer = setTimeout(() => {
         setCurrentKey(transitionKey);
         setIsVisible(true);
-      }, 150);
+      }, 50); // Reducir delay entre transiciones
 
       return () => clearTimeout(timer);
     } else {

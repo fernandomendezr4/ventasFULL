@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, Package, ShoppingCart, DollarSign, Calendar, Users, AlertTriangle, CheckCircle, Plus, Calculator } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { Sale, Product, SaleWithItems } from '../lib/types';
+import { Product, SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import { ListTransition } from './ViewTransition';
@@ -32,50 +32,46 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
     try {
       setLoading(true);
       
-      // Timeout para evitar carga infinita
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout loading dashboard data')), 10000);
-      });
+      // Cargar datos básicos de forma más eficiente
+      const today = new Date().toISOString().split('T')[0];
       
-      // Cargar datos en paralelo
-      const [
-        salesCountResult,
-        productsCountResult,
-        customersCountResult,
-        todaySalesResult,
-        allSalesResult,
-        recentSalesResult,
-        lowStockResult
-      ] = await Promise.all([
-        supabase.from('sales').select('*', { count: 'exact', head: true }),
-        supabase.from('products').select('*', { count: 'exact', head: true }),
-        supabase.from('customers').select('*', { count: 'exact', head: true }),
-        supabase.from('sales').select('total_amount').gte('created_at', new Date().toISOString().split('T')[0]),
-        supabase.from('sales').select('total_amount'),
-        supabase.from('sales').select(`
-          *,
-          sale_items (
-            *,
-            product:products (*)
-          ),
-          customer:customers (name)
-        `).order('created_at', { ascending: false }).limit(5),
-        supabase.from('products').select('*').lte('stock', 10).order('stock', { ascending: true }).limit(5)
+      // Usar consultas más simples y rápidas
+      const [statsResult, recentSalesResult, lowStockResult] = await Promise.all([
+        // Una sola consulta para estadísticas básicas
+        supabase.rpc('get_dashboard_stats', { target_date: today }),
+        // Ventas recientes simplificadas
+        supabase
+          .from('sales')
+          .select('id, total_amount, created_at, customer:customers(name)')
+          .order('created_at', { ascending: false })
+          .limit(5),
+        // Productos con bajo stock
+        supabase
+          .from('products')
+          .select('id, name, stock, sale_price')
+          .lte('stock', 10)
+          .order('stock', { ascending: true })
+          .limit(5)
       ]);
 
-      const todaySalesSum = todaySalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
-      const totalRevenue = allSalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
+      const dashboardStats = statsResult.data?.[0] || {};
 
       setStats({
-        totalSales: salesCountResult.count || 0,
-        totalProducts: productsCountResult.count || 0,
-        totalCustomers: customersCountResult.count || 0,
-        todaySales: todaySalesSum,
-        totalRevenue,
+        totalSales: dashboardStats.total_sales || 0,
+        totalProducts: dashboardStats.total_products || 0,
+        totalCustomers: dashboardStats.total_customers || 0,
+        todaySales: dashboardStats.today_sales || 0,
+        totalRevenue: dashboardStats.total_revenue || 0,
         lowStockProducts: lowStockResult.data?.length || 0,
       });
 
-      setRecentSales((recentSalesResult.data as SaleWithItems[]) || []);
+      // Convertir ventas recientes al formato esperado
+      const recentSalesFormatted = (recentSalesResult.data || []).map(sale => ({
+        ...sale,
+        sale_items: [] // No cargar items para el dashboard por rendimiento
+      }));
+      
+      setRecentSales(recentSalesFormatted as SaleWithItems[]);
       setLowStockProducts(lowStockResult.data || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -92,10 +88,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
       setRecentSales([]);
       setLowStockProducts([]);
       
-      // Mostrar mensaje de error al usuario
-      if (error.message?.includes('Timeout')) {
-        alert('La carga de datos está tomando mucho tiempo. Verifica tu conexión a internet.');
-      }
+      // No mostrar alert, solo log del error
     } finally {
       setLoading(false);
     }

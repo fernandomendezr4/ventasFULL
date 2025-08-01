@@ -13,21 +13,25 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
-    flowType: 'pkce'
+    flowType: 'pkce',
+    storageKey: 'sb-auth-token'
   },
   global: {
     headers: {
       'X-Client-Info': 'cash-register-app',
     },
   },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
   db: {
     schema: 'public',
   },
+  // Configuraciones de rendimiento
+  fetch: (url, options = {}) => {
+    return fetch(url, {
+      ...options,
+      // Agregar timeout para evitar cuelgues
+      signal: AbortSignal.timeout(10000)
+    });
+  }
 });
 
 // Función para verificar la conexión

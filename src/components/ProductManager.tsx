@@ -48,14 +48,17 @@ export default function ProductManager() {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      
+      // Cargar productos con paginación para mejorar rendimiento
       const { data, error } = await supabase
         .from('products')
         .select(`
           *,
-          category:categories (*),
-          supplier:suppliers (*)
+          category:categories (id, name),
+          supplier:suppliers (id, name)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100); // Limitar a 100 productos inicialmente
 
       if (error) throw error;
       setProducts(data as ProductWithCategory[]);

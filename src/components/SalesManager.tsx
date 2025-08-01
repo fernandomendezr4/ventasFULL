@@ -53,25 +53,28 @@ export default function SalesManager() {
   const loadSales = async () => {
     try {
       setLoading(true);
+      
+      // Cargar solo las ventas más recientes inicialmente
       const { data, error } = await supabase
         .from('sales')
         .select(`
           *,
-          payments (
-            payment_method,
-            notes
-          ),
           customer:customers (name, phone, email),
-          user:users (name, email),
-          sale_items (
-            *,
-            product:products (*)
-          )
+          user:users (name, email)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50); // Limitar a 50 ventas más recientes
 
       if (error) throw error;
-      setSales(data as SaleWithItems[]);
+      
+      // Convertir al formato esperado sin cargar todos los items
+      const salesFormatted = (data || []).map(sale => ({
+        ...sale,
+        sale_items: [], // Cargar items solo cuando se necesiten
+        payments: []
+      }));
+      
+      setSales(salesFormatted as SaleWithItems[]);
     } catch (error) {
       console.error('Error loading sales:', error);
     } finally {

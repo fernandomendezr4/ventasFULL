@@ -1,54 +1,60 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
-// Hook para usar las vistas materializadas optimizadas
+// Hook optimizado para el dashboard con cache
 export function useOptimizedDashboard() {
   const [stats, setStats] = useState({
     dailyStats: [],
     inventorySummary: [],
     customerSummary: [],
     loading: true,
-    error: null
+    error: null,
+    lastUpdated: null
   });
 
-  useEffect(() => {
-    loadOptimizedData();
-  }, []);
-
-  const loadOptimizedData = async () => {
+  const loadOptimizedData = useCallback(async () => {
     try {
       setStats(prev => ({ ...prev, loading: true }));
 
-      // Usar vistas materializadas para datos rápidos
-      const [dailyStatsResult, inventoryResult, customerResult] = await Promise.all([
-        // Estadísticas diarias de los últimos 30 días
-        supabase
-          .from('daily_sales_stats')
-          .select('*')
-          .gte('sale_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-          .order('sale_date', { ascending: false }),
+      // Verificar cache (5 minutos)
+      const cacheKey = 'dashboard_cache';
+      const cached = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(cacheKey + '_time');
+      
+      if (cached && cacheTime) {
+        const age = Date.now() - parseInt(cacheTime);
+        if (age < 5 * 60 * 1000) { // 5 minutos
+          const cachedData = JSON.parse(cached);
+          setStats({
+            ...cachedData,
+            loading: false,
+            error: null
+          });
+          return;
+        }
+      }
 
-        // Resumen de inventario con productos de bajo stock
-        supabase
-          .from('inventory_summary')
-          .select('*')
-          .in('stock_status', ['low_stock', 'out_of_stock'])
-          .order('total_sold_last_30_days', { ascending: false })
-          .limit(20),
+      // Cargar datos frescos de forma más eficiente
+      const today = new Date().toISOString().split('T')[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-        // Clientes más activos
-        supabase
-          .from('customer_summary')
-          .select('*')
-          .eq('customer_status', 'active')
-          .order('total_spent', { ascending: false })
-          .limit(10)
+      const [dashboardStatsResult] = await Promise.all([
+        supabase.rpc('get_dashboard_stats', { target_date: today })
       ]);
 
+      const newStats = {
+        dailyStats: dashboardStatsResult.data || [],
+        inventorySummary: [],
+        customerSummary: [],
+        lastUpdated: Date.now()
+      };
+
+      // Guardar en cache
+      localStorage.setItem(cacheKey, JSON.stringify(newStats));
+      localStorage.setItem(cacheKey + '_time', Date.now().toString());
+
       setStats({
-        dailyStats: dailyStatsResult.data || [],
-        inventorySummary: inventoryResult.data || [],
-        customerSummary: customerResult.data || [],
+        ...newStats,
         loading: false,
         error: null
       });
@@ -60,12 +66,16 @@ export function useOptimizedDashboard() {
         error: error as Error
       }));
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadOptimizedData();
+  }, [loadOptimizedData]);
 
   return { ...stats, refresh: loadOptimizedData };
 }
 
-// Hook para estadísticas de ventas optimizadas
+// Hook simplificado para estadísticas de ventas
 export function useSalesStatistics(startDate?: string, endDate?: string) {
   const [statistics, setStatistics] = useState({
     data: null,
@@ -73,23 +83,31 @@ export function useSalesStatistics(startDate?: string, endDate?: string) {
     error: null
   });
 
-  useEffect(() => {
-    loadSalesStatistics();
-  }, [startDate, endDate]);
-
-  const loadSalesStatistics = async () => {
+  const loadSalesStatistics = useCallback(async () => {
     try {
       setStatistics(prev => ({ ...prev, loading: true }));
 
-      const { data, error } = await supabase.rpc('get_sales_statistics', {
-        start_date: startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        end_date: endDate || new Date().toISOString().split('T')[0]
-      });
+      // Usar consulta simple en lugar de función RPC
+      const { data, error } = await supabase
+        .from('sales')
+        .select('total_amount, payment_type, created_at')
+        .gte('created_at', startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .lte('created_at', endDate || new Date().toISOString());
 
       if (error) throw error;
 
+      // Calcular estadísticas en el cliente
+      const totalSales = data?.length || 0;
+      const totalRevenue = data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
+      const cashSales = data?.filter(sale => sale.payment_type === 'cash').length || 0;
+
       setStatistics({
-        data: data?.[0] || null,
+        data: {
+          total_sales: totalSales,
+          total_revenue: totalRevenue,
+          cash_sales_count: cashSales,
+          installment_sales_count: totalSales - cashSales
+        },
         loading: false,
         error: null
       });
@@ -101,12 +119,16 @@ export function useSalesStatistics(startDate?: string, endDate?: string) {
         error: error as Error
       });
     }
-  };
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    loadSalesStatistics();
+  }, [loadSalesStatistics]);
 
   return { ...statistics, refresh: loadSalesStatistics };
 }
 
-// Hook para productos con bajo stock
+// Hook optimizado para productos con bajo stock
 export function useLowStockProducts(threshold: number = 10) {
   const [products, setProducts] = useState({
     data: [],
@@ -114,17 +136,17 @@ export function useLowStockProducts(threshold: number = 10) {
     error: null
   });
 
-  useEffect(() => {
-    loadLowStockProducts();
-  }, [threshold]);
-
-  const loadLowStockProducts = async () => {
+  const loadLowStockProducts = useCallback(async () => {
     try {
       setProducts(prev => ({ ...prev, loading: true }));
 
-      const { data, error } = await supabase.rpc('get_low_stock_products', {
-        stock_threshold: threshold
-      });
+      // Consulta simple y rápida
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, stock, sale_price')
+        .lte('stock', threshold)
+        .order('stock', { ascending: true })
+        .limit(10);
 
       if (error) throw error;
 
@@ -141,132 +163,11 @@ export function useLowStockProducts(threshold: number = 10) {
         error: error as Error
       });
     }
-  };
+  }, [threshold]);
+
+  useEffect(() => {
+    loadLowStockProducts();
+  }, [loadLowStockProducts]);
 
   return { ...products, refresh: loadLowStockProducts };
-}
-
-// Hook para balance de caja optimizado
-export function useCashRegisterBalance(registerId?: string) {
-  const [balance, setBalance] = useState({
-    data: null,
-    loading: true,
-    error: null
-  });
-
-  useEffect(() => {
-    if (registerId) {
-      loadCashBalance();
-    }
-  }, [registerId]);
-
-  const loadCashBalance = async () => {
-    if (!registerId) return;
-
-    try {
-      setBalance(prev => ({ ...prev, loading: true }));
-
-      const { data, error } = await supabase.rpc('get_cash_register_balance', {
-        register_id: registerId
-      });
-
-      if (error) throw error;
-
-      setBalance({
-        data: data?.[0] || null,
-        loading: false,
-        error: null
-      });
-    } catch (error) {
-      console.error('Error loading cash balance:', error);
-      setBalance({
-        data: null,
-        loading: false,
-        error: error as Error
-      });
-    }
-  };
-
-  return { ...balance, refresh: loadCashBalance };
-}
-
-// Hook para productos más vendidos
-export function useTopSellingProducts(daysBack: number = 30, limitCount: number = 10) {
-  const [products, setProducts] = useState({
-    data: [],
-    loading: true,
-    error: null
-  });
-
-  useEffect(() => {
-    loadTopSellingProducts();
-  }, [daysBack, limitCount]);
-
-  const loadTopSellingProducts = async () => {
-    try {
-      setProducts(prev => ({ ...prev, loading: true }));
-
-      const { data, error } = await supabase.rpc('get_top_selling_products', {
-        days_back: daysBack,
-        limit_count: limitCount
-      });
-
-      if (error) throw error;
-
-      setProducts({
-        data: data || [],
-        loading: false,
-        error: null
-      });
-    } catch (error) {
-      console.error('Error loading top selling products:', error);
-      setProducts({
-        data: [],
-        loading: false,
-        error: error as Error
-      });
-    }
-  };
-
-  return { ...products, refresh: loadTopSellingProducts };
-}
-
-// Hook para análisis de rentabilidad por categoría
-export function useCategoryProfitability(daysBack: number = 30) {
-  const [profitability, setProfitability] = useState({
-    data: [],
-    loading: true,
-    error: null
-  });
-
-  useEffect(() => {
-    loadCategoryProfitability();
-  }, [daysBack]);
-
-  const loadCategoryProfitability = async () => {
-    try {
-      setProfitability(prev => ({ ...prev, loading: true }));
-
-      const { data, error } = await supabase.rpc('get_category_profitability', {
-        days_back: daysBack
-      });
-
-      if (error) throw error;
-
-      setProfitability({
-        data: data || [],
-        loading: false,
-        error: null
-      });
-    } catch (error) {
-      console.error('Error loading category profitability:', error);
-      setProfitability({
-        data: [],
-        loading: false,
-        error: error as Error
-      });
-    }
-  };
-
-  return { ...profitability, refresh: loadCategoryProfitability };
 }

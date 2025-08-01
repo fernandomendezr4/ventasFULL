@@ -17,10 +17,9 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   React.useEffect(() => {
     const timeoutId = setTimeout(() => {
       if (loading) {
-        console.log('Loading timeout reached - forcing render');
         setTimeoutReached(true);
       }
-    }, 8000); // 8 segundos máximo de carga
+    }, 5000); // Reducido a 5 segundos
 
     return () => clearTimeout(timeoutId);
   }, [loading]);

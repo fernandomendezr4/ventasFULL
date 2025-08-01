@@ -406,7 +406,7 @@ Celular Samsung,Smartphone con IMEI,800000,600000,5,9876543210987,,,true,imei,tr
                         : 'border-slate-300 hover:border-slate-400'
                     }`}
                   >
-                    <Smartphone className="h-6 w-6 mx-auto mb-2" />
+                    <Plus className="h-6 w-6 mx-auto mb-2" />
                     <h5 className="font-medium">Producto + IMEI/Serial</h5>
                     <p className="text-sm text-slate-600 mt-1">Un producto, múltiples unidades</p>
                   </button>

@@ -43,6 +43,11 @@ class ErrorBoundary extends React.Component {
         </div>
       );
     }
+
+    return this.props.children;
+  }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
@@ -50,7 +55,3 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>
 );
-
-    return this.props.children;
-  }
-}

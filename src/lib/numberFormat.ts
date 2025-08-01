@@ -1,3 +1,5 @@
+import React from 'react';
+
 // Utilidades para formateo de números con separadores colombianos
 
 export const formatNumberInput = (value: string): string => {

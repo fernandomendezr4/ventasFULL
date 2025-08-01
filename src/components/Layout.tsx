@@ -110,14 +110,6 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       <div className="w-64 bg-white dark:bg-slate-800 shadow-lg border-r border-slate-200 dark:border-slate-700 flex flex-col transition-all duration-300 ease-smooth animate-slide-in-left">
         {/* Header */}
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
-          {React.useEffect(() => {
-            // Actualizar el título de la página con el nombre configurado
-            const savedSettings = localStorage.getItem('app_settings');
-            if (savedSettings) {
-              const settings = JSON.parse(savedSettings);
-              document.title = settings.app_name || 'VentasFULL';
-            }
-          }, [])}
           <div className="flex items-center animate-fade-in">
             <div className="p-2 bg-blue-600 dark:bg-blue-500 rounded-lg">
               <ShoppingCart className="h-6 w-6 text-white" />

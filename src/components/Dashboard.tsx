@@ -38,7 +38,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
       });
       
       // Cargar datos en paralelo
-      const dataPromise = Promise.all([
+      const [
         salesCountResult,
         productsCountResult,
         customersCountResult,
@@ -46,7 +46,7 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
         allSalesResult,
         recentSalesResult,
         lowStockResult
-      ] = [
+      ] = await Promise.all([
         supabase.from('sales').select('*', { count: 'exact', head: true }),
         supabase.from('products').select('*', { count: 'exact', head: true }),
         supabase.from('customers').select('*', { count: 'exact', head: true }),
@@ -62,8 +62,6 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
         `).order('created_at', { ascending: false }).limit(5),
         supabase.from('products').select('*').lte('stock', 10).order('stock', { ascending: true }).limit(5)
       ]);
-
-      const results = await Promise.race([dataPromise, timeoutPromise]);
 
       const todaySalesSum = todaySalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
       const totalRevenue = allSalesResult.data?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;

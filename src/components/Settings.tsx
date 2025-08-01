@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Printer, Palette, Shield, Bell, Database, Smartphone, CreditCard, Plus, Edit2, Trash2, Upload, X } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, Database, Users, Package, DollarSign, Printer, Globe, Shield, Bell, Palette, Monitor, Activity } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import DatabaseHealthMonitor from './DatabaseHealthMonitor';
 import FormattedNumberInput from './FormattedNumberInput';
 import NotificationModal from './NotificationModal';
 import { useNotification } from '../hooks/useNotification';
@@ -247,7 +248,8 @@ export default function Settings() {
     { id: 'payments', label: 'Métodos de Pago', icon: CreditCard },
     { id: 'security', label: 'Seguridad', icon: Shield },
     { id: 'notifications', label: 'Notificaciones', icon: Bell },
-    { id: 'advanced', label: 'Avanzado', icon: Database }
+    { id: 'database', label: 'Base de Datos', icon: Database, adminOnly: true },
+    { id: 'health', label: 'Estado del Sistema', icon: Activity, adminOnly: true },
   ];
 
   return (
@@ -1354,6 +1356,15 @@ export default function Settings() {
         onClose={hideNotification}
         type={notification.type}
         title={notification.title}
+          
+          {activeSection === 'health' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Monitor de Salud del Sistema</h3>
+                <DatabaseHealthMonitor />
+              </div>
+            </div>
+          )}
         message={notification.message}
       />
     </div>

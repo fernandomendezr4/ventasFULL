@@ -5,8 +5,8 @@ import { Product, Category, Supplier } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
-import ProductDetailsModal from './ProductDetailsModal';
-import ProductQuickActions from './ProductQuickActions';
+import { ProductDetailsModal } from './ProductDetailsModal';
+import { ProductQuickActions } from './ProductQuickActions';
 import { BulkProductImport } from './BulkProductImport';
 import { ImeiSerialManager } from './ImeiSerialManager';
 import { FormattedNumberInput } from './FormattedNumberInput';
@@ -22,7 +22,7 @@ interface ProductWithDetails extends Product {
   last_sale_date?: string;
 }
 
-export function ProductManager() {
+export default function ProductManager() {
   const [products, setProducts] = useState<ProductWithDetails[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

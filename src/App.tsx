@@ -7,7 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import ViewTransition from './components/ViewTransition';
 import Dashboard from './components/Dashboard';
-import { ProductManager } from './components/ProductManager';
+import ProductManager from './components/ProductManager';
 import CategoryManager from './components/CategoryManager';
 import SalesManager from './components/SalesManager';
 import NewSale from './components/NewSale';

@@ -1,25 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, User, Search, X, CreditCard, Banknote, Smartphone, Building2, UserPlus, AlertTriangle, Calculator, Hash } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, User, Search, Trash2, Calculator, CreditCard, Banknote, Building2, Smartphone } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { Product, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
-import { supabase } from '../lib/supabase';
-
-interface PaymentMethod {
-  id: string;
-  name: string;
-  icon: string;
-  image_url?: string;
-}
-
-const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
-  { id: 'cash', name: 'Efectivo', icon: 'Banknote' },
-  { id: 'card', name: 'Tarjeta', icon: 'CreditCard' },
-  { id: 'transfer', name: 'Transferencia Bancaria', icon: 'Building2' },
-  { id: 'nequi', name: 'NEQUI', icon: 'Smartphone' }
-];
 
 export default function NewSale() {
   const { user } = useAuth();
@@ -29,22 +15,15 @@ export default function NewSale() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [showCustomerSelectionModal, setShowCustomerSelectionModal] = useState(false);
-  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
-  const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
-  const [loadingCashRegister, setLoadingCashRegister] = useState(true);
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
-  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(DEFAULT_PAYMENT_METHODS);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amountReceived, setAmountReceived] = useState('');
   const [discount, setDiscount] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPrintModal, setShowPrintModal] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
-  
-  // New customer form data
-  const [newCustomerData, setNewCustomerData] = useState({
+  const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
+  const [customerFormData, setCustomerFormData] = useState({
     name: '',
     email: '',
     phone: '',
@@ -52,61 +31,51 @@ export default function NewSale() {
     cedula: ''
   });
 
-  // IMEI/Serial tracking state
-  const [imeiSerialData, setImeiSerialData] = useState<{[key: string]: string[]}>({});
-  const [showImeiSerialModal, setShowImeiSerialModal] = useState(false);
-  const [currentProductForImei, setCurrentProductForImei] = useState<Product | null>(null);
-  const [currentQuantityForImei, setCurrentQuantityForImei] = useState(0);
+  // Load payment methods from localStorage
+  const getPaymentMethods = () => {
+    try {
+      const savedMethods = localStorage.getItem('payment_methods');
+      if (savedMethods) {
+        return JSON.parse(savedMethods);
+      }
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+    }
+    return [
+      { id: 'cash', name: 'Efectivo', icon: 'Banknote' },
+      { id: 'card', name: 'Tarjeta', icon: 'CreditCard' },
+      { id: 'transfer', name: 'Transferencia Bancaria', icon: 'Building2' },
+      { id: 'nequi', name: 'NEQUI', icon: 'Smartphone' }
+    ];
+  };
+
+  const paymentMethods = getPaymentMethods();
 
   useEffect(() => {
     loadProducts();
     loadCustomers();
-    loadPaymentMethods();
-    checkCashRegisterStatus();
+    checkCashRegister();
   }, []);
 
-  const checkCashRegisterStatus = async () => {
+  const checkCashRegister = async () => {
     if (!user) return;
     
     try {
-      setLoadingCashRegister(true);
-      
-      // Buscar caja abierta del usuario actual
-      const { data: register, error } = await supabase
+      const { data, error } = await supabase
         .from('cash_registers')
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1)
         .maybeSingle();
 
       if (error) {
         console.error('Error checking cash register:', error);
-        throw error;
+        return;
       }
 
-      setCurrentCashRegister(register);
+      setCurrentCashRegister(data);
     } catch (error) {
-      console.error('Error checking cash register status:', error);
-      setCurrentCashRegister(null);
-    } finally {
-      setLoadingCashRegister(false);
-    }
-  };
-
-  const loadPaymentMethods = () => {
-    try {
-      const savedMethods = localStorage.getItem('payment_methods');
-      if (savedMethods) {
-        const methods = JSON.parse(savedMethods);
-        setPaymentMethods(methods);
-      } else {
-        setPaymentMethods(DEFAULT_PAYMENT_METHODS);
-      }
-    } catch (error) {
-      console.error('Error loading payment methods:', error);
-      setPaymentMethods(DEFAULT_PAYMENT_METHODS);
+      console.error('Error checking cash register:', error);
     }
   };
 
@@ -142,145 +111,64 @@ export default function NewSale() {
   const addToCart = (product: Product) => {
     const existingItem = cart.find(item => item.product.id === product.id);
     
-    // Check if product requires IMEI/Serial and handle accordingly
-    if (product.has_imei_serial && product.requires_imei_serial) {
-      const newQuantity = existingItem ? existingItem.quantity + 1 : 1;
-      if (newQuantity > product.stock) {
-        alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+    if (existingItem) {
+      if (existingItem.quantity >= product.stock) {
+        alert('No hay suficiente stock disponible');
         return;
       }
-      
-      setCurrentProductForImei(product);
-      setCurrentQuantityForImei(newQuantity);
-      setShowImeiSerialModal(true);
-      return;
-    }
-    
-    if (existingItem) {
-      if (existingItem.quantity < product.stock) {
-        setCart(cart.map(item =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        ));
-      } else {
-        alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
-      }
+      setCart(cart.map(item =>
+        item.product.id === product.id
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
     } else {
       setCart([...cart, { product, quantity: 1 }]);
     }
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
-    if (newQuantity <= 0) {
+  const updateQuantity = (productId: string, quantity: number) => {
+    if (quantity <= 0) {
       removeFromCart(productId);
-      // Remove IMEI/Serial data for this product
-      const newImeiSerialData = { ...imeiSerialData };
-      delete newImeiSerialData[productId];
-      setImeiSerialData(newImeiSerialData);
       return;
     }
 
-    if (newQuantity > product.stock) {
-      alert(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+    const product = products.find(p => p.id === productId);
+    if (product && quantity > product.stock) {
+      alert('No hay suficiente stock disponible');
       return;
-    }
-
-    // If product requires IMEI/Serial and quantity is increasing
-    if (product.has_imei_serial && product.requires_imei_serial) {
-      const currentQuantity = cart.find(item => item.product.id === productId)?.quantity || 0;
-      if (newQuantity > currentQuantity) {
-        setCurrentProductForImei(product);
-        setCurrentQuantityForImei(newQuantity);
-        setShowImeiSerialModal(true);
-        return;
-      }
     }
 
     setCart(cart.map(item =>
       item.product.id === productId
-        ? { ...item, quantity: newQuantity }
+        ? { ...item, quantity }
         : item
     ));
   };
 
   const removeFromCart = (productId: string) => {
     setCart(cart.filter(item => item.product.id !== productId));
-    // Remove IMEI/Serial data for this product
-    const newImeiSerialData = { ...imeiSerialData };
-    delete newImeiSerialData[productId];
-    setImeiSerialData(newImeiSerialData);
   };
 
-  const handleImeiSerialSubmit = (imeiSerials: string[]) => {
-    if (!currentProductForImei) return;
-    
-    // Update IMEI/Serial data
-    setImeiSerialData({
-      ...imeiSerialData,
-      [currentProductForImei.id]: imeiSerials
-    });
-    
-    // Update cart
-    const existingItem = cart.find(item => item.product.id === currentProductForImei.id);
-    if (existingItem) {
-      setCart(cart.map(item =>
-        item.product.id === currentProductForImei.id
-          ? { ...item, quantity: currentQuantityForImei }
-          : item
-      ));
-    } else {
-      setCart([...cart, { product: currentProductForImei, quantity: currentQuantityForImei }]);
-    }
-    
-    setShowImeiSerialModal(false);
-    setCurrentProductForImei(null);
-    setCurrentQuantityForImei(0);
-  };
-
-  const calculateSubtotal = () => {
+  const getSubtotal = () => {
     return cart.reduce((sum, item) => sum + (item.product.sale_price * item.quantity), 0);
   };
 
-  const calculateDiscount = () => {
+  const getDiscountAmount = () => {
     return parseFloat(discount) || 0;
   };
 
-  const calculateTotal = () => {
-    return calculateSubtotal() - calculateDiscount();
+  const getTotal = () => {
+    return Math.max(0, getSubtotal() - getDiscountAmount());
   };
 
-  const calculateChange = () => {
+  const getChange = () => {
     if (paymentType !== 'cash') return 0;
     const received = parseFloat(amountReceived) || 0;
-    const total = calculateTotal();
-    return Math.max(0, received - total);
+    return Math.max(0, received - getTotal());
   };
 
-  const handleCustomerSelection = (type: 'generic' | 'existing' | 'new') => {
-    setShowCustomerSelectionModal(false);
-    
-    if (type === 'generic') {
-      // Cliente genérico - no seleccionar ningún cliente específico
-      setSelectedCustomer(null);
-      // Procesar la venta inmediatamente después de seleccionar cliente genérico
-      setTimeout(() => {
-        processActualSale();
-      }, 100);
-    } else if (type === 'existing') {
-      // Mostrar modal para seleccionar cliente existente
-      setShowCustomerModal(true);
-    } else if (type === 'new') {
-      // Mostrar formulario para crear nuevo cliente
-      setShowNewCustomerForm(true);
-    }
-  };
-
-  const handleCreateNewCustomer = async () => {
-    if (!newCustomerData.name.trim()) {
+  const createCustomer = async () => {
+    if (!customerFormData.name.trim()) {
       alert('El nombre del cliente es requerido');
       return;
     }
@@ -288,91 +176,32 @@ export default function NewSale() {
     try {
       const { data, error } = await supabase
         .from('customers')
-        .insert([newCustomerData])
+        .insert([customerFormData])
         .select()
         .single();
 
       if (error) throw error;
 
       setSelectedCustomer(data);
-      setShowNewCustomerForm(false);
-      setNewCustomerData({ name: '', email: '', phone: '', address: '', cedula: '' });
-      
-      // Recargar la lista de clientes
-      loadCustomers();
-      
-      // Procesar la venta después de crear el cliente
-      setTimeout(() => {
-        processActualSale();
-      }, 100);
+      setCustomers([...customers, data]);
+      setShowCustomerForm(false);
+      setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
     } catch (error) {
       console.error('Error creating customer:', error);
       alert('Error al crear cliente: ' + (error as Error).message);
     }
   };
 
-  const processSale = async () => {
-    // Verificar que hay caja abierta antes de procesar la venta
-    if (!currentCashRegister) {
-      alert('Debe abrir una caja registradora antes de realizar ventas. Vaya a la sección "Caja" para abrir una caja.');
-      return;
-    }
-
+  const completeSale = async () => {
     if (cart.length === 0) {
-      alert('Agrega productos al carrito');
+      alert('Agregue productos al carrito');
       return;
     }
 
-    // Validar monto recibido para ventas en efectivo
     if (paymentType === 'cash') {
-      if (!amountReceived || amountReceived.trim() === '') {
-        alert('Debes ingresar el monto recibido para procesar la venta en efectivo');
-        return;
-      }
-      
       const received = parseFloat(amountReceived) || 0;
-      const total = calculateTotal();
-      
-      if (received < total) {
-        alert('El monto recibido debe ser mayor o igual al total de la venta');
-        return;
-      }
-    }
-
-    // Si no hay cliente seleccionado, mostrar modal de selección
-    if (!selectedCustomer) {
-      setShowCustomerSelectionModal(true);
-      return;
-    }
-
-    await processActualSale();
-  };
-
-  const processActualSale = async () => {
-    // Verificar nuevamente que hay caja abierta
-    if (!currentCashRegister) {
-      alert('Debe abrir una caja registradora antes de realizar ventas. Vaya a la sección "Caja" para abrir una caja.');
-      return;
-    }
-
-    // Validar que si es venta por abonos, debe tener cliente seleccionado
-    if (paymentType === 'installment' && !selectedCustomer) {
-      alert('Para ventas por abonos debe seleccionar un cliente');
-      return;
-    }
-
-    // Validación adicional para ventas en efectivo
-    if (paymentType === 'cash') {
-      if (!amountReceived || amountReceived.trim() === '') {
-        alert('Debes ingresar el monto recibido para procesar la venta en efectivo');
-        return;
-      }
-      
-      const received = parseFloat(amountReceived) || 0;
-      const total = calculateTotal();
-      
-      if (received < total) {
-        alert('El monto recibido debe ser mayor o igual al total de la venta');
+      if (received < getTotal()) {
+        alert('El monto recibido debe ser mayor o igual al total');
         return;
       }
     }
@@ -380,20 +209,16 @@ export default function NewSale() {
     try {
       setLoading(true);
 
-      const subtotal = calculateSubtotal();
-      const discountAmount = calculateDiscount();
-      const total = calculateTotal();
-
-      // Create sale
+      // Crear la venta
       const saleData = {
-        total_amount: total,
-        subtotal: subtotal,
-        discount_amount: discountAmount,
+        total_amount: getTotal(),
+        subtotal: getSubtotal(),
+        discount_amount: getDiscountAmount(),
         customer_id: selectedCustomer?.id || null,
         user_id: user?.id || null,
         payment_type: paymentType,
-        total_paid: paymentType === 'cash' ? total : 0,
-        payment_status: paymentType === 'cash' ? 'paid' : 'pending',
+        total_paid: paymentType === 'cash' ? getTotal() : 0,
+        payment_status: paymentType === 'cash' ? 'paid' : 'pending'
       };
 
       const { data: sale, error: saleError } = await supabase
@@ -404,13 +229,13 @@ export default function NewSale() {
 
       if (saleError) throw saleError;
 
-      // Create sale items
+      // Crear los items de la venta
       const saleItems = cart.map(item => ({
         sale_id: sale.id,
         product_id: item.product.id,
         quantity: item.quantity,
         unit_price: item.product.sale_price,
-        total_price: item.product.sale_price * item.quantity,
+        total_price: item.product.sale_price * item.quantity
       }));
 
       const { error: itemsError } = await supabase
@@ -419,65 +244,62 @@ export default function NewSale() {
 
       if (itemsError) throw itemsError;
 
-      // Update product stock
+      // Actualizar stock de productos
       for (const item of cart) {
         const { error: stockError } = await supabase
           .from('products')
           .update({ stock: item.product.stock - item.quantity })
           .eq('id', item.product.id);
 
-        if (stockError) throw stockError;
+        if (stockError) {
+          console.error('Error updating stock:', stockError);
+        }
       }
 
-      // Record payment if cash
-      if (paymentType === 'cash') {
-        // Determinar las notas del pago basado en el método
-        let paymentNotes = `Pago completo - ${paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod}`;
-        if (paymentMethod === 'nequi') {
-          paymentNotes += ' - NEQUI';
-        }
-        
-        const { error: paymentError } = await supabase
-          .from('payments')
+      // Registrar pago en efectivo si aplica
+      if (paymentType === 'cash' && currentCashRegister) {
+        const { error: cashRegisterError } = await supabase
+          .from('cash_register_sales')
           .insert([{
+            cash_register_id: currentCashRegister.id,
             sale_id: sale.id,
-            amount: total,
-            payment_method: paymentMethod === 'nequi' ? 'other' : paymentMethod,
-            notes: paymentNotes
+            payment_method: paymentMethod,
+            amount_received: parseFloat(amountReceived) || getTotal(),
+            change_given: getChange()
           }]);
 
-        if (paymentError) throw paymentError;
+        if (cashRegisterError) {
+          console.error('Error registering cash sale:', cashRegisterError);
+        }
       }
 
-      // Prepare sale data for printing
-      const saleForPrint = {
+      // Preparar datos para el comprobante
+      const saleWithDetails = {
         ...sale,
-        customer: selectedCustomer,
-        user: user,
-        sale_items: cart.map(item => ({
-          product: item.product,
-          quantity: item.quantity,
-          unit_price: item.product.sale_price,
-          total_price: item.product.sale_price * item.quantity
+        sale_items: saleItems.map(item => ({
+          ...item,
+          product: cart.find(cartItem => cartItem.product.id === item.product_id)?.product
         })),
-        payment_method_name: paymentMethods.find(m => m.id === paymentMethod)?.name || paymentMethod
+        customer: selectedCustomer,
+        user: user
       };
 
-      setCompletedSale(saleForPrint);
-      setShowPrintModal(true);
+      setCompletedSale(saleWithDetails);
 
-      // Reset form
+      // Limpiar formulario
       setCart([]);
-      setImeiSerialData({});
       setSelectedCustomer(null);
       setAmountReceived('');
       setDiscount('');
       setPaymentType('cash');
       setPaymentMethod('cash');
+
+      // Recargar productos para actualizar stock
       loadProducts();
+
     } catch (error) {
-      console.error('Error processing sale:', error);
-      alert('Error al procesar la venta: ' + (error as Error).message);
+      console.error('Error completing sale:', error);
+      alert('Error al completar la venta: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -491,87 +313,85 @@ export default function NewSale() {
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
     customer.phone.includes(customerSearchTerm) ||
-    customer.cedula.includes(customerSearchTerm)
+    customer.email.toLowerCase().includes(customerSearchTerm.toLowerCase())
   );
 
   const getPaymentMethodIcon = (methodId: string) => {
     const method = paymentMethods.find(m => m.id === methodId);
-    if (!method) return <CreditCard className="h-5 w-5" />;
-
-    // If there's a custom image, use it
-    if (method.image_url) {
-      return (
-        <img 
-          src={method.image_url} 
-          alt={method.name}
-          className="h-5 w-5 object-contain"
-          onError={(e) => {
-            // Fallback to icon if image fails to load
-            (e.target as HTMLImageElement).style.display = 'none';
-          }}
-        />
-      );
-    }
-
-    // Default icons
+    if (!method) return <CreditCard className="h-4 w-4" />;
+    
     switch (method.icon) {
       case 'Banknote':
-        return <Banknote className="h-5 w-5" />;
+        return <Banknote className="h-4 w-4" />;
       case 'CreditCard':
-        return <CreditCard className="h-5 w-5" />;
+        return <CreditCard className="h-4 w-4" />;
       case 'Building2':
-        return <Building2 className="h-5 w-5" />;
+        return <Building2 className="h-4 w-4" />;
       case 'Smartphone':
-        return <Smartphone className="h-5 w-5" />;
+        return <Smartphone className="h-4 w-4" />;
       default:
-        return <CreditCard className="h-5 w-5" />;
+        return <CreditCard className="h-4 w-4" />;
     }
   };
-  // Si está cargando el estado de la caja, mostrar loading
-  if (loadingCashRegister) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Verificando estado de caja registradora...</p>
-        </div>
-      </div>
-    );
-  }
 
-  // Si no hay caja abierta, mostrar mensaje de error
-  if (!currentCashRegister) {
+  if (completedSale) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-8">
-            <AlertTriangle className="h-16 w-16 text-red-600 mx-auto mb-6" />
-            <h3 className="text-xl font-semibold text-red-900 mb-4">Caja Registradora Requerida</h3>
-            <p className="text-red-700 mb-6 leading-relaxed">
-              Para realizar ventas, primero debe abrir una caja registradora. 
-              Esto es necesario para registrar correctamente todos los movimientos de dinero.
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={() => window.location.hash = '#cash-register'}
-                className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center mx-auto"
-              >
-                <Calculator className="h-5 w-5 mr-2" />
-                Ir a Caja Registradora
-              </button>
-              <button
-                onClick={checkCashRegisterStatus}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
-              >
-                Verificar Estado de Caja
-              </button>
-            </div>
+        <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShoppingCart className="h-8 w-8 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-green-900 mb-2">¡Venta Completada!</h2>
+          <p className="text-green-700 mb-4">
+            Venta #{completedSale.id.slice(-8)} por {formatCurrency(completedSale.total_amount)}
+          </p>
+          
+          <div className="flex justify-center gap-4">
+            <PrintService
+              sale={completedSale}
+              settings={(() => {
+                const savedSettings = localStorage.getItem('app_settings');
+                const printSettings = localStorage.getItem('print_settings');
+                if (savedSettings || printSettings) {
+                  const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
+                  const printConfig = printSettings ? JSON.parse(printSettings) : {};
+                  return {
+                    print_enabled: true,
+                    auto_print: false,
+                    print_copies: 1,
+                    receipt_width: '80mm',
+                    show_logo: true,
+                    show_company_info: true,
+                    show_customer_info: true,
+                    show_payment_details: true,
+                    show_footer_message: true,
+                    footer_message: '¡Gracias por su compra!',
+                    company_name: 'VentasFULL',
+                    ...appSettings,
+                    ...printConfig
+                  };
+                }
+                return {
+                  print_enabled: true,
+                  auto_print: false,
+                  print_copies: 1,
+                  receipt_width: '80mm',
+                  show_logo: true,
+                  show_company_info: true,
+                  show_customer_info: true,
+                  show_payment_details: true,
+                  show_footer_message: true,
+                  footer_message: '¡Gracias por su compra!',
+                  company_name: 'VentasFULL'
+                };
+              })()}
+            />
+            <button
+              onClick={() => setCompletedSale(null)}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+            >
+              Nueva Venta
+            </button>
           </div>
         </div>
       </div>
@@ -582,19 +402,13 @@ export default function NewSale() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold text-slate-900">Nueva Venta</h2>
-        <div className="flex items-center gap-4">
-          <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-            <div className="flex items-center text-sm">
-              <Calculator className="h-4 w-4 text-green-600 mr-2" />
-              <span className="text-green-700 font-medium">
-                Caja Abierta: #{currentCashRegister.id.slice(-8)}
-              </span>
-            </div>
-            <p className="text-xs text-green-600 mt-1">
-              Apertura: {formatCurrency(currentCashRegister.opening_amount)}
+        {!currentCashRegister && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-yellow-800 text-sm">
+              ⚠️ No hay caja abierta. Las ventas en efectivo no se registrarán en caja.
             </p>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -606,7 +420,7 @@ export default function NewSale() {
               <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Buscar productos por nombre o código de barras..."
+                placeholder="Buscar productos por nombre o código..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -621,8 +435,8 @@ export default function NewSale() {
               {filteredProducts.map((product) => (
                 <div
                   key={product.id}
+                  className="border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition-colors duration-200 cursor-pointer"
                   onClick={() => addToCart(product)}
-                  className="p-4 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all duration-200"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -630,7 +444,9 @@ export default function NewSale() {
                       <p className="text-sm text-slate-600">{formatCurrency(product.sale_price)}</p>
                       <p className="text-xs text-slate-500">Stock: {product.stock}</p>
                     </div>
-                    <Plus className="h-5 w-5 text-blue-600" />
+                    <button className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                      <Plus className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -638,32 +454,69 @@ export default function NewSale() {
           </div>
         </div>
 
-        {/* Cart and Checkout Section */}
+        {/* Cart and Checkout */}
         <div className="space-y-6">
           {/* Customer Selection */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Cliente</h3>
             {selectedCustomer ? (
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div>
-                  <p className="font-medium text-blue-900">{selectedCustomer.name}</p>
-                  <p className="text-sm text-blue-700">{selectedCustomer.phone}</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-blue-900">{selectedCustomer.name}</h4>
+                    {selectedCustomer.phone && (
+                      <p className="text-sm text-blue-700">{selectedCustomer.phone}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSelectedCustomer(null)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setSelectedCustomer(null)}
-                  className="p-1 text-blue-600 hover:text-blue-800"
-                >
-                  <X className="h-4 w-4" />
-                </button>
               </div>
             ) : (
-              <button
-                onClick={() => setShowCustomerSelectionModal(true)}
-                className="w-full p-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-colors duration-200 flex items-center justify-center"
-              >
-                <User className="h-4 w-4 mr-2" />
-                {paymentType === 'installment' ? 'Seleccionar Cliente (Requerido)' : 'Seleccionar Cliente (Opcional)'}
-              </button>
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente..."
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                
+                {customerSearchTerm && (
+                  <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg">
+                    {filteredCustomers.map((customer) => (
+                      <button
+                        key={customer.id}
+                        onClick={() => {
+                          setSelectedCustomer(customer);
+                          setCustomerSearchTerm('');
+                        }}
+                        className="w-full text-left p-3 hover:bg-slate-50 border-b border-slate-100 last:border-b-0"
+                      >
+                        <div className="font-medium text-slate-900">{customer.name}</div>
+                        {customer.phone && (
+                          <div className="text-sm text-slate-600">{customer.phone}</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                <button
+                  onClick={() => setShowCustomerForm(true)}
+                  className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuevo Cliente
+                </button>
+              </div>
             )}
           </div>
 
@@ -682,14 +535,6 @@ export default function NewSale() {
                     <div className="flex-1">
                       <h4 className="font-medium text-slate-900">{item.product.name}</h4>
                       <p className="text-sm text-slate-600">{formatCurrency(item.product.sale_price)}</p>
-                      {item.product.has_imei_serial && imeiSerialData[item.product.id] && (
-                        <div className="text-xs text-purple-600 mt-1">
-                          <span className="flex items-center">
-                            <Hash className="h-3 w-3 mr-1" />
-                            {item.product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'}: {imeiSerialData[item.product.id].length} asignados
-                          </span>
-                        </div>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -709,7 +554,7 @@ export default function NewSale() {
                         onClick={() => removeFromCart(item.product.id)}
                         className="p-1 text-red-600 hover:bg-red-50 rounded ml-2"
                       >
-                        <X className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -718,407 +563,193 @@ export default function NewSale() {
             )}
           </div>
 
-          {/* Payment Section */}
+          {/* Payment and Checkout */}
           {cart.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Pago</h3>
               
               {/* Payment Type */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Tipo de Pago
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setPaymentType('cash')}
-                      className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-                        paymentType === 'cash'
-                          ? 'border-green-500 bg-green-50 text-green-700'
-                          : 'border-slate-300 hover:border-slate-400'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <Banknote className="h-5 w-5 mx-auto mb-1" />
-                        <span className="text-sm font-medium">Efectivo</span>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPaymentType('installment');
-                        if (!selectedCustomer) {
-                          setShowCustomerSelectionModal(true);
-                        }
-                      }}
-                      className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-                        paymentType === 'installment'
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-slate-300 hover:border-slate-400'
-                      }`}
-                    >
-                      <div className="text-center">
-                        <CreditCard className="h-5 w-5 mx-auto mb-1" />
-                        <span className="text-sm font-medium">Abonos</span>
-                      </div>
-                    </button>
-                  </div>
-                  {paymentType === 'installment' && !selectedCustomer && (
-                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                      ⚠️ Para ventas por abonos debe seleccionar un cliente
-                    </div>
-                  )}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Tipo de Pago
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setPaymentType('cash')}
+                    className={`p-3 rounded-lg border-2 transition-colors duration-200 ${
+                      paymentType === 'cash'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-slate-300 hover:border-slate-400'
+                    }`}
+                  >
+                    <Calculator className="h-5 w-5 mx-auto mb-1" />
+                    <span className="text-sm font-medium">Efectivo</span>
+                  </button>
+                  <button
+                    onClick={() => setPaymentType('installment')}
+                    className={`p-3 rounded-lg border-2 transition-colors duration-200 ${
+                      paymentType === 'installment'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-slate-300 hover:border-slate-400'
+                    }`}
+                  >
+                    <CreditCard className="h-5 w-5 mx-auto mb-1" />
+                    <span className="text-sm font-medium">Abonos</span>
+                  </button>
                 </div>
+              </div>
 
-                {/* Payment Method Selection */}
-                {paymentType === 'cash' && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Método de Pago *
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {paymentMethods.map((method) => (
-                        <button
-                          key={method.id}
-                          onClick={() => setPaymentMethod(method.id)}
-                          className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-                            paymentMethod === method.id
-                              ? 'border-blue-500 bg-blue-50 text-blue-700'
-                              : 'border-slate-300 hover:border-slate-400'
-                          }`}
-                        >
-                          <div className="text-center">
-                            <div className="flex justify-center mb-1">
-                              {getPaymentMethodIcon(method.id)}
-                            </div>
-                            <span className="text-xs font-medium">{method.name}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              {/* Payment Method for Cash */}
+              {paymentType === 'cash' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Método de Pago
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {paymentMethods.map((method) => (
+                      <option key={method.id} value={method.id}>
+                        {method.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-                {/* Discount */}
-                <div>
+              {/* Discount */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Descuento
+                </label>
+                <FormattedNumberInput
+                  value={discount}
+                  onChange={setDiscount}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="0"
+                  min="0"
+                />
+              </div>
+
+              {/* Amount Received for Cash */}
+              {paymentType === 'cash' && (
+                <div className="mb-4">
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Descuento (opcional)
+                    Monto Recibido
                   </label>
                   <FormattedNumberInput
-                    value={discount}
-                    onChange={(value) => setDiscount(value)}
+                    value={amountReceived}
+                    onChange={setAmountReceived}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0"
+                    placeholder={getTotal().toString()}
                     min="0"
-                    max={calculateSubtotal().toString()}
                   />
-                </div>
-
-                {/* Amount Received (only for cash) */}
-                {paymentType === 'cash' && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Monto Recibido
-                    </label>
-                    <FormattedNumberInput
-                      value={amountReceived}
-                      onChange={(value) => setAmountReceived(value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder={calculateTotal().toString()}
-                      min={calculateTotal().toString()}
-                    />
-                  </div>
-                )}
-
-                {/* Totals */}
-                <div className="space-y-2 pt-4 border-t border-slate-200">
-                  <div className="flex justify-between text-sm">
-                    <span>Subtotal:</span>
-                    <span>{formatCurrency(calculateSubtotal())}</span>
-                  </div>
-                  {calculateDiscount() > 0 && (
-                    <div className="flex justify-between text-sm text-red-600">
-                      <span>Descuento:</span>
-                      <span>-{formatCurrency(calculateDiscount())}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total:</span>
-                    <span>{formatCurrency(calculateTotal())}</span>
-                  </div>
-                  {paymentType === 'cash' && amountReceived && (
-                    <div className="flex justify-between text-sm text-green-600">
-                      <span>Cambio:</span>
-                      <span>{formatCurrency(calculateChange())}</span>
-                    </div>
+                  {amountReceived && getChange() > 0 && (
+                    <p className="text-sm text-green-600 mt-1">
+                      Cambio: {formatCurrency(getChange())}
+                    </p>
                   )}
                 </div>
+              )}
 
-                {/* Process Sale Button */}
-                <button
-                  onClick={processSale}
-                  disabled={
-                    loading || 
-                    cart.length === 0 || 
-                    (paymentType === 'cash' && (!amountReceived || amountReceived.trim() === '' || parseFloat(amountReceived) < calculateTotal()))
-                  }
-                  className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center font-medium"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                      {paymentType === 'cash' ? 'Procesar Venta' : 'Crear Venta a Crédito'}
-                    </>
-                  )}
-                </button>
-                
-                {/* Mensaje de ayuda cuando el botón está deshabilitado */}
-                {paymentType === 'cash' && cart.length > 0 && (!amountReceived || amountReceived.trim() === '' || parseFloat(amountReceived) < calculateTotal()) && (
-                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                    {!amountReceived || amountReceived.trim() === '' 
-                      ? '⚠️ Ingresa el monto recibido para procesar la venta'
-                      : parseFloat(amountReceived) < calculateTotal()
-                        ? '⚠️ El monto recibido debe ser mayor o igual al total'
-                        : ''
-                    }
+              {/* Totals */}
+              <div className="space-y-2 mb-4 p-4 bg-slate-50 rounded-lg">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(getSubtotal())}</span>
+                </div>
+                {getDiscountAmount() > 0 && (
+                  <div className="flex justify-between text-sm text-orange-600">
+                    <span>Descuento:</span>
+                    <span>-{formatCurrency(getDiscountAmount())}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-2">
+                  <span>Total:</span>
+                  <span>{formatCurrency(getTotal())}</span>
+                </div>
               </div>
+
+              <button
+                onClick={completeSale}
+                disabled={loading || cart.length === 0}
+                className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Completar Venta
+                  </>
+                )}
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Customer Selection Modal */}
-      {showCustomerSelectionModal && (
+      {/* Customer Form Modal */}
+      {showCustomerForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
             <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Seleccionar Tipo de Cliente</h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Elige el tipo de cliente para esta venta
-              </p>
+              <h3 className="text-lg font-semibold text-slate-900">Nuevo Cliente</h3>
             </div>
-            
-            <div className="p-6 space-y-3">
-              <button
-                onClick={() => handleCustomerSelection('generic')}
-                className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all duration-200 text-left"
-              >
-                <div className="flex items-center">
-                  <User className="h-6 w-6 text-slate-600 mr-3" />
-                  <div>
-                    <h4 className="font-medium text-slate-900">Cliente Genérico</h4>
-                    <p className="text-sm text-slate-600">
-                      {paymentType === 'installment' 
-                        ? 'No recomendado para ventas por abonos' 
-                        : 'Venta sin datos específicos del cliente'
-                      }
-                    </p>
-                  </div>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => handleCustomerSelection('existing')}
-                className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-green-300 hover:bg-green-50 transition-all duration-200 text-left"
-              >
-                <div className="flex items-center">
-                  <Search className="h-6 w-6 text-slate-600 mr-3" />
-                  <div>
-                    <h4 className="font-medium text-slate-900">Cliente Existente</h4>
-                    <p className="text-sm text-slate-600">Seleccionar de la lista de clientes registrados</p>
-                  </div>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => handleCustomerSelection('new')}
-                className="w-full p-4 border-2 border-slate-300 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-all duration-200 text-left"
-              >
-                <div className="flex items-center">
-                  <UserPlus className="h-6 w-6 text-slate-600 mr-3" />
-                  <div>
-                    <h4 className="font-medium text-slate-900">Nuevo Cliente</h4>
-                    <p className="text-sm text-slate-600">Crear un nuevo cliente y asignarlo a esta venta</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-            
-            <div className="p-6 border-t border-slate-200">
-              <button
-                onClick={() => setShowCustomerSelectionModal(false)}
-                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Customer Selection Modal */}
-      {showCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[85vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Seleccionar Cliente Existente</h3>
-              <div className="mt-4 relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre, teléfono o cédula..."
-                  value={customerSearchTerm}
-                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            
-            <div className="p-6 flex-1 overflow-y-auto">
-              <div className="space-y-2">
-                {filteredCustomers.map((customer) => (
-                  <button
-                    key={customer.id}
-                    onClick={() => {
-                      setSelectedCustomer(customer);
-                      setShowCustomerModal(false);
-                      setCustomerSearchTerm('');
-                      // Procesar la venta después de seleccionar el cliente
-                      setTimeout(() => {
-                        processActualSale();
-                      }, 100);
-                    }}
-                    className="w-full text-left p-3 hover:bg-slate-50 rounded-lg transition-colors duration-200"
-                  >
-                    <div>
-                      <p className="font-medium text-slate-900">{customer.name}</p>
-                      <p className="text-sm text-slate-600">{customer.phone}</p>
-                      {customer.cedula && (
-                        <p className="text-xs text-slate-500">CC: {customer.cedula}</p>
-                      )}
-                    </div>
-                  </button>
-                ))}
-                {filteredCustomers.length === 0 && (
-                  <p className="text-slate-500 text-center py-4">No se encontraron clientes</p>
-                )}
-              </div>
-            </div>
-            
-            <div className="p-6 border-t border-slate-200 flex-shrink-0">
-              <button
-                onClick={() => {
-                  setShowCustomerModal(false);
-                  setCustomerSearchTerm('');
-                }}
-                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* New Customer Form Modal */}
-      {showNewCustomerForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Crear Nuevo Cliente</h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Ingresa los datos del nuevo cliente
-              </p>
-            </div>
-            
-            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+            <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nombre Completo *
+                  Nombre *
                 </label>
                 <input
                   type="text"
                   required
-                  value={newCustomerData.name}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                  value={customerFormData.name}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Nombre del cliente"
                 />
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Cédula
-                </label>
-                <input
-                  type="text"
-                  value={newCustomerData.cedula}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, cedula: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Número de cédula"
-                />
-              </div>
-              
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Teléfono
                 </label>
                 <input
                   type="tel"
-                  value={newCustomerData.phone}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                  value={customerFormData.phone}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Número de teléfono"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Email
                 </label>
                 <input
                   type="email"
-                  value={newCustomerData.email}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                  value={customerFormData.email}
+                  onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Correo electrónico"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Dirección
-                </label>
-                <textarea
-                  value={newCustomerData.address}
-                  onChange={(e) => setNewCustomerData({ ...newCustomerData, address: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Dirección del cliente"
                 />
               </div>
             </div>
-            
-            <div className="p-6 border-t border-slate-200 flex gap-3 flex-shrink-0">
+            <div className="p-6 border-t border-slate-200 flex gap-3">
               <button
-                onClick={handleCreateNewCustomer}
-                disabled={!newCustomerData.name.trim()}
-                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                onClick={createCustomer}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors duration-200"
               >
                 Crear Cliente
               </button>
               <button
                 onClick={() => {
-                  setShowNewCustomerForm(false);
-                  setNewCustomerData({ name: '', email: '', phone: '', address: '', cedula: '' });
+                  setShowCustomerForm(false);
+                  setCustomerFormData({ name: '', email: '', phone: '', address: '', cedula: '' });
                 }}
-                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
+                className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >
                 Cancelar
               </button>
@@ -1126,300 +757,6 @@ export default function NewSale() {
           </div>
         </div>
       )}
-
-      {/* IMEI/Serial Modal */}
-      {showImeiSerialModal && currentProductForImei && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center">
-                <Hash className="h-5 w-5 mr-2 text-purple-600" />
-                Asignar {currentProductForImei.imei_serial_type === 'imei' ? 'IMEI' : 'Número de Serie'}
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Producto: {currentProductForImei.name} (Cantidad: {currentQuantityForImei})
-              </p>
-            </div>
-            
-            <ImeiSerialAssignment
-              product={currentProductForImei}
-              quantity={currentQuantityForImei}
-              existingData={imeiSerialData[currentProductForImei.id] || []}
-              onSubmit={handleImeiSerialSubmit}
-              onCancel={() => {
-                setShowImeiSerialModal(false);
-                setCurrentProductForImei(null);
-                setCurrentQuantityForImei(0);
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Print Modal */}
-      {showPrintModal && completedSale && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">
-                ¡Venta Completada!
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                ¿Deseas imprimir el comprobante?
-              </p>
-            </div>
-            
-            <div className="p-6">
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-green-900">Total de la venta:</span>
-                    <span className="text-xl font-bold text-green-900">
-                      {formatCurrency(completedSale.total_amount)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-green-700">Método de pago:</span>
-                    <span className="text-green-800">{completedSale.payment_method_name}</span>
-                  </div>
-                  {completedSale.customer && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-green-700">Cliente:</span>
-                      <span className="text-green-800">{completedSale.customer.name}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex gap-3">
-                <PrintService
-                  sale={completedSale}
-                  settings={(() => {
-                    const savedSettings = localStorage.getItem('app_settings');
-                    const printSettings = localStorage.getItem('print_settings');
-                    if (savedSettings || printSettings) {
-                      const appSettings = savedSettings ? JSON.parse(savedSettings) : {};
-                      const printConfig = printSettings ? JSON.parse(printSettings) : {};
-                      return {
-                        print_enabled: true,
-                        auto_print: false,
-                        print_copies: 1,
-                        receipt_width: '80mm',
-                        show_logo: true,
-                        show_company_info: true,
-                        show_customer_info: true,
-                        show_payment_details: true,
-                        show_footer_message: true,
-                        footer_message: '¡Gracias por su compra!',
-                        receipt_header: '',
-                        receipt_footer: 'Conserve este comprobante',
-                        company_name: 'VentasFULL',
-                        company_address: '',
-                        company_phone: '',
-                        company_email: '',
-                        ...appSettings,
-                        ...printConfig
-                      };
-                    }
-                    return {
-                      print_enabled: true,
-                      auto_print: false,
-                      print_copies: 1,
-                      receipt_width: '80mm',
-                      show_logo: true,
-                      show_company_info: true,
-                      show_customer_info: true,
-                      show_payment_details: true,
-                      show_footer_message: true,
-                      footer_message: '¡Gracias por su compra!',
-                      receipt_header: '',
-                      receipt_footer: 'Conserve este comprobante',
-                      company_name: 'VentasFULL',
-                      company_address: '',
-                      company_phone: '',
-                      company_email: ''
-                    };
-                  })()}
-                  onPrint={() => {
-                    setShowPrintModal(false);
-                    setCompletedSale(null);
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    setShowPrintModal(false);
-                    setCompletedSale(null);
-                  }}
-                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors duration-200"
-                >
-                  Continuar sin Imprimir
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Component for IMEI/Serial assignment in sales
-interface ImeiSerialAssignmentProps {
-  product: Product;
-  quantity: number;
-  existingData: string[];
-  onSubmit: (imeiSerials: string[]) => void;
-  onCancel: () => void;
-}
-
-function ImeiSerialAssignment({ 
-  product, 
-  quantity, 
-  existingData, 
-  onSubmit, 
-  onCancel 
-}: ImeiSerialAssignmentProps) {
-  const [imeiSerials, setImeiSerials] = useState<string[]>(() => {
-    // Initialize with existing data or empty array
-    const initial = [...existingData];
-    while (initial.length < quantity) {
-      initial.push('');
-    }
-    return initial.slice(0, quantity);
-  });
-  const [availableItems, setAvailableItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadAvailableItems();
-  }, [product.id]);
-
-  const loadAvailableItems = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('product_imei_serials')
-        .select('*')
-        .eq('product_id', product.id)
-        .eq('status', 'available')
-        .order('created_at');
-
-      if (error) throw error;
-      setAvailableItems(data || []);
-    } catch (error) {
-      console.error('Error loading available items:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = () => {
-    // Validate that all required fields are filled
-    const filledItems = imeiSerials.filter(item => item.trim() !== '');
-    if (filledItems.length !== quantity) {
-      alert(`Debe asignar ${quantity} ${product.imei_serial_type === 'imei' ? 'IMEI' : 'números de serie'}`);
-      return;
-    }
-
-    // Validate IMEI format if needed
-    if (product.imei_serial_type === 'imei') {
-      for (const imei of filledItems) {
-        if (!/^\d{15}$/.test(imei)) {
-          alert(`IMEI inválido: ${imei}. Debe tener exactamente 15 dígitos.`);
-          return;
-        }
-      }
-    }
-
-    onSubmit(filledItems);
-  };
-
-  const selectFromAvailable = (index: number, item: any) => {
-    const newImeiSerials = [...imeiSerials];
-    newImeiSerials[index] = product.imei_serial_type === 'imei' ? item.imei_number : item.serial_number;
-    setImeiSerials(newImeiSerials);
-  };
-
-  return (
-    <div className="p-6">
-      {loading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">Cargando...</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {availableItems.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 mb-2">
-                {product.imei_serial_type === 'imei' ? 'IMEI' : 'Números de Serie'} Disponibles
-              </h4>
-              <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
-                {availableItems.map((item, itemIndex) => (
-                  <div key={item.id} className="flex items-center justify-between text-sm">
-                    <span className="font-mono">
-                      {product.imei_serial_type === 'imei' ? item.imei_number : item.serial_number}
-                    </span>
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value !== '') {
-                          selectFromAvailable(parseInt(e.target.value), item);
-                        }
-                      }}
-                      className="text-xs px-2 py-1 border border-slate-300 rounded"
-                    >
-                      <option value="">Asignar a...</option>
-                      {imeiSerials.map((_, index) => (
-                        <option key={index} value={index}>
-                          Unidad {index + 1}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {imeiSerials.map((value, index) => (
-              <div key={index}>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {product.imei_serial_type === 'imei' ? 'IMEI' : 'Número de Serie'} #{index + 1}
-                </label>
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(e) => {
-                    const newImeiSerials = [...imeiSerials];
-                    newImeiSerials[index] = e.target.value;
-                    setImeiSerials(newImeiSerials);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
-                  placeholder={product.imei_serial_type === 'imei' ? '15 dígitos' : 'Número de serie'}
-                  maxLength={product.imei_serial_type === 'imei' ? 15 : undefined}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      <div className="flex gap-3 mt-6">
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
-        >
-          Confirmar
-        </button>
-        <button
-          onClick={onCancel}
-          className="flex-1 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-        >
-          Cancelar
-        </button>
-      </div>
     </div>
   );
 }

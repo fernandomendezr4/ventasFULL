@@ -117,6 +117,13 @@ export interface Database {
           category_id: string | null;
           supplier_id: string | null;
           created_at: string;
+          has_imei_serial: boolean;
+          imei_serial_type: 'imei' | 'serial' | 'both';
+          requires_imei_serial: boolean;
+          bulk_import_batch: string;
+          import_notes: string;
+          imported_at: string | null;
+          imported_by: string | null;
         };
         Insert: {
           id?: string;
@@ -129,6 +136,13 @@ export interface Database {
           category_id?: string | null;
           supplier_id?: string | null;
           created_at?: string;
+          has_imei_serial?: boolean;
+          imei_serial_type?: 'imei' | 'serial' | 'both';
+          requires_imei_serial?: boolean;
+          bulk_import_batch?: string;
+          import_notes?: string;
+          imported_at?: string | null;
+          imported_by?: string | null;
         };
         Update: {
           id?: string;
@@ -141,6 +155,13 @@ export interface Database {
           category_id?: string | null;
           supplier_id?: string | null;
           created_at?: string;
+          has_imei_serial?: boolean;
+          imei_serial_type?: 'imei' | 'serial' | 'both';
+          requires_imei_serial?: boolean;
+          bulk_import_batch?: string;
+          import_notes?: string;
+          imported_at?: string | null;
+          imported_by?: string | null;
         };
       };
       sales: {
@@ -292,74 +313,53 @@ export interface Database {
           created_at?: string;
         };
       };
-      has_imei_serial: boolean;
-      imei_serial_type: 'imei' | 'serial' | 'both';
-      requires_imei_serial: boolean;
-      bulk_import_batch: string;
-      import_notes: string;
-      imported_at: string | null;
-      imported_by: string | null;
-      has_imei_serial?: boolean;
-      imei_serial_type?: 'imei' | 'serial' | 'both';
-      requires_imei_serial?: boolean;
-      bulk_import_batch?: string;
-      import_notes?: string;
-      imported_at?: string | null;
-      imported_by?: string | null;
-      has_imei_serial?: boolean;
-      imei_serial_type?: 'imei' | 'serial' | 'both';
-      requires_imei_serial?: boolean;
-      bulk_import_batch?: string;
-      import_notes?: string;
-      imported_at?: string | null;
-      imported_by?: string | null;
-    };
-  };
-  product_imei_serials: {
-    Row: {
-      id: string;
-      product_id: string;
-      imei_number: string;
-      serial_number: string;
-      status: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
-      sale_id: string | null;
-      sale_item_id: string | null;
-      sold_at: string | null;
-      notes: string;
-      created_at: string;
-      created_by: string | null;
-      updated_at: string;
-      updated_by: string | null;
-    };
-    Insert: {
-      id?: string;
-      product_id: string;
-      imei_number?: string;
-      serial_number?: string;
-      status?: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
-      sale_id?: string | null;
-      sale_item_id?: string | null;
-      sold_at?: string | null;
-      notes?: string;
-      created_at?: string;
-      created_by?: string | null;
-      updated_at?: string;
-      updated_by?: string | null;
-    };
-    Update: {
-      id?: string;
-      product_id?: string;
-      imei_number?: string;
-      serial_number?: string;
-      status?: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
-      sale_id?: string | null;
-      sale_item_id?: string | null;
-      sold_at?: string | null;
-      notes?: string;
-      created_at?: string;
-      created_by?: string | null;
-      updated_at?: string;
-      updated_by?: string | null;
+      product_imei_serials: {
+        Row: {
+          id: string;
+          product_id: string;
+          imei_number: string;
+          serial_number: string;
+          status: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
+          sale_id: string | null;
+          sale_item_id: string | null;
+          sold_at: string | null;
+          notes: string;
+          created_at: string;
+          created_by: string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          imei_number?: string;
+          serial_number?: string;
+          status?: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
+          sale_id?: string | null;
+          sale_item_id?: string | null;
+          sold_at?: string | null;
+          notes?: string;
+          created_at?: string;
+          created_by?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          imei_number?: string;
+          serial_number?: string;
+          status?: 'available' | 'sold' | 'reserved' | 'defective' | 'returned';
+          sale_id?: string | null;
+          sale_item_id?: string | null;
+          sold_at?: string | null;
+          notes?: string;
+          created_at?: string;
+          created_by?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+      };
     };
   };
 }

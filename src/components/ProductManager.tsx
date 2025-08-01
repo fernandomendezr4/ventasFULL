@@ -49,7 +49,7 @@ export default function ProductManager() {
     try {
       setLoading(true);
       
-      // Cargar productos con paginación para mejorar rendimiento
+      // Cargar productos con información completa
       const { data, error } = await supabase
         .from('products')
         .select(`
@@ -58,12 +58,13 @@ export default function ProductManager() {
           supplier:suppliers (id, name)
         `)
         .order('created_at', { ascending: false })
-        .limit(100); // Limitar a 100 productos inicialmente
+        .limit(200);
 
       if (error) throw error;
       setProducts(data as ProductWithCategory[]);
     } catch (error) {
       console.error('Error loading products:', error);
+      setProducts([]);
     } finally {
       setLoading(false);
     }

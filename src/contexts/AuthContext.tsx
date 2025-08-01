@@ -163,7 +163,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     );
-              .single();
 
     // Timeout de seguridad reducido
     const timeoutId = setTimeout(() => {
@@ -171,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         setInitialized(true);
       }
-    }, 3000); // Reducido de 5 a 3 segundos
+    }, 2000); // Reducido a 2 segundos
 
     // Cleanup subscription on unmount
     return () => {

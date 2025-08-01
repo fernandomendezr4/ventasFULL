@@ -14,7 +14,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     autoRefreshToken: true,
     detectSessionInUrl: false,
     flowType: 'pkce',
-    storageKey: 'sb-auth-token'
+    storageKey: 'sb-auth-token',
+    debug: false
   },
   global: {
     headers: {
@@ -24,13 +25,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   db: {
     schema: 'public',
   },
-  // Configuraciones de rendimiento
-  fetch: (url, options = {}) => {
-    return fetch(url, {
-      ...options,
-      // Agregar timeout para evitar cuelgues
-      signal: AbortSignal.timeout(10000)
-    });
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 });
 

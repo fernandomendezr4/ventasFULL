@@ -44,7 +44,7 @@ export default function CashRegister() {
         .from('cash_registers')
         .select(`
           *,
-          user:users (name, email)
+          user:users (id, name, email)
         `)
         .eq('user_id', user.id)
         .eq('status', 'open')
@@ -54,15 +54,16 @@ export default function CashRegister() {
 
       if (registerError) {
         console.error('Error loading register:', registerError);
-        throw registerError;
+        // No lanzar error, solo loggearlo
+        setCurrentRegister(null);
+        setMovements([]);
+        return;
       }
 
       if (register) {
-        console.log('Caja encontrada:', register);
         setCurrentRegister(register);
         await loadMovements(register.id);
       } else {
-        console.log('No hay caja abierta para el usuario');
         setCurrentRegister(null);
         setMovements([]);
       }

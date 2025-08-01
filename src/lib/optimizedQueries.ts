@@ -33,29 +33,33 @@ setInterval(() => {
 // =====================================================
 
 export const getDashboardStats = async (targetDate?: string) => {
-  const cacheKey = `dashboard_stats_${targetDate || 'today'}`;
-  const cached = getCachedData(cacheKey, 2 * 60 * 1000); // 2 minutos de cache
-  
-  if (cached) return cached;
-
   try {
-    const { data, error } = await supabase.rpc('get_dashboard_stats', {
-      target_date: targetDate || new Date().toISOString().split('T')[0]
-    });
+    const today = targetDate || new Date().toISOString().split('T')[0];
+    
+    // Consultas básicas sin RPC
+    const [salesCount, productsCount, customersCount, todaySales, totalRevenue] = await Promise.all([
+      supabase.from('sales').select('id', { count: 'exact', head: true }),
+      supabase.from('products').select('id', { count: 'exact', head: true }),
+      supabase.from('customers').select('id', { count: 'exact', head: true }),
+      supabase
+        .from('sales')
+        .select('total_amount')
+        .gte('created_at', today)
+        .lt('created_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+      supabase.from('sales').select('total_amount')
+    ]);
 
-    if (error) throw error;
+    const todayTotal = todaySales.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
+    const revenueTotal = totalRevenue.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
 
-    const result = data?.[0] || {
-      total_sales: 0,
-      total_products: 0,
-      total_customers: 0,
-      today_sales: 0,
-      total_revenue: 0,
+    return {
+      total_sales: salesCount.count || 0,
+      total_products: productsCount.count || 0,
+      total_customers: customersCount.count || 0,
+      today_sales: todayTotal,
+      total_revenue: revenueTotal,
       low_stock_count: 0
     };
-
-    setCachedData(cacheKey, result);
-    return result;
   } catch (error) {
     console.error('Error getting dashboard stats:', error);
     return {

@@ -285,6 +285,29 @@ export default function UserManager() {
       `¿Estás seguro de que quieres eliminar al usuario "${user.name}"? Esta acción no se puede deshacer.`,
       async () => {
         try {
+          // First, update any cash_register_discrepancies that reference this user
+          const { error: discrepancyError } = await supabase
+            .from('cash_register_discrepancies')
+            .update({ created_by: null })
+            .eq('created_by', id);
+
+          if (discrepancyError) {
+            console.warn('Warning updating discrepancies:', discrepancyError);
+            // Continue with deletion even if this fails, as it might not be critical
+          }
+
+          // Also update resolved_by references
+          const { error: resolvedError } = await supabase
+            .from('cash_register_discrepancies')
+            .update({ resolved_by: null })
+            .eq('resolved_by', id);
+
+          if (resolvedError) {
+            console.warn('Warning updating resolved_by:', resolvedError);
+            // Continue with deletion even if this fails
+          }
+
+          // Now delete the user
           const { error } = await supabase
             .from('users')
             .delete()

@@ -82,24 +82,43 @@ if (!isDemoMode) {
 
 export const supabase = supabaseClient;
 
-// Función para inicializar el monitoreo de conexión
-function initializeConnectionMonitoring() {
-  if (!supabaseClient) return;
+// Sistema de listeners para cambios de estado de conexión
+export const addConnectionListener = (callback: (status: ConnectionStatus) => void) => {
+  connectionState.listeners.add(callback);
+  
+  // Enviar estado actual inmediatamente
+  const currentStatus = connectionState.isConnected ? 'connected' : 
+                       connectionState.isConnecting ? 'connecting' : 'disconnected';
+  callback(currentStatus);
+  
+  return () => {
+    connectionState.listeners.delete(callback);
+  };
+};
 
-  // Verificar conexión cada 30 segundos
-  connectionState.healthCheckInterval = setInterval(async () => {
-    await checkConnectionHealth();
-  }, 30000);
-
-  // Limpiar interval al cerrar la aplicación
-  window.addEventListener('beforeunload', () => {
-    if (connectionState.healthCheckInterval) {
-      clearInterval(connectionState.healthCheckInterval);
+function notifyConnectionListeners(status: ConnectionStatus) {
+  connectionState.listeners.forEach(listener => {
+    try {
+      listener(status);
+    } catch (error) {
+      console.error('Error in connection listener:', error);
     }
   });
+}
 
-  // Verificar conexión inicial
-  checkConnectionHealth();
+// Función para programar reconexión automática
+function scheduleReconnection() {
+  const delay = Math.min(
+    connectionState.retryDelay * Math.pow(2, connectionState.retryCount),
+    30000 // Máximo 30 segundos
+  );
+
+  console.log(`🔄 Programando reconexión en ${delay}ms (intento ${connectionState.retryCount + 1}/${connectionState.maxRetries})`);
+
+  setTimeout(async () => {
+    connectionState.retryCount++;
+    await checkConnectionHealth();
+  }, delay);
 }
 
 // Función mejorada para verificar la salud de la conexión
@@ -166,43 +185,24 @@ export const checkConnectionHealth = async (): Promise<boolean> => {
   }
 };
 
-// Función para programar reconexión automática
-function scheduleReconnection() {
-  const delay = Math.min(
-    connectionState.retryDelay * Math.pow(2, connectionState.retryCount),
-    30000 // Máximo 30 segundos
-  );
+// Función para inicializar el monitoreo de conexión
+function initializeConnectionMonitoring() {
+  if (!supabaseClient) return;
 
-  console.log(`🔄 Programando reconexión en ${delay}ms (intento ${connectionState.retryCount + 1}/${connectionState.maxRetries})`);
-
-  setTimeout(async () => {
-    connectionState.retryCount++;
+  // Verificar conexión cada 30 segundos
+  connectionState.healthCheckInterval = setInterval(async () => {
     await checkConnectionHealth();
-  }, delay);
-}
+  }, 30000);
 
-// Sistema de listeners para cambios de estado de conexión
-export const addConnectionListener = (callback: (status: ConnectionStatus) => void) => {
-  connectionState.listeners.add(callback);
-  
-  // Enviar estado actual inmediatamente
-  const currentStatus = connectionState.isConnected ? 'connected' : 
-                       connectionState.isConnecting ? 'connecting' : 'disconnected';
-  callback(currentStatus);
-  
-  return () => {
-    connectionState.listeners.delete(callback);
-  };
-};
-
-function notifyConnectionListeners(status: ConnectionStatus) {
-  connectionState.listeners.forEach(listener => {
-    try {
-      listener(status);
-    } catch (error) {
-      console.error('Error in connection listener:', error);
+  // Limpiar interval al cerrar la aplicación
+  window.addEventListener('beforeunload', () => {
+    if (connectionState.healthCheckInterval) {
+      clearInterval(connectionState.healthCheckInterval);
     }
   });
+
+  // Verificar conexión inicial
+  checkConnectionHealth();
 }
 
 // Función para forzar reconexión manual

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';

@@ -734,7 +734,7 @@ export default function UserManager() {
                 </div>
               </div>
               
-              <div className="mt-4 pt-4 border-t border-slate-200">
+              {currentUser?.role === 'manager' && (
                 <p className="text-xs text-slate-500">
                   Registrado: {new Date(user.created_at).toLocaleDateString('es-ES')}
                 </p>

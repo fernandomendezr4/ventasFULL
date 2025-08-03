@@ -553,7 +553,7 @@ export default function NewSale() {
         if (cartItem.product.requires_imei_serial && cartItem.selectedImeiSerials) {
           try {
             // Completar venta con IMEI/Serial específicos
-            const { error: imeiError } = await supabase!.rpc('complete_imei_serial_sale', {
+            const { error: imeiError } = await supabase!.rpc('mark_imei_serial_sold', {
               p_sale_item_id: saleItem.id,
               p_imei_serial_ids: cartItem.selectedImeiSerials.map(imei => imei.id)
             });

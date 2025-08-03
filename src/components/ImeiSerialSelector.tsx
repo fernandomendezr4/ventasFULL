@@ -96,7 +96,7 @@ export default function ImeiSerialSelector({
 
   const handleConfirm = () => {
     if (selectedImeiSerials.length !== requiredQuantity) {
-      alert(`Debe seleccionar exactamente ${requiredQuantity} unidad(es)`);
+      alert(`Debe seleccionar exactamente ${requiredQuantity} unidad${requiredQuantity > 1 ? 'es' : ''} para completar la venta`);
       return;
     }
     
@@ -172,7 +172,7 @@ export default function ImeiSerialSelector({
               <div className="flex items-center">
                 <Package className="h-5 w-5 text-blue-600 mr-2" />
                 <span className="font-medium text-blue-900">
-                  Disponibles: {filteredImeiSerials.length}
+                  Unidades disponibles: {filteredImeiSerials.length}
                 </span>
               </div>
               <div className="text-sm text-blue-700">
@@ -184,9 +184,19 @@ export default function ImeiSerialSelector({
                 ) : (
                   <span className="flex items-center">
                     <AlertTriangle className="h-4 w-4 mr-1" />
-                    Faltan {requiredQuantity - selectedImeiSerials.length}
+                    Seleccionadas: {selectedImeiSerials.length} de {requiredQuantity}
                   </span>
                 )}
+              </div>
+            </div>
+            
+            {/* Barra de progreso */}
+            <div className="mt-3">
+              <div className="w-full bg-slate-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(selectedImeiSerials.length / requiredQuantity) * 100}%` }}
+                ></div>
               </div>
             </div>
           </div>
@@ -202,9 +212,14 @@ export default function ImeiSerialSelector({
               <Hash className="h-12 w-12 text-slate-400 mx-auto mb-4" />
               <p className="text-slate-500">
                 {availableImeiSerials.length === 0 
-                  ? 'No hay unidades disponibles para este producto'
+                  ? `No hay unidades disponibles para este producto. Verifique el stock de ${imeiSerialType === 'imei' ? 'IMEI' : imeiSerialType === 'serial' ? 'números de serie' : 'IMEI/Serial'}.`
                   : 'No se encontraron unidades que coincidan con la búsqueda'}
               </p>
+              {availableImeiSerials.length === 0 && (
+                <p className="text-sm text-slate-400 mt-2">
+                  Debe agregar {imeiSerialType === 'imei' ? 'códigos IMEI' : imeiSerialType === 'serial' ? 'números de serie' : 'códigos IMEI/Serial'} en la gestión de productos antes de poder vender este artículo.
+                </p>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -277,9 +292,16 @@ export default function ImeiSerialSelector({
         <div className="p-6 border-t border-slate-200 flex justify-between items-center">
           <div className="text-sm text-slate-600">
             {selectedImeiSerials.length > 0 && (
-              <span>
-                Seleccionados: {selectedImeiSerials.map(item => getDisplayText(item)).join(', ')}
-              </span>
+              <div className="max-w-md">
+                <p className="font-medium mb-1">Unidades seleccionadas:</p>
+                <div className="text-xs space-y-1 max-h-20 overflow-y-auto">
+                  {selectedImeiSerials.map((item, index) => (
+                    <div key={item.id} className="bg-green-50 px-2 py-1 rounded border border-green-200">
+                      {index + 1}. {getDisplayText(item)}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
           
@@ -296,7 +318,7 @@ export default function ImeiSerialSelector({
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center"
             >
               <Check className="h-4 w-4 mr-2" />
-              Confirmar Selección
+              Confirmar Selección ({selectedImeiSerials.length}/{requiredQuantity})
             </button>
           </div>
         </div>

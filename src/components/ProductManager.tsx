@@ -659,9 +659,18 @@ export default function ProductManager() {
                        product.imei_serial_type === 'serial' ? 'Serial' : 'IMEI/Serial'}:
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500">
-                        {(product as any).available_imei_serial_count || 0} disponibles
-                      </span>
+                      <div className="text-right">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          (product as any).available_imei_serial_count > 0 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {(product as any).available_imei_serial_count || 0} disponibles
+                        </span>
+                        {product.requires_imei_serial && (product as any).available_imei_serial_count === 0 && (
+                          <p className="text-xs text-red-600 mt-1">⚠️ Sin unidades para venta</p>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleManageImeiSerial(product)}
                         className="text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors duration-200"

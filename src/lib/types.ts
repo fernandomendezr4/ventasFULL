@@ -609,6 +609,9 @@ export interface CashRegisterWithMovements extends CashRegisterWithUser {
 export interface CartItem {
   product: Product;
   quantity: number;
+  // Campos opcionales para productos con IMEI/Serial
+  selectedImeiSerials?: ProductImeiSerial[];
+  needsImeiSelection?: boolean;
 }
 
 // Tipos para formularios

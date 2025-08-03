@@ -1,1 +1,6 @@
-{"code":"rate-limited","message":"You have hit the rate limit. Please upgrade to keep chatting.","providerLimitHit":false,"isRetryable":true}
+import React from 'react';
+import OptimizedDashboard from './OptimizedDashboard';
+
+export default function Dashboard() {
+  return <OptimizedDashboard />;
+}

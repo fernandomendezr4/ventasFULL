@@ -100,7 +100,7 @@ export const safeQuery = async <T>(
       const errorMessage = handleSupabaseError(result.error);
       console.error('Database query error:', result.error);
       return { data: fallbackData, error: errorMessage };
-    },
+    }
     
     return { data: result.data || fallbackData, error: null };
   } catch (error) {

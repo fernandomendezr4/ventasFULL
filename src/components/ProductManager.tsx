@@ -290,7 +290,7 @@ export default function ProductManager() {
   const handleDelete = async (product: Product) => {
     showConfirmation(
       'Confirmar eliminación',
-      `¿Estás seguro de que quieres eliminar el producto "${product.name}"? Esta acción no se puede deshacer.`
+      `¿Estás seguro de que quieres eliminar el producto "${product.name}"? Esta acción no se puede deshacer.`,
       async () => {
         try {
           if (!supabase) {

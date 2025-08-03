@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Plus, Edit2, Trash2, AlertTriangle, CheckCircle, X, Settings } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, isDemoMode } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AuditAlert {
@@ -8,7 +8,7 @@ interface AuditAlert {
   alert_name: string;
   alert_type: string;
   severity: string;
-  table_name: string;
+  entity_type: string;
   event_types: string[];
   trigger_conditions: any;
   description: string;
@@ -41,7 +41,7 @@ export default function AuditAlertManager({
     alert_name: '',
     alert_type: 'security',
     severity: 'medium',
-    table_name: '',
+    entity_type: '',
     event_types: [] as string[],
     description: '',
     business_impact: '',
@@ -63,15 +63,71 @@ export default function AuditAlertManager({
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('audit_alerts')
-        .select('*')
-        .order('created_at', { ascending: false });
+      
+      if (isDemoMode) {
+        // Datos demo para alertas
+        const demoAlerts: AuditAlert[] = [
+          {
+            id: 'demo-alert-1',
+            alert_name: 'Eliminaciones Masivas',
+            alert_type: 'security',
+            severity: 'high',
+            entity_type: 'product',
+            event_types: ['delete'],
+            trigger_conditions: { max_events_per_hour: 5 },
+            description: 'Detecta cuando se eliminan muchos productos en poco tiempo',
+            business_impact: 'Pérdida potencial de datos críticos de inventario',
+            remediation_steps: '1. Verificar autorización, 2. Revisar logs, 3. Contactar administrador',
+            notification_channels: ['dashboard', 'email'],
+            is_active: true,
+            trigger_count: 0,
+            last_triggered_at: '',
+            status: 'active'
+          },
+          {
+            id: 'demo-alert-2',
+            alert_name: 'Acceso Fuera de Horario',
+            alert_type: 'compliance',
+            severity: 'medium',
+            entity_type: 'cash_register',
+            event_types: ['open', 'close'],
+            trigger_conditions: { outside_business_hours: true },
+            description: 'Detecta operaciones de caja fuera del horario laboral',
+            business_impact: 'Posible violación de políticas de seguridad',
+            remediation_steps: '1. Verificar autorización, 2. Documentar razón, 3. Notificar supervisor',
+            notification_channels: ['dashboard'],
+            is_active: true,
+            trigger_count: 2,
+            last_triggered_at: new Date(Date.now() - 86400000).toISOString(),
+            status: 'active'
+          }
+        ];
+        
+        setAlerts(demoAlerts);
+        setLoading(false);
+        return;
+      }
 
-      if (error) throw error;
-      setAlerts(data || []);
+      // Intentar cargar alertas reales
+      try {
+        const { data, error } = await supabase
+          .from('audit_alerts')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error loading alerts:', error);
+          setAlerts([]);
+        } else {
+          setAlerts(data || []);
+        }
+      } catch (error) {
+        console.error('Error loading alerts:', error);
+        setAlerts([]);
+      }
     } catch (error) {
       console.error('Error loading alerts:', error);
+      setAlerts([]);
     } finally {
       setLoading(false);
     }
@@ -86,11 +142,51 @@ export default function AuditAlertManager({
     }
 
     try {
+      if (isDemoMode) {
+        // Simular creación en modo demo
+        const newAlert: AuditAlert = {
+          id: `demo-alert-${Date.now()}`,
+          alert_name: formData.alert_name,
+          alert_type: formData.alert_type,
+          severity: formData.severity,
+          entity_type: formData.entity_type,
+          event_types: formData.event_types,
+          trigger_conditions: {
+            ...formData.trigger_conditions,
+            cooldown_minutes: formData.cooldown_minutes,
+            max_triggers_per_hour: formData.max_triggers_per_hour
+          },
+          description: formData.description,
+          business_impact: formData.business_impact,
+          remediation_steps: formData.remediation_steps,
+          notification_channels: formData.notification_channels,
+          is_active: true,
+          trigger_count: 0,
+          last_triggered_at: '',
+          status: 'active'
+        };
+
+        if (editingAlert) {
+          setAlerts(prev => prev.map(alert => 
+            alert.id === editingAlert.id ? { ...newAlert, id: editingAlert.id } : alert
+          ));
+        } else {
+          setAlerts(prev => [newAlert, ...prev]);
+        }
+
+        alert('Alerta guardada exitosamente (modo demo)');
+        setShowForm(false);
+        setEditingAlert(null);
+        resetForm();
+        onUpdate();
+        return;
+      }
+
       const alertData = {
         alert_name: formData.alert_name,
         alert_type: formData.alert_type,
         severity: formData.severity,
-        table_name: formData.table_name || null,
+        entity_type: formData.entity_type || null,
         event_types: formData.event_types,
         trigger_conditions: {
           ...formData.trigger_conditions,
@@ -136,7 +232,7 @@ export default function AuditAlertManager({
       alert_name: alert.alert_name,
       alert_type: alert.alert_type,
       severity: alert.severity,
-      table_name: alert.table_name || '',
+      entity_type: alert.entity_type || '',
       event_types: alert.event_types || [],
       description: alert.description,
       business_impact: alert.business_impact,
@@ -152,6 +248,13 @@ export default function AuditAlertManager({
   const handleDelete = async (id: string) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta alerta?')) {
       try {
+        if (isDemoMode) {
+          setAlerts(prev => prev.filter(alert => alert.id !== id));
+          alert('Alerta eliminada exitosamente (modo demo)');
+          onUpdate();
+          return;
+        }
+
         const { error } = await supabase
           .from('audit_alerts')
           .delete()
@@ -169,6 +272,14 @@ export default function AuditAlertManager({
 
   const toggleAlertStatus = async (id: string, currentStatus: boolean) => {
     try {
+      if (isDemoMode) {
+        setAlerts(prev => prev.map(alert => 
+          alert.id === id ? { ...alert, is_active: !currentStatus } : alert
+        ));
+        onUpdate();
+        return;
+      }
+
       const { error } = await supabase
         .from('audit_alerts')
         .update({ is_active: !currentStatus })
@@ -187,7 +298,7 @@ export default function AuditAlertManager({
       alert_name: '',
       alert_type: 'security',
       severity: 'medium',
-      table_name: '',
+      entity_type: '',
       event_types: [],
       description: '',
       business_impact: '',
@@ -239,6 +350,11 @@ export default function AuditAlertManager({
             <h3 className="text-xl font-semibold text-slate-900 flex items-center">
               <Bell className="h-6 w-6 mr-3 text-orange-600" />
               Gestión de Alertas de Auditoría
+              {isDemoMode && (
+                <span className="ml-3 text-sm bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                  DEMO
+                </span>
+              )}
             </h3>
             <button
               onClick={onClose}
@@ -277,6 +393,16 @@ export default function AuditAlertManager({
                   <div className="text-center py-12">
                     <Bell className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <p className="text-slate-500">No hay alertas configuradas</p>
+                    <button
+                      onClick={() => {
+                        setShowForm(true);
+                        setEditingAlert(null);
+                        resetForm();
+                      }}
+                      className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                    >
+                      Crear Primera Alerta
+                    </button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
@@ -321,8 +447,8 @@ export default function AuditAlertManager({
                             
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
                               <div>
-                                <span className="font-medium">Tabla:</span>
-                                <span className="ml-1">{alert.table_name || 'Todas'}</span>
+                                <span className="font-medium">Entidad:</span>
+                                <span className="ml-1">{alert.entity_type || 'Todas'}</span>
                               </div>
                               <div>
                                 <span className="font-medium">Activaciones:</span>
@@ -434,21 +560,20 @@ export default function AuditAlertManager({
 
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Tabla Específica (opcional)
+                          Entidad Específica (opcional)
                         </label>
                         <select
-                          value={formData.table_name}
-                          onChange={(e) => setFormData({ ...formData, table_name: e.target.value })}
+                          value={formData.entity_type}
+                          onChange={(e) => setFormData({ ...formData, entity_type: e.target.value })}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="">Todas las tablas</option>
-                          <option value="users">Usuarios</option>
-                          <option value="sales">Ventas</option>
-                          <option value="products">Productos</option>
-                          <option value="customers">Clientes</option>
-                          <option value="cash_registers">Cajas Registradoras</option>
-                          <option value="categories">Categorías</option>
-                          <option value="suppliers">Proveedores</option>
+                          <option value="">Todas las entidades</option>
+                          <option value="cash_register">Cajas Registradoras</option>
+                          <option value="sale">Ventas</option>
+                          <option value="movement">Movimientos</option>
+                          <option value="installment">Abonos</option>
+                          <option value="product">Productos</option>
+                          <option value="customer">Clientes</option>
                         </select>
                       </div>
                     </div>
@@ -457,8 +582,8 @@ export default function AuditAlertManager({
                   {/* Tipos de Eventos */}
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                     <h5 className="font-medium text-slate-900 mb-4">Tipos de Eventos a Monitorear</h5>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                      {['INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT'].map((eventType) => (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {['open', 'close', 'sale', 'installment', 'income', 'expense', 'edit', 'delete'].map((eventType) => (
                         <div key={eventType} className="flex items-center">
                           <input
                             type="checkbox"
@@ -479,7 +604,7 @@ export default function AuditAlertManager({
                             }}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                           />
-                          <label htmlFor={`event_${eventType}`} className="ml-2 text-sm text-slate-700">
+                          <label htmlFor={`event_${eventType}`} className="ml-2 text-sm text-slate-700 capitalize">
                             {eventType}
                           </label>
                         </div>
@@ -608,6 +733,20 @@ export default function AuditAlertManager({
                       </div>
                     </div>
                   </div>
+
+                  {isDemoMode && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-center">
+                        <CheckCircle className="h-5 w-5 text-yellow-600 mr-2" />
+                        <div>
+                          <h4 className="font-medium text-yellow-900">Modo Demo</h4>
+                          <p className="text-sm text-yellow-800">
+                            La alerta se guardará localmente para demostración.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex justify-end gap-3">
                     <button

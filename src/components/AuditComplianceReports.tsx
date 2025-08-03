@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, FileText, Download, Calendar, Filter, Eye, CheckCircle, AlertTriangle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Shield, FileText, Download, Calendar, Filter, Eye, CheckCircle, AlertTriangle, BarChart3 } from 'lucide-react';
+import { supabase, isDemoMode } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -56,46 +56,78 @@ export default function AuditComplianceReports() {
     try {
       setLoading(true);
       
-      // Cargar reportes de compliance existentes
-      const { data: reportsData, error: reportsError } = await supabase
-        .from('audit_reports')
-        .select('*')
-        .eq('report_type', 'compliance')
-        .order('generated_at', { ascending: false })
-        .limit(20);
+      if (isDemoMode) {
+        // Datos demo para compliance
+        const demoReports: ComplianceReport[] = [
+          {
+            id: 'demo-compliance-1',
+            report_name: 'Reporte SOX - Enero 2024',
+            report_type: 'compliance',
+            compliance_framework: 'SOX',
+            date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            date_to: new Date().toISOString().split('T')[0],
+            total_events: 150,
+            critical_events: 2,
+            compliance_score: 95,
+            violations_found: 1,
+            recommendations: [
+              'Implementar controles adicionales de acceso',
+              'Revisar políticas de retención de datos',
+              'Capacitar usuarios en mejores prácticas'
+            ],
+            generated_at: new Date().toISOString(),
+            status: 'completed'
+          }
+        ];
 
-      if (reportsError) throw reportsError;
+        const demoViolations: ComplianceViolation[] = [
+          {
+            id: 'demo-violation-1',
+            violation_type: 'Unauthorized Data Access',
+            severity: 'medium',
+            table_name: 'customers',
+            description: 'Acceso a datos de clientes fuera del horario laboral',
+            detected_at: new Date().toISOString(),
+            user_involved: user?.name || 'Usuario Demo',
+            remediation_status: 'pending',
+            business_impact: 'Posible violación de privacidad de datos'
+          }
+        ];
 
-      // Simular datos de violaciones para demo
-      const mockViolations: ComplianceViolation[] = [
-        {
-          id: '1',
-          violation_type: 'Unauthorized Data Access',
-          severity: 'high',
-          table_name: 'customers',
-          description: 'Acceso a datos de clientes fuera del horario laboral',
-          detected_at: new Date().toISOString(),
-          user_involved: 'usuario@empresa.com',
-          remediation_status: 'pending',
-          business_impact: 'Posible violación de privacidad de datos'
-        },
-        {
-          id: '2',
-          violation_type: 'Bulk Data Modification',
-          severity: 'critical',
-          table_name: 'sales',
-          description: 'Modificación masiva de datos de ventas sin autorización',
-          detected_at: new Date(Date.now() - 86400000).toISOString(),
-          user_involved: 'admin@empresa.com',
-          remediation_status: 'resolved',
-          business_impact: 'Integridad de datos financieros comprometida'
+        setReports(demoReports);
+        setViolations(demoViolations);
+        setLoading(false);
+        return;
+      }
+
+      // Intentar cargar reportes de compliance reales
+      try {
+        const { data: reportsData, error: reportsError } = await supabase
+          .from('audit_reports')
+          .select('*')
+          .eq('report_type', 'compliance')
+          .order('generated_at', { ascending: false })
+          .limit(20);
+
+        if (reportsError) {
+          console.error('Error loading compliance reports:', reportsError);
+          setReports([]);
+        } else {
+          setReports(reportsData || []);
         }
-      ];
+      } catch (error) {
+        console.error('Error loading compliance reports:', error);
+        setReports([]);
+      }
 
-      setReports(reportsData || []);
+      // Para violaciones, usar datos simulados ya que no tenemos tabla específica
+      const mockViolations: ComplianceViolation[] = [];
       setViolations(mockViolations);
+
     } catch (error) {
       console.error('Error loading compliance data:', error);
+      setReports([]);
+      setViolations([]);
     } finally {
       setLoading(false);
     }
@@ -105,7 +137,36 @@ export default function AuditComplianceReports() {
     try {
       setLoading(true);
 
-      // Generar reporte de compliance personalizado
+      if (isDemoMode) {
+        // Generar reporte demo
+        const demoReport: ComplianceReport = {
+          id: `demo-compliance-${Date.now()}`,
+          report_name: `Reporte de Cumplimiento ${generatorConfig.framework} - ${new Date().toLocaleDateString('es-ES')}`,
+          report_type: 'compliance',
+          compliance_framework: generatorConfig.framework,
+          date_from: generatorConfig.date_from,
+          date_to: generatorConfig.date_to,
+          total_events: Math.floor(Math.random() * 200) + 50,
+          critical_events: Math.floor(Math.random() * 5),
+          compliance_score: Math.floor(Math.random() * 20) + 80,
+          violations_found: Math.floor(Math.random() * 3),
+          recommendations: [
+            'Implementar controles adicionales de acceso',
+            'Revisar políticas de retención de datos',
+            'Capacitar usuarios en mejores prácticas de seguridad',
+            'Establecer procedimientos de respuesta a incidentes'
+          ],
+          generated_at: new Date().toISOString(),
+          status: 'completed'
+        };
+
+        setReports(prev => [demoReport, ...prev]);
+        alert('Reporte de cumplimiento generado exitosamente (modo demo)');
+        setShowGenerator(false);
+        return;
+      }
+
+      // Generar reporte real
       const { data, error } = await supabase
         .rpc('generate_audit_report', {
           p_report_type: 'compliance',
@@ -113,23 +174,12 @@ export default function AuditComplianceReports() {
           p_date_to: generatorConfig.date_to + 'T23:59:59Z'
         });
 
-      if (error) throw error;
-
-      // Actualizar con configuraciones específicas de compliance
-      const { error: updateError } = await supabase
-        .from('audit_reports')
-        .update({
-          report_name: `Reporte de Cumplimiento ${generatorConfig.framework} - ${new Date().toLocaleDateString('es-ES')}`,
-          custom_filters: {
-            compliance_framework: generatorConfig.framework,
-            include_recommendations: generatorConfig.include_recommendations,
-            include_remediation_plan: generatorConfig.include_remediation_plan,
-            detailed_analysis: generatorConfig.detailed_analysis
-          }
-        })
-        .eq('id', data);
-
-      if (updateError) throw updateError;
+      if (error) {
+        console.error('Error generating compliance report:', error);
+        // Fallback: crear reporte manual
+        await generateManualComplianceReport();
+        return;
+      }
 
       alert('Reporte de cumplimiento generado exitosamente');
       setShowGenerator(false);
@@ -139,6 +189,61 @@ export default function AuditComplianceReports() {
       alert('Error al generar reporte: ' + (error as Error).message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateManualComplianceReport = async () => {
+    try {
+      // Obtener datos de auditoría para el período
+      const { data: auditData, error } = await supabase
+        .from('cash_register_audit_logs')
+        .select('*')
+        .gte('performed_at', generatorConfig.date_from + 'T00:00:00Z')
+        .lte('performed_at', generatorConfig.date_to + 'T23:59:59Z');
+
+      if (error) throw error;
+
+      const totalEvents = auditData?.length || 0;
+      const criticalEvents = auditData?.filter(log => 
+        log.action_type === 'delete' || 
+        (log.metadata && JSON.stringify(log.metadata).includes('bulk'))
+      ).length || 0;
+
+      const complianceScore = Math.max(70, 100 - (criticalEvents / Math.max(totalEvents, 1)) * 100);
+
+      const reportData = {
+        report_name: `Reporte de Cumplimiento ${generatorConfig.framework} - ${new Date().toLocaleDateString('es-ES')}`,
+        report_type: 'compliance',
+        compliance_framework: generatorConfig.framework,
+        date_from: generatorConfig.date_from,
+        date_to: generatorConfig.date_to,
+        total_events: totalEvents,
+        critical_events: criticalEvents,
+        compliance_score: Math.round(complianceScore),
+        violations_found: criticalEvents,
+        recommendations: [
+          'Implementar controles adicionales de acceso',
+          'Revisar políticas de retención de datos',
+          'Capacitar usuarios en mejores prácticas'
+        ],
+        generated_at: new Date().toISOString(),
+        status: 'completed'
+      };
+
+      // Descargar reporte
+      const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `compliance_report_${generatorConfig.framework}_${generatorConfig.date_from}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      alert('Reporte de cumplimiento generado y descargado exitosamente');
+      setShowGenerator(false);
+    } catch (error) {
+      console.error('Error generating manual compliance report:', error);
+      alert('Error al generar reporte manual: ' + (error as Error).message);
     }
   };
 
@@ -158,10 +263,7 @@ export default function AuditComplianceReports() {
   };
 
   const getComplianceScore = (report: ComplianceReport) => {
-    // Calcular score basado en eventos críticos vs totales
-    if (report.total_events === 0) return 100;
-    const score = Math.max(0, 100 - (report.critical_events / report.total_events) * 100);
-    return Math.round(score);
+    return report.compliance_score || 95;
   };
 
   const getScoreColor = (score: number) => {
@@ -278,7 +380,7 @@ export default function AuditComplianceReports() {
                       </p>
                       
                       <div className="flex items-center gap-4 text-sm text-slate-500">
-                        <span>Tabla: {violation.table_name}</span>
+                        <span>Entidad: {violation.table_name}</span>
                         <span>Usuario: {violation.user_involved}</span>
                         <span>Detectado: {new Date(violation.detected_at).toLocaleDateString('es-ES')}</span>
                       </div>
@@ -306,6 +408,12 @@ export default function AuditComplianceReports() {
             <div className="text-center py-8">
               <FileText className="h-12 w-12 text-slate-400 mx-auto mb-4" />
               <p className="text-slate-500">No hay reportes de cumplimiento generados</p>
+              <button
+                onClick={() => setShowGenerator(true)}
+                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              >
+                Generar Primer Reporte
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -381,7 +489,6 @@ export default function AuditComplianceReports() {
                           </button>
                           <button
                             onClick={() => {
-                              // Simular descarga del reporte
                               const reportData = {
                                 ...report,
                                 generated_by: user?.name,
@@ -389,11 +496,7 @@ export default function AuditComplianceReports() {
                                   framework: report.compliance_framework || 'General',
                                   score: getComplianceScore(report),
                                   violations: violations.filter(v => v.remediation_status === 'pending').length,
-                                  recommendations: [
-                                    'Implementar controles adicionales de acceso',
-                                    'Revisar políticas de retención de datos',
-                                    'Capacitar usuarios en mejores prácticas'
-                                  ]
+                                  recommendations: report.recommendations || []
                                 }
                               };
                               
@@ -444,7 +547,6 @@ export default function AuditComplianceReports() {
                     <option value="GDPR">GDPR - Protección de Datos</option>
                     <option value="ISO27001">ISO 27001 - Seguridad</option>
                     <option value="PCI_DSS">PCI DSS - Pagos</option>
-                    <option value="HIPAA">HIPAA - Salud</option>
                     <option value="Custom">Personalizado</option>
                   </select>
                 </div>
@@ -514,6 +616,20 @@ export default function AuditComplianceReports() {
                   </label>
                 </div>
               </div>
+
+              {isDemoMode && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-5 w-5 text-yellow-600 mr-2" />
+                    <div>
+                      <h4 className="font-medium text-yellow-900">Modo Demo</h4>
+                      <p className="text-sm text-yellow-800">
+                        Se generará un reporte de demostración con datos simulados.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
@@ -558,7 +674,7 @@ export default function AuditComplianceReports() {
                   onClick={() => setSelectedReport(null)}
                   className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
                 >
-                  <Eye className="h-5 w-5" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
             </div>

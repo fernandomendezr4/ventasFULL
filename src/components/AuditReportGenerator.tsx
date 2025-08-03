@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Download, Calendar, Filter, FileText, X, Settings } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Download, Calendar, Filter, FileText, X, Settings, CheckCircle } from 'lucide-react';
+import { supabase, isDemoMode } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface AuditReportGeneratorProps {
@@ -21,39 +21,32 @@ export default function AuditReportGenerator({
     report_name: '',
     date_from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     date_to: new Date().toISOString().split('T')[0],
-    tables_included: [] as string[],
-    event_types_included: [] as string[],
-    severity_filter: [] as string[],
+    entities_included: [] as string[],
+    action_types_included: [] as string[],
     include_user_details: true,
-    include_change_details: true,
+    include_metadata: true,
     include_ip_addresses: false,
     format: 'json'
   });
 
-  const availableTables = [
-    { id: 'users', name: 'Usuarios', description: 'Gestión de usuarios y roles' },
-    { id: 'sales', name: 'Ventas', description: 'Transacciones de venta' },
-    { id: 'products', name: 'Productos', description: 'Inventario y productos' },
-    { id: 'customers', name: 'Clientes', description: 'Información de clientes' },
-    { id: 'cash_registers', name: 'Cajas', description: 'Cajas registradoras' },
-    { id: 'categories', name: 'Categorías', description: 'Categorías de productos' },
-    { id: 'suppliers', name: 'Proveedores', description: 'Información de proveedores' },
-    { id: 'payment_installments', name: 'Abonos', description: 'Pagos a plazos' }
+  const availableEntities = [
+    { id: 'cash_register', name: 'Cajas Registradoras', description: 'Operaciones de caja' },
+    { id: 'sale', name: 'Ventas', description: 'Transacciones de venta' },
+    { id: 'movement', name: 'Movimientos', description: 'Ingresos y gastos' },
+    { id: 'installment', name: 'Abonos', description: 'Pagos a plazos' },
+    { id: 'product', name: 'Productos', description: 'Gestión de inventario' },
+    { id: 'customer', name: 'Clientes', description: 'Información de clientes' }
   ];
 
-  const eventTypes = [
-    { id: 'INSERT', name: 'Creación', description: 'Nuevos registros' },
-    { id: 'UPDATE', name: 'Modificación', description: 'Cambios en registros' },
-    { id: 'DELETE', name: 'Eliminación', description: 'Registros eliminados' },
-    { id: 'LOGIN', name: 'Inicio de Sesión', description: 'Accesos al sistema' },
-    { id: 'LOGOUT', name: 'Cierre de Sesión', description: 'Salidas del sistema' }
-  ];
-
-  const severityLevels = [
-    { id: 'critical', name: 'Crítica', color: 'text-red-600' },
-    { id: 'high', name: 'Alta', color: 'text-orange-600' },
-    { id: 'normal', name: 'Normal', color: 'text-blue-600' },
-    { id: 'low', name: 'Baja', color: 'text-gray-600' }
+  const actionTypes = [
+    { id: 'open', name: 'Apertura', description: 'Apertura de cajas' },
+    { id: 'close', name: 'Cierre', description: 'Cierre de cajas' },
+    { id: 'sale', name: 'Venta', description: 'Transacciones de venta' },
+    { id: 'installment', name: 'Abono', description: 'Pagos a plazos' },
+    { id: 'income', name: 'Ingreso', description: 'Ingresos adicionales' },
+    { id: 'expense', name: 'Gasto', description: 'Gastos registrados' },
+    { id: 'edit', name: 'Edición', description: 'Modificaciones' },
+    { id: 'delete', name: 'Eliminación', description: 'Registros eliminados' }
   ];
 
   if (!isOpen) return null;
@@ -72,33 +65,65 @@ export default function AuditReportGenerator({
     try {
       setLoading(true);
 
+      if (isDemoMode) {
+        // Generar reporte demo
+        const reportData = {
+          id: `demo-report-${Date.now()}`,
+          report_name: reportConfig.report_name,
+          report_type: reportConfig.report_type,
+          date_from: reportConfig.date_from,
+          date_to: reportConfig.date_to,
+          entities_included: reportConfig.entities_included,
+          action_types_included: reportConfig.action_types_included,
+          total_events: 25,
+          events_by_type: {
+            'open': 5,
+            'close': 5,
+            'sale': 10,
+            'income': 3,
+            'expense': 2
+          },
+          events_by_entity: {
+            'cash_register': 10,
+            'sale': 10,
+            'movement': 5
+          },
+          generated_at: new Date().toISOString(),
+          generated_by: user?.name || 'Usuario Demo',
+          format: reportConfig.format,
+          demo_mode: true
+        };
+
+        // Descargar reporte
+        const blob = new Blob([JSON.stringify(reportData, null, 2)], { 
+          type: reportConfig.format === 'json' ? 'application/json' : 'text/csv' 
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${reportConfig.report_name.replace(/\s+/g, '_')}_${reportConfig.date_from}_${reportConfig.date_to}.${reportConfig.format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        alert('Reporte generado y descargado exitosamente (modo demo)');
+        onReportGenerated();
+        onClose();
+        return;
+      }
+
+      // Intentar usar función RPC
       const { data, error } = await supabase
         .rpc('generate_audit_report', {
           p_report_type: reportConfig.report_type,
           p_date_from: reportConfig.date_from + 'T00:00:00Z',
-          p_date_to: reportConfig.date_to + 'T23:59:59Z',
-          p_tables: reportConfig.tables_included.length > 0 ? reportConfig.tables_included : null,
-          p_event_types: reportConfig.event_types_included.length > 0 ? reportConfig.event_types_included : null
+          p_date_to: reportConfig.date_to + 'T23:59:59Z'
         });
 
-      if (error) throw error;
-
-      // Actualizar el reporte con configuraciones adicionales
-      const { error: updateError } = await supabase
-        .from('audit_reports')
-        .update({
-          report_name: reportConfig.report_name,
-          report_format: reportConfig.format,
-          severity_filter: reportConfig.severity_filter,
-          custom_filters: {
-            include_user_details: reportConfig.include_user_details,
-            include_change_details: reportConfig.include_change_details,
-            include_ip_addresses: reportConfig.include_ip_addresses
-          }
-        })
-        .eq('id', data);
-
-      if (updateError) throw updateError;
+      if (error) {
+        console.error('Error with RPC, generating manual report:', error);
+        await generateManualReport();
+        return;
+      }
 
       alert('Reporte generado exitosamente. ID: ' + data);
       onReportGenerated();
@@ -111,30 +136,133 @@ export default function AuditReportGenerator({
     }
   };
 
-  const toggleTableSelection = (tableId: string) => {
+  const generateManualReport = async () => {
+    try {
+      // Obtener datos de auditoría manualmente
+      let query = supabase
+        .from('cash_register_audit_logs')
+        .select(`
+          *,
+          performed_by_user:users(name, email)
+        `)
+        .gte('performed_at', reportConfig.date_from + 'T00:00:00Z')
+        .lte('performed_at', reportConfig.date_to + 'T23:59:59Z');
+
+      // Aplicar filtros
+      if (reportConfig.entities_included.length > 0) {
+        query = query.in('entity_type', reportConfig.entities_included);
+      }
+
+      if (reportConfig.action_types_included.length > 0) {
+        query = query.in('action_type', reportConfig.action_types_included);
+      }
+
+      const { data: auditData, error } = await query
+        .order('performed_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Procesar datos para el reporte
+      const reportData = {
+        report_name: reportConfig.report_name,
+        report_type: reportConfig.report_type,
+        date_from: reportConfig.date_from,
+        date_to: reportConfig.date_to,
+        total_events: auditData?.length || 0,
+        events_by_type: (auditData || []).reduce((acc, log) => {
+          acc[log.action_type] = (acc[log.action_type] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        events_by_entity: (auditData || []).reduce((acc, log) => {
+          acc[log.entity_type] = (acc[log.entity_type] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        unique_users: new Set((auditData || []).map(log => log.performed_by)).size,
+        events: reportConfig.include_metadata ? auditData : (auditData || []).map(log => ({
+          id: log.id,
+          action_type: log.action_type,
+          entity_type: log.entity_type,
+          description: log.description,
+          amount: log.amount,
+          performed_at: log.performed_at,
+          performed_by: reportConfig.include_user_details ? log.performed_by_user?.name : 'Usuario',
+          ip_address: reportConfig.include_ip_addresses ? log.ip_address : undefined
+        })),
+        generated_at: new Date().toISOString(),
+        generated_by: user?.name || 'Sistema'
+      };
+
+      // Generar archivo según formato
+      let blob: Blob;
+      let filename: string;
+
+      if (reportConfig.format === 'csv') {
+        const csvContent = generateCSVContent(reportData);
+        blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        filename = `${reportConfig.report_name.replace(/\s+/g, '_')}_${reportConfig.date_from}_${reportConfig.date_to}.csv`;
+      } else {
+        blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+        filename = `${reportConfig.report_name.replace(/\s+/g, '_')}_${reportConfig.date_from}_${reportConfig.date_to}.json`;
+      }
+
+      // Descargar archivo
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      alert('Reporte generado y descargado exitosamente');
+      onReportGenerated();
+      onClose();
+    } catch (error) {
+      console.error('Error generating manual report:', error);
+      alert('Error al generar reporte manual: ' + (error as Error).message);
+    }
+  };
+
+  const generateCSVContent = (reportData: any): string => {
+    const headers = [
+      'Fecha',
+      'Hora',
+      'Acción',
+      'Entidad',
+      'Descripción',
+      'Monto',
+      'Usuario',
+      'IP'
+    ];
+
+    const rows = reportData.events.map((event: any) => [
+      new Date(event.performed_at).toLocaleDateString('es-ES'),
+      new Date(event.performed_at).toLocaleTimeString('es-ES'),
+      event.action_type,
+      event.entity_type,
+      `"${event.description}"`,
+      event.amount || 0,
+      event.performed_by || 'Sistema',
+      event.ip_address || 'N/A'
+    ]);
+
+    return [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+  };
+
+  const toggleEntitySelection = (entityId: string) => {
     setReportConfig(prev => ({
       ...prev,
-      tables_included: prev.tables_included.includes(tableId)
-        ? prev.tables_included.filter(id => id !== tableId)
-        : [...prev.tables_included, tableId]
+      entities_included: prev.entities_included.includes(entityId)
+        ? prev.entities_included.filter(id => id !== entityId)
+        : [...prev.entities_included, entityId]
     }));
   };
 
-  const toggleEventTypeSelection = (eventType: string) => {
+  const toggleActionTypeSelection = (actionType: string) => {
     setReportConfig(prev => ({
       ...prev,
-      event_types_included: prev.event_types_included.includes(eventType)
-        ? prev.event_types_included.filter(type => type !== eventType)
-        : [...prev.event_types_included, eventType]
-    }));
-  };
-
-  const toggleSeveritySelection = (severity: string) => {
-    setReportConfig(prev => ({
-      ...prev,
-      severity_filter: prev.severity_filter.includes(severity)
-        ? prev.severity_filter.filter(s => s !== severity)
-        : [...prev.severity_filter, severity]
+      action_types_included: prev.action_types_included.includes(actionType)
+        ? prev.action_types_included.filter(type => type !== actionType)
+        : [...prev.action_types_included, actionType]
     }));
   };
 
@@ -171,7 +299,7 @@ export default function AuditReportGenerator({
                     value={reportConfig.report_name}
                     onChange={(e) => setReportConfig({ ...reportConfig, report_name: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Ej: Reporte de Seguridad Semanal"
+                    placeholder="Ej: Reporte de Auditoría Semanal"
                   />
                 </div>
 
@@ -220,74 +348,50 @@ export default function AuditReportGenerator({
               </div>
             </div>
 
-            {/* Selección de Tablas */}
+            {/* Selección de Entidades */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <h4 className="font-medium text-slate-900 mb-4">Tablas a Incluir</h4>
+              <h4 className="font-medium text-slate-900 mb-4">Entidades a Incluir</h4>
               <p className="text-sm text-slate-600 mb-3">
-                Selecciona las tablas que deseas incluir en el reporte (vacío = todas)
+                Selecciona las entidades que deseas incluir en el reporte (vacío = todas)
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {availableTables.map((table) => (
-                  <div key={table.id} className="flex items-center">
+                {availableEntities.map((entity) => (
+                  <div key={entity.id} className="flex items-center">
                     <input
                       type="checkbox"
-                      id={`table_${table.id}`}
-                      checked={reportConfig.tables_included.includes(table.id)}
-                      onChange={() => toggleTableSelection(table.id)}
+                      id={`entity_${entity.id}`}
+                      checked={reportConfig.entities_included.includes(entity.id)}
+                      onChange={() => toggleEntitySelection(entity.id)}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                     />
-                    <label htmlFor={`table_${table.id}`} className="ml-2 text-sm">
-                      <span className="font-medium text-slate-900">{table.name}</span>
-                      <span className="text-slate-600 block text-xs">{table.description}</span>
+                    <label htmlFor={`entity_${entity.id}`} className="ml-2 text-sm">
+                      <span className="font-medium text-slate-900">{entity.name}</span>
+                      <span className="text-slate-600 block text-xs">{entity.description}</span>
                     </label>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Tipos de Eventos */}
+            {/* Tipos de Acciones */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <h4 className="font-medium text-slate-900 mb-4">Tipos de Eventos</h4>
+              <h4 className="font-medium text-slate-900 mb-4">Tipos de Acciones</h4>
               <p className="text-sm text-slate-600 mb-3">
-                Selecciona los tipos de eventos a incluir (vacío = todos)
+                Selecciona los tipos de acciones a incluir (vacío = todas)
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {eventTypes.map((eventType) => (
-                  <div key={eventType.id} className="flex items-center">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {actionTypes.map((actionType) => (
+                  <div key={actionType.id} className="flex items-center">
                     <input
                       type="checkbox"
-                      id={`event_${eventType.id}`}
-                      checked={reportConfig.event_types_included.includes(eventType.id)}
-                      onChange={() => toggleEventTypeSelection(eventType.id)}
+                      id={`action_${actionType.id}`}
+                      checked={reportConfig.action_types_included.includes(actionType.id)}
+                      onChange={() => toggleActionTypeSelection(actionType.id)}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                     />
-                    <label htmlFor={`event_${eventType.id}`} className="ml-2 text-sm">
-                      <span className="font-medium text-slate-900">{eventType.name}</span>
-                      <span className="text-slate-600 block text-xs">{eventType.description}</span>
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Niveles de Severidad */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <h4 className="font-medium text-slate-900 mb-4">Niveles de Severidad</h4>
-              <p className="text-sm text-slate-600 mb-3">
-                Filtra por nivel de severidad (vacío = todos)
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {severityLevels.map((severity) => (
-                  <div key={severity.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={`severity_${severity.id}`}
-                      checked={reportConfig.severity_filter.includes(severity.id)}
-                      onChange={() => toggleSeveritySelection(severity.id)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
-                    />
-                    <label htmlFor={`severity_${severity.id}`} className={`ml-2 text-sm font-medium ${severity.color}`}>
-                      {severity.name}
+                    <label htmlFor={`action_${actionType.id}`} className="ml-2 text-sm">
+                      <span className="font-medium text-slate-900">{actionType.name}</span>
+                      <span className="text-slate-600 block text-xs">{actionType.description}</span>
                     </label>
                   </div>
                 ))}
@@ -314,13 +418,13 @@ export default function AuditReportGenerator({
                 <div className="flex items-center">
                   <input
                     type="checkbox"
-                    id="include_change_details"
-                    checked={reportConfig.include_change_details}
-                    onChange={(e) => setReportConfig({ ...reportConfig, include_change_details: e.target.checked })}
+                    id="include_metadata"
+                    checked={reportConfig.include_metadata}
+                    onChange={(e) => setReportConfig({ ...reportConfig, include_metadata: e.target.checked })}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                   />
-                  <label htmlFor="include_change_details" className="ml-2 text-sm text-slate-700">
-                    Incluir valores anteriores y nuevos
+                  <label htmlFor="include_metadata" className="ml-2 text-sm text-slate-700">
+                    Incluir metadatos de eventos
                   </label>
                 </div>
 
@@ -349,7 +453,6 @@ export default function AuditReportGenerator({
                 >
                   <option value="json">JSON (Datos estructurados)</option>
                   <option value="csv">CSV (Hoja de cálculo)</option>
-                  <option value="html">HTML (Reporte visual)</option>
                 </select>
               </div>
             </div>
@@ -366,15 +469,15 @@ export default function AuditReportGenerator({
                   </span>
                 </div>
                 <div>
-                  <span className="text-blue-700">Tablas:</span>
+                  <span className="text-blue-700">Entidades:</span>
                   <span className="ml-2 font-medium text-blue-900">
-                    {reportConfig.tables_included.length === 0 ? 'Todas' : reportConfig.tables_included.length}
+                    {reportConfig.entities_included.length === 0 ? 'Todas' : reportConfig.entities_included.length}
                   </span>
                 </div>
                 <div>
-                  <span className="text-blue-700">Eventos:</span>
+                  <span className="text-blue-700">Acciones:</span>
                   <span className="ml-2 font-medium text-blue-900">
-                    {reportConfig.event_types_included.length === 0 ? 'Todos' : reportConfig.event_types_included.length}
+                    {reportConfig.action_types_included.length === 0 ? 'Todas' : reportConfig.action_types_included.length}
                   </span>
                 </div>
                 <div>
@@ -383,6 +486,20 @@ export default function AuditReportGenerator({
                 </div>
               </div>
             </div>
+
+            {isDemoMode && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <CheckCircle className="h-5 w-5 text-yellow-600 mr-2" />
+                  <div>
+                    <h4 className="font-medium text-yellow-900">Modo Demo</h4>
+                    <p className="text-sm text-yellow-800">
+                      El reporte se generará con datos de demostración y se descargará automáticamente.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

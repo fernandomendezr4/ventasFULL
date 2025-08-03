@@ -70,6 +70,8 @@ const DEFAULT_PERMISSIONS = {
     'delete_users',
     'view_audit',
     'manage_audit',
+    'view_compliance',
+    'manage_compliance',
     'manage_settings'
   ],
   manager: [
@@ -96,6 +98,7 @@ const DEFAULT_PERMISSIONS = {
     'create_users',
     'edit_users',
     'view_audit',
+    'view_compliance',
     'manage_settings'
   ],
   employee: [

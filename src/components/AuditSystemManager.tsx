@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Shield, BarChart3, Bell, FileText, Settings, AlertTriangle, Database } from 'lucide-react';
+import { Shield, BarChart3, Bell, FileText, Settings, AlertTriangle, Database, Activity, CheckCircle } from 'lucide-react';
 import AuditDashboard from './AuditDashboard';
 import AuditReportGenerator from './AuditReportGenerator';
 import AuditAlertManager from './AuditAlertManager';
 import AuditComplianceReports from './AuditComplianceReports';
 import { useAuth } from '../contexts/AuthContext';
+import { isDemoMode } from '../lib/supabase';
 
 export default function AuditSystemManager() {
   const { user } = useAuth();
@@ -13,7 +14,7 @@ export default function AuditSystemManager() {
   const [showAlertManager, setShowAlertManager] = useState(false);
 
   // Verificar permisos de auditoría
-  if (!user || !['admin', 'auditor', 'manager'].includes(user.role)) {
+  if (!user || !['admin', 'manager'].includes(user.role)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-xl shadow-sm p-8 max-w-md text-center">
@@ -25,7 +26,7 @@ export default function AuditSystemManager() {
             No tienes permisos para acceder al sistema de auditoría.
           </p>
           <p className="text-sm text-slate-500">
-            Contacta al administrador para obtener acceso.
+            Solo administradores y gerentes pueden acceder a esta sección.
           </p>
         </div>
       </div>
@@ -46,12 +47,6 @@ export default function AuditSystemManager() {
       description: 'Reportes de cumplimiento normativo' 
     },
     { 
-      id: 'alerts', 
-      label: 'Alertas', 
-      icon: Bell, 
-      description: 'Gestión de alertas y notificaciones' 
-    },
-    { 
       id: 'reports', 
       label: 'Reportes', 
       icon: FileText, 
@@ -65,22 +60,6 @@ export default function AuditSystemManager() {
         return <AuditDashboard />;
       case 'compliance':
         return <AuditComplianceReports />;
-      case 'alerts':
-        return (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-slate-900">Gestión de Alertas</h3>
-              <button
-                onClick={() => setShowAlertManager(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Configurar Alertas
-              </button>
-            </div>
-            <AuditDashboard />
-          </div>
-        );
       case 'reports':
         return (
           <div className="space-y-6">
@@ -110,7 +89,12 @@ export default function AuditSystemManager() {
           <div>
             <h1 className="text-3xl font-bold mb-2 flex items-center">
               <Shield className="h-8 w-8 mr-3" />
-              Sistema de Auditoría Completa
+              Sistema de Auditoría
+              {isDemoMode && (
+                <span className="ml-3 text-sm bg-yellow-500 text-yellow-900 px-3 py-1 rounded-full">
+                  MODO DEMO
+                </span>
+              )}
             </h1>
             <p className="text-blue-100 text-lg">
               Monitoreo, análisis y cumplimiento normativo integral
@@ -118,11 +102,11 @@ export default function AuditSystemManager() {
             <div className="flex items-center gap-6 mt-4 text-sm">
               <div className="flex items-center">
                 <Database className="h-4 w-4 mr-2" />
-                <span>Auditoría automática activa</span>
+                <span>Auditoría automática {isDemoMode ? 'simulada' : 'activa'}</span>
               </div>
               <div className="flex items-center">
                 <Bell className="h-4 w-4 mr-2" />
-                <span>Sistema de alertas funcionando</span>
+                <span>Sistema de alertas {isDemoMode ? 'demo' : 'funcionando'}</span>
               </div>
               <div className="flex items-center">
                 <FileText className="h-4 w-4 mr-2" />
@@ -177,7 +161,6 @@ export default function AuditSystemManager() {
         onClose={() => setShowReportGenerator(false)}
         onReportGenerated={() => {
           setShowReportGenerator(false);
-          // Recargar datos si es necesario
         }}
       />
 
@@ -185,7 +168,7 @@ export default function AuditSystemManager() {
         isOpen={showAlertManager}
         onClose={() => setShowAlertManager(false)}
         onUpdate={() => {
-          // Recargar datos de alertas
+          // Recargar datos de alertas si es necesario
         }}
       />
 
@@ -200,7 +183,7 @@ export default function AuditSystemManager() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-600">Auditoría Automática</p>
-                <p className="font-bold text-green-900">Activa</p>
+                <p className="font-bold text-green-900">{isDemoMode ? 'Demo' : 'Activa'}</p>
               </div>
               <Shield className="h-6 w-6 text-green-600" />
             </div>
@@ -231,31 +214,41 @@ export default function AuditSystemManager() {
           <h4 className="font-medium text-blue-900 mb-2">Características del Sistema</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-blue-800">
             <div className="flex items-center">
-              <Shield className="h-3 w-3 mr-2" />
+              <CheckCircle className="h-3 w-3 mr-2" />
               <span>Auditoría en tiempo real de todas las operaciones</span>
             </div>
             <div className="flex items-center">
-              <Bell className="h-3 w-3 mr-2" />
-              <span>Alertas inteligentes y configurables</span>
-            </div>
-            <div className="flex items-center">
-              <FileText className="h-3 w-3 mr-2" />
-              <span>Reportes de cumplimiento automáticos</span>
-            </div>
-            <div className="flex items-center">
-              <AlertTriangle className="h-3 w-3 mr-2" />
+              <CheckCircle className="h-3 w-3 mr-2" />
               <span>Detección de patrones sospechosos</span>
             </div>
             <div className="flex items-center">
-              <Database className="h-3 w-3 mr-2" />
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Reportes de cumplimiento automáticos</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
               <span>Retención y archivado automático</span>
             </div>
             <div className="flex items-center">
-              <Settings className="h-3 w-3 mr-2" />
-              <span>Configuración granular por tabla</span>
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Configuración granular por entidad</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Integración completa con cajas registradoras</span>
             </div>
           </div>
         </div>
+
+        {isDemoMode && (
+          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h4 className="font-medium text-yellow-900 mb-2">Modo Demo Activo</h4>
+            <p className="text-sm text-yellow-800">
+              Estás viendo datos de demostración. Para usar el sistema de auditoría completo, 
+              configura las variables de entorno de Supabase y conecta una base de datos real.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

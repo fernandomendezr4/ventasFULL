@@ -72,6 +72,7 @@ export default function ProductManager() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const { showNotification } = useNotification();
+  const { notification, hideNotification, showSuccess, showError } = useNotification();
   const { showConfirmation } = useConfirmation();
 
   const [formData, setFormData] = useState({

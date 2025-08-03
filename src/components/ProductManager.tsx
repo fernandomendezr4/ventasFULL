@@ -135,8 +135,9 @@ export default function ProductManager() {
     try {
       setLoading(true);
       
+      // Usar la vista optimizada que incluye stock efectivo
       const { data: productsData, error: productsError } = await supabase
-        .from('products')
+        .from('products_detailed')
         .select(`
           *,
           category:categories(id, name, description),
@@ -624,9 +625,16 @@ export default function ProductManager() {
 
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Stock:</span>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStockStatusColor(product.stock)}`}>
-                    {product.stock} - {getStockStatusText(product.stock)}
-                  </span>
+                  <div className="text-right">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStockStatusColor((product as any).effective_stock || product.stock)}`}>
+                      {(product as any).effective_stock || product.stock} - {getStockStatusText((product as any).effective_stock || product.stock)}
+                    </span>
+                    {product.requires_imei_serial && (product as any).effective_stock !== product.stock && (
+                      <p className="text-xs text-orange-600 mt-1">
+                        Stock físico: {product.stock} | Disponible: {(product as any).effective_stock || 0}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {product.category && (
@@ -647,14 +655,20 @@ export default function ProductManager() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-slate-600 flex items-center">
                       <Hash className="h-3 w-3 mr-1" />
-                      IMEI/Serial:
+                      {product.imei_serial_type === 'imei' ? 'IMEI' : 
+                       product.imei_serial_type === 'serial' ? 'Serial' : 'IMEI/Serial'}:
                     </span>
-                    <button
-                      onClick={() => handleManageImeiSerial(product)}
-                      className="text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors duration-200"
-                    >
-                      Gestionar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        {(product as any).available_imei_serial_count || 0} disponibles
+                      </span>
+                      <button
+                        onClick={() => handleManageImeiSerial(product)}
+                        className="text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors duration-200"
+                      >
+                        Gestionar
+                      </button>
+                    </div>
                   </div>
                 )}
 

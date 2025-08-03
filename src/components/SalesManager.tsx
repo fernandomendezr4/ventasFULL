@@ -60,7 +60,22 @@ export default function SalesManager() {
         .select(`
           *,
           customer:customers (id, name, phone, email, cedula),
-          user:users (id, name, email)
+          user:users (id, name, email),
+          sale_items (
+            id,
+            quantity,
+            unit_price,
+            total_price,
+            product:products (id, name, has_imei_serial, imei_serial_type),
+            sale_item_imei_serials (
+              imei_serial:product_imei_serials (
+                id,
+                imei_number,
+                serial_number,
+                notes
+              )
+            )
+          )
         `)
         .order('created_at', { ascending: false })
         .limit(100);
@@ -70,7 +85,7 @@ export default function SalesManager() {
       // Convertir al formato esperado
       const salesFormatted = (data || []).map(sale => ({
         ...sale,
-        sale_items: [],
+        sale_items: sale.sale_items || [],
         payments: [],
         notes: sale.notes || ''
       }));
@@ -674,6 +689,29 @@ export default function SalesManager() {
                       <p className="text-sm text-slate-600">
                         {formatCurrency(item.unit_price)} × {item.quantity}
                       </p>
+                      
+                      {/* Mostrar IMEI/Serial si están disponibles */}
+                      {item.product.has_imei_serial && item.sale_item_imei_serials && item.sale_item_imei_serials.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {item.sale_item_imei_serials.map((imeiSerial, imeiIndex) => (
+                            <div key={imeiIndex} className="text-xs text-purple-600 font-mono bg-purple-50 px-2 py-1 rounded">
+                              {item.product.imei_serial_type === 'imei' && imeiSerial.imei_serial.imei_number && (
+                                <span>IMEI: {imeiSerial.imei_serial.imei_number}</span>
+                              )}
+                              {item.product.imei_serial_type === 'serial' && imeiSerial.imei_serial.serial_number && (
+                                <span>Serial: {imeiSerial.imei_serial.serial_number}</span>
+                              )}
+                              {item.product.imei_serial_type === 'both' && (
+                                <span>
+                                  {imeiSerial.imei_serial.imei_number && `IMEI: ${imeiSerial.imei_serial.imei_number}`}
+                                  {imeiSerial.imei_serial.imei_number && imeiSerial.imei_serial.serial_number && ' | '}
+                                  {imeiSerial.imei_serial.serial_number && `Serial: ${imeiSerial.imei_serial.serial_number}`}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="font-semibold text-slate-900">
                       {formatCurrency(item.total_price)}

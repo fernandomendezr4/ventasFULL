@@ -425,6 +425,21 @@ export default function PrintService({ sale, settings, onPrint }: PrintServicePr
               ${item.quantity} x ${settings.show_unit_prices ? formatCurrency(item.unit_price) : ''}
               ${settings.show_product_codes && item.product.barcode ? ` | Código: ${item.product.barcode}` : ''}
               ${settings.show_product_categories && item.product.category ? ` | ${item.product.category.name}` : ''}
+              ${item.product.has_imei_serial && item.sale_item_imei_serials && item.sale_item_imei_serials.length > 0 ? 
+                item.sale_item_imei_serials.map(imeiSerial => {
+                  if (item.product.imei_serial_type === 'imei' && imeiSerial.imei_serial.imei_number) {
+                    return ` | IMEI: ${imeiSerial.imei_serial.imei_number}`;
+                  } else if (item.product.imei_serial_type === 'serial' && imeiSerial.imei_serial.serial_number) {
+                    return ` | Serial: ${imeiSerial.imei_serial.serial_number}`;
+                  } else if (item.product.imei_serial_type === 'both') {
+                    const parts = [];
+                    if (imeiSerial.imei_serial.imei_number) parts.push(`IMEI: ${imeiSerial.imei_serial.imei_number}`);
+                    if (imeiSerial.imei_serial.serial_number) parts.push(`Serial: ${imeiSerial.imei_serial.serial_number}`);
+                    return ` | ${parts.join(' | ')}`;
+                  }
+                  return '';
+                }).join('') : ''
+              }
             </div>
           </div>
         `;

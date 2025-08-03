@@ -580,6 +580,9 @@ export interface ProductWithCategory extends Product {
 export interface SaleWithItems extends Sale {
   sale_items: (SaleItem & { product: Product })[];
   customer: Customer | null;
+    sale_item_imei_serials?: Array<{
+      imei_serial: ProductImeiSerial;
+    }>;
   user: User | null;
 }
 

@@ -750,12 +750,3 @@ export const useConnectionStatus = () => {
 };
 
 export { isDemoMode };
-
-// Exportar funciones de utilidad
-export {
-  withConnectionRetry,
-  getConnectionStats,
-  forceReconnection,
-  addConnectionListener,
-  cleanupConnection
-};

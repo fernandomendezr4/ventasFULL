@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
+<<<<<<< HEAD
 import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer, Phone, CreditCard, Banknote, Building2, Smartphone, Tag, Hash } from 'lucide-react';
+=======
+import { Calendar, DollarSign, Package, Eye, Trash2, Search, Filter, User, Printer, Phone, CreditCard, Banknote, Building2, Smartphone, Tag } from 'lucide-react';
+>>>>>>> 56f80df (Primer commit)
 import { supabase } from '../lib/supabase';
 import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';

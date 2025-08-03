@@ -11,6 +11,7 @@ if (isDemoMode) {
   console.warn('Ejecutando en modo demo - configura las variables de entorno de Supabase para usar la base de datos real');
 }
 
+<<<<<<< HEAD
 // Estado de conexión global
 let connectionState = {
   isConnected: false,
@@ -151,6 +152,10 @@ function initializeConnectionMonitoring() {
 let supabaseClient: any = null;
 
 // Configuración optimizada de Supabase
+=======
+let supabaseClient: any = null;
+
+>>>>>>> 56f80df (Primer commit)
 if (!isDemoMode) {
   try {
     supabaseClient = createClient<Database>(supabaseUrl, supabaseKey, {
@@ -164,6 +169,7 @@ if (!isDemoMode) {
       },
       global: {
         headers: {
+<<<<<<< HEAD
           'X-Client-Info': 'ventasfull-app',
           'X-Client-Version': '1.0.0'
         },
@@ -187,6 +193,13 @@ if (!isDemoMode) {
       },
       db: {
         schema: 'public'
+=======
+          'X-Client-Info': 'cash-register-app',
+        },
+      },
+      db: {
+        schema: 'public',
+>>>>>>> 56f80df (Primer commit)
       },
       realtime: {
         params: {
@@ -194,9 +207,12 @@ if (!isDemoMode) {
         }
       }
     });
+<<<<<<< HEAD
 
     // Inicializar monitoreo de conexión
     initializeConnectionMonitoring();
+=======
+>>>>>>> 56f80df (Primer commit)
   } catch (error) {
     console.error('Error creating Supabase client:', error);
     supabaseClient = null;
@@ -205,6 +221,7 @@ if (!isDemoMode) {
 
 export const supabase = supabaseClient;
 
+<<<<<<< HEAD
 // Función para forzar reconexión manual
 export const forceReconnection = async (): Promise<boolean> => {
   console.log('🔄 Forzando reconexión...');
@@ -385,12 +402,85 @@ export const safeInsert = async <T>(
   const { retries = 2, validateBeforeInsert = true } = options || {};
 
   if (isDemoMode || !supabaseClient) {
+=======
+// Función para verificar si Supabase está disponible
+export const isSupabaseAvailable = (): boolean => {
+  return !isDemoMode && supabase !== null;
+};
+
+// Función para manejar errores de conexión de manera elegante
+export const handleSupabaseError = (error: any): string => {
+  if (!error) return 'Error desconocido';
+  
+  // Errores comunes de conexión
+  if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+    return 'Error de conexión. Verifica tu internet y vuelve a intentar.';
+  }
+  
+  if (error.message?.includes('Invalid API key') || error.message?.includes('unauthorized')) {
+    return 'Error de autenticación. Verifica la configuración de Supabase.';
+  }
+  
+  if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+    return 'Error de base de datos. La tabla no existe o no tienes permisos.';
+  }
+  
+  if (error.message?.includes('duplicate key')) {
+    return 'Ya existe un registro con esos datos. Verifica la información.';
+  }
+  
+  if (error.message?.includes('violates foreign key constraint')) {
+    return 'Error de referencia. Verifica que los datos relacionados existan.';
+  }
+  
+  if (error.message?.includes('violates check constraint')) {
+    return 'Los datos no cumplen con las validaciones requeridas.';
+  }
+  
+  // Devolver el mensaje original si no es un error conocido
+  return error.message || 'Error en la operación de base de datos';
+};
+
+// Función para ejecutar consultas con manejo de errores
+export const safeQuery = async <T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>,
+  fallbackData: T
+): Promise<{ data: T; error: string | null }> => {
+  if (isDemoMode || !supabase) {
+    return { data: fallbackData, error: null };
+  }
+  
+  try {
+    const result = await queryFn();
+    
+    if (result.error) {
+      const errorMessage = handleSupabaseError(result.error);
+      console.error('Database query error:', result.error);
+      return { data: fallbackData, error: errorMessage };
+    }
+    
+    return { data: result.data || fallbackData, error: null };
+  } catch (error) {
+    const errorMessage = handleSupabaseError(error);
+    console.error('Query execution error:', error);
+    return { data: fallbackData, error: errorMessage };
+  }
+};
+
+// Función para insertar datos con manejo de errores
+export const safeInsert = async <T>(
+  tableName: string,
+  data: any
+): Promise<{ success: boolean; data: T | null; error: string | null }> => {
+  if (isDemoMode || !supabase) {
+>>>>>>> 56f80df (Primer commit)
     return { 
       success: true, 
       data: { ...data, id: `demo-${Date.now()}`, created_at: new Date().toISOString() } as T, 
       error: null 
     };
   }
+<<<<<<< HEAD
 
   try {
     // Validación básica antes de insertar
@@ -412,12 +502,29 @@ export const safeInsert = async <T>(
     }
 
     return { success: true, data: result.data, error: null };
+=======
+  
+  try {
+    const { data: result, error } = await supabase
+      .from(tableName)
+      .insert([data])
+      .select()
+      .single();
+    
+    if (error) {
+      const errorMessage = handleSupabaseError(error);
+      return { success: false, data: null, error: errorMessage };
+    }
+    
+    return { success: true, data: result, error: null };
+>>>>>>> 56f80df (Primer commit)
   } catch (error) {
     const errorMessage = handleSupabaseError(error);
     return { success: false, data: null, error: errorMessage };
   }
 };
 
+<<<<<<< HEAD
 // Función mejorada para actualizar datos
 export const safeUpdate = async (
   tableName: string,
@@ -462,12 +569,37 @@ export const safeUpdate = async (
       error: null, 
       rowsAffected: result.data?.length || 0 
     };
+=======
+// Función para actualizar datos con manejo de errores
+export const safeUpdate = async (
+  tableName: string,
+  data: any,
+  id: string
+): Promise<{ success: boolean; error: string | null }> => {
+  if (isDemoMode || !supabase) {
+    return { success: true, error: null };
+  }
+  
+  try {
+    const { error } = await supabase
+      .from(tableName)
+      .update(data)
+      .eq('id', id);
+    
+    if (error) {
+      const errorMessage = handleSupabaseError(error);
+      return { success: false, error: errorMessage };
+    }
+    
+    return { success: true, error: null };
+>>>>>>> 56f80df (Primer commit)
   } catch (error) {
     const errorMessage = handleSupabaseError(error);
     return { success: false, error: errorMessage };
   }
 };
 
+<<<<<<< HEAD
 // Función mejorada para eliminar datos
 export const safeDelete = async (
   tableName: string,
@@ -519,12 +651,36 @@ export const safeDelete = async (
       error: null, 
       rowsAffected: result.data?.length || 0 
     };
+=======
+// Función para eliminar datos con manejo de errores
+export const safeDelete = async (
+  tableName: string,
+  id: string
+): Promise<{ success: boolean; error: string | null }> => {
+  if (isDemoMode || !supabase) {
+    return { success: true, error: null };
+  }
+  
+  try {
+    const { error } = await supabase
+      .from(tableName)
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      const errorMessage = handleSupabaseError(error);
+      return { success: false, error: errorMessage };
+    }
+    
+    return { success: true, error: null };
+>>>>>>> 56f80df (Primer commit)
   } catch (error) {
     const errorMessage = handleSupabaseError(error);
     return { success: false, error: errorMessage };
   }
 };
 
+<<<<<<< HEAD
 // Función para ejecutar transacciones de manera segura
 export const safeTransaction = async <T>(
   operations: Array<() => Promise<any>>,
@@ -591,10 +747,37 @@ export const testConnection = async (timeoutMs: number = 8000): Promise<boolean>
     return true;
   } catch (error) {
     console.error('❌ Prueba de conexión falló:', error);
+=======
+export { isDemoMode };
+
+// Función para verificar la conexión
+export const testConnection = async () => {
+  if (isDemoMode || !supabase) return false;
+  
+  try {
+    console.log('Testing database connection...');
+    
+    // Hacer una consulta simple para verificar conectividad
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id')
+      .limit(1);
+    
+    if (error) {
+      console.error('Database connection error:', error);
+      return false;
+    }
+    
+    console.log('Database connection successful');
+    return true;
+  } catch (error) {
+    console.error('Connection test failed:', error);
+>>>>>>> 56f80df (Primer commit)
     return false;
   }
 };
 
+<<<<<<< HEAD
 // Función para obtener estadísticas de conexión
 export const getConnectionStats = () => {
   return {
@@ -670,12 +853,43 @@ export const checkSupabaseHealth = async () => {
         realtime: realtimeHealthy,
         session: authResult.status === 'fulfilled' ? !!authResult.value.data?.session : false
       }
+=======
+// Función mejorada para verificar el estado completo de Supabase
+export const checkSupabaseHealth = async () => {
+  if (isDemoMode || !supabase) {
+    return {
+      isHealthy: false,
+      mode: 'demo',
+      message: 'Ejecutando en modo demo'
+    };
+  }
+  
+  try {
+    // Verificar autenticación
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    // Verificar base de datos
+    const { data, error: dbError } = await supabase
+      .from('categories')
+      .select('count')
+      .limit(1);
+    
+    const isHealthy = !sessionError && !dbError;
+    
+    return {
+      isHealthy,
+      mode: 'production',
+      session: !!session,
+      database: !dbError,
+      message: isHealthy ? 'Sistema funcionando correctamente' : 'Problemas de conectividad detectados'
+>>>>>>> 56f80df (Primer commit)
     };
   } catch (error) {
     console.error('Health check failed:', error);
     return {
       isHealthy: false,
       mode: 'production',
+<<<<<<< HEAD
       message: 'Error de conexión con Supabase',
       details: {
         database: false,
@@ -683,10 +897,16 @@ export const checkSupabaseHealth = async () => {
         realtime: false,
         session: false
       }
+=======
+      session: false,
+      database: false,
+      message: 'Error de conexión con Supabase'
+>>>>>>> 56f80df (Primer commit)
     };
   }
 };
 
+<<<<<<< HEAD
 // Función para reintentar operaciones fallidas con backoff exponencial
 export const retryOperation = async <T>(
   operation: () => Promise<T>,
@@ -750,3 +970,32 @@ export const useConnectionStatus = () => {
 };
 
 export { isDemoMode };
+=======
+// Función para reintentar operaciones fallidas
+export const retryOperation = async <T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<T> => {
+  let lastError: any;
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      console.log(`Attempting operation (try ${i + 1}/${maxRetries})`);
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      console.error(`Operation failed (try ${i + 1}/${maxRetries}):`, error);
+      
+      if (i < maxRetries - 1) {
+        const waitTime = delay * (i + 1);
+        console.log(`Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+      }
+    }
+  }
+  
+  console.error('All retry attempts failed');
+  throw lastError;
+};
+>>>>>>> 56f80df (Primer commit)

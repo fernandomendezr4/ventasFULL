@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+<<<<<<< HEAD
 import { AlertTriangle } from 'lucide-react';
+=======
+>>>>>>> 56f80df (Primer commit)
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
@@ -20,8 +23,11 @@ import InstallmentManager from './components/InstallmentManager';
 import Settings from './components/Settings';
 import PerformanceMonitor from './components/PerformanceMonitor';
 import LazyLoader from './components/LazyLoader';
+<<<<<<< HEAD
 import OfflineIndicator from './components/OfflineIndicator';
 import ConnectionNotifications from './components/ConnectionNotifications';
+=======
+>>>>>>> 56f80df (Primer commit)
 import AuditSystemManager from './components/AuditSystemManager';
 
 function AppContent() {
@@ -222,8 +228,11 @@ function AppContent() {
         {renderContent()}
       </Layout>
       <PerformanceMonitor />
+<<<<<<< HEAD
       <OfflineIndicator />
       <ConnectionNotifications />
+=======
+>>>>>>> 56f80df (Primer commit)
     </ProtectedRoute>
   );
 }

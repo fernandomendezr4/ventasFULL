@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Database, AlertTriangle, CheckCircle, RefreshCw, Zap, Activity, TrendingUp } from 'lucide-react';
+<<<<<<< HEAD
 import { supabase, checkSupabaseHealth, getConnectionStats, forceReconnection } from '../lib/supabase';
+=======
+import { supabase } from '../lib/supabase';
+>>>>>>> 56f80df (Primer commit)
 import { 
   runDatabaseMaintenance, 
   checkDatabaseIntegrity, 
@@ -17,8 +21,11 @@ interface DatabaseIssue {
 
 export default function DatabaseHealthMonitor() {
   const [healthStatus, setHealthStatus] = useState<'checking' | 'healthy' | 'issues' | 'error'>('checking');
+<<<<<<< HEAD
   const [connectionHealth, setConnectionHealth] = useState<any>(null);
   const [connectionStats, setConnectionStats] = useState<any>(null);
+=======
+>>>>>>> 56f80df (Primer commit)
   const [issues, setIssues] = useState<DatabaseIssue[]>([]);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
   const [maintenanceLog, setMaintenanceLog] = useState<string>('');
@@ -26,21 +33,28 @@ export default function DatabaseHealthMonitor() {
 
   useEffect(() => {
     checkHealth();
+<<<<<<< HEAD
     loadConnectionStats();
+=======
+>>>>>>> 56f80df (Primer commit)
     
     // Verificar salud cada 5 minutos
     const interval = setInterval(checkHealth, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
+<<<<<<< HEAD
   const loadConnectionStats = () => {
     const stats = getConnectionStats();
     setConnectionStats(stats);
   };
+=======
+>>>>>>> 56f80df (Primer commit)
   const checkHealth = async () => {
     try {
       setHealthStatus('checking');
       
+<<<<<<< HEAD
       // Verificar salud de Supabase
       const supabaseHealth = await checkSupabaseHealth();
       setConnectionHealth(supabaseHealth);
@@ -54,10 +68,19 @@ export default function DatabaseHealthMonitor() {
       // Determinar estado de salud
       const hasConnectionIssues = !supabaseHealth.isHealthy;
       const hasDataIssues = healthData.some(issue => 
+=======
+      const healthData = await checkDatabaseIntegrity();
+      setIssues(healthData);
+      setLastCheck(new Date());
+      
+      // Determinar estado de salud
+      const hasIssues = healthData.some(issue => 
+>>>>>>> 56f80df (Primer commit)
         issue.issue_type !== 'healthy' && 
         !issue.issue_description.includes('buen estado')
       );
       
+<<<<<<< HEAD
       if (hasConnectionIssues) {
         setHealthStatus('error');
       } else if (hasDataIssues) {
@@ -65,6 +88,9 @@ export default function DatabaseHealthMonitor() {
       } else {
         setHealthStatus('healthy');
       }
+=======
+      setHealthStatus(hasIssues ? 'issues' : 'healthy');
+>>>>>>> 56f80df (Primer commit)
     } catch (error) {
       console.error('Error checking database health:', error);
       setHealthStatus('error');
@@ -104,6 +130,7 @@ export default function DatabaseHealthMonitor() {
 
   const clearCache = () => {
     clearQueryCache();
+<<<<<<< HEAD
     loadConnectionStats();
     alert('Cache limpiado exitosamente');
   };
@@ -121,6 +148,11 @@ export default function DatabaseHealthMonitor() {
       setLoading(false);
     }
   };
+=======
+    alert('Cache limpiado exitosamente');
+  };
+
+>>>>>>> 56f80df (Primer commit)
   const getStatusColor = () => {
     switch (healthStatus) {
       case 'healthy':
@@ -166,7 +198,11 @@ export default function DatabaseHealthMonitor() {
         <div className="flex items-center">
           <Database className="h-6 w-6 text-blue-600 mr-3" />
           <div>
+<<<<<<< HEAD
             <h3 className="text-lg font-semibold text-slate-900">Estado del Sistema</h3>
+=======
+            <h3 className="text-lg font-semibold text-slate-900">Estado de la Base de Datos</h3>
+>>>>>>> 56f80df (Primer commit)
             <div className="flex items-center mt-1">
               {getStatusIcon()}
               <span className={`ml-2 text-sm font-medium ${getStatusColor()}`}>
@@ -178,6 +214,7 @@ export default function DatabaseHealthMonitor() {
         
         <div className="flex gap-2">
           <button
+<<<<<<< HEAD
             onClick={handleForceReconnection}
             disabled={loading}
             className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors duration-200 flex items-center text-sm"
@@ -187,6 +224,8 @@ export default function DatabaseHealthMonitor() {
           </button>
           
           <button
+=======
+>>>>>>> 56f80df (Primer commit)
             onClick={checkHealth}
             disabled={loading || healthStatus === 'checking'}
             className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200 flex items-center text-sm"
@@ -208,6 +247,7 @@ export default function DatabaseHealthMonitor() {
 
       {/* Estado de Salud */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<<<<<<< HEAD
         {/* Estado de Conexión */}
         <div className={`p-4 rounded-lg border-2 ${
           connectionHealth?.isHealthy 
@@ -238,6 +278,8 @@ export default function DatabaseHealthMonitor() {
             }`} />
           </div>
         </div>
+=======
+>>>>>>> 56f80df (Primer commit)
         <div className={`p-4 rounded-lg border-2 ${
           healthStatus === 'healthy' 
             ? 'bg-green-50 border-green-200' 
@@ -247,7 +289,11 @@ export default function DatabaseHealthMonitor() {
         }`}>
           <div className="flex items-center justify-between">
             <div>
+<<<<<<< HEAD
               <p className="text-sm font-medium text-slate-700">Integridad de Datos</p>
+=======
+              <p className="text-sm font-medium text-slate-700">Estado General</p>
+>>>>>>> 56f80df (Primer commit)
               <p className={`text-lg font-bold ${getStatusColor()}`}>
                 {healthStatus === 'healthy' ? 'Saludable' : 
                  healthStatus === 'issues' ? 'Con Problemas' : 
@@ -276,9 +322,15 @@ export default function DatabaseHealthMonitor() {
         <div className="p-4 rounded-lg border-2 bg-purple-50 border-purple-200">
           <div className="flex items-center justify-between">
             <div>
+<<<<<<< HEAD
               <p className="text-sm font-medium text-slate-700">Reintentos</p>
               <p className="text-lg font-bold text-purple-900">
                 {connectionStats?.retryCount || 0}/{connectionStats?.maxRetries || 0}
+=======
+              <p className="text-sm font-medium text-slate-700">Problemas</p>
+              <p className="text-lg font-bold text-purple-900">
+                {issues.filter(i => i.issue_type !== 'healthy').length}
+>>>>>>> 56f80df (Primer commit)
               </p>
             </div>
             <TrendingUp className="h-5 w-5 text-purple-600" />
@@ -286,6 +338,7 @@ export default function DatabaseHealthMonitor() {
         </div>
       </div>
 
+<<<<<<< HEAD
       {/* Información de Conexión Detallada */}
       {connectionStats && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -321,6 +374,8 @@ export default function DatabaseHealthMonitor() {
           </div>
         </div>
       )}
+=======
+>>>>>>> 56f80df (Primer commit)
       {/* Problemas Detectados */}
       {issues.length > 0 && (
         <div className="mb-6">
@@ -366,6 +421,7 @@ export default function DatabaseHealthMonitor() {
       {/* Acciones de Mantenimiento */}
       <div className="border-t border-slate-200 pt-6">
         <h4 className="font-medium text-slate-900 mb-3">Acciones de Mantenimiento</h4>
+<<<<<<< HEAD
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <button
             onClick={handleForceReconnection}
@@ -376,6 +432,9 @@ export default function DatabaseHealthMonitor() {
             Reconectar
           </button>
           
+=======
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+>>>>>>> 56f80df (Primer commit)
           <button
             onClick={refreshMaterializedViews}
             disabled={loading}

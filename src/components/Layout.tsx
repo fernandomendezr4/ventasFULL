@@ -3,7 +3,10 @@ import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, 
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import UserProfile from './UserProfile';
+<<<<<<< HEAD
 import ConnectionStatusIndicator from './ConnectionStatusIndicator';
+=======
+>>>>>>> 56f80df (Primer commit)
 import { isDemoMode } from '../lib/supabase';
 
 interface LayoutProps {
@@ -196,7 +199,10 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               </p>
             </div>
             <div className="flex items-center space-x-3">
+<<<<<<< HEAD
               <ConnectionStatusIndicator showDetails={true} />
+=======
+>>>>>>> 56f80df (Primer commit)
               <div className="text-right">
                 <p className="text-sm font-medium text-slate-900 dark:text-white">{user?.name}</p>
                 <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(user?.role || '')}`}>

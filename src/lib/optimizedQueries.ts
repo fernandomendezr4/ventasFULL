@@ -1,6 +1,10 @@
 // Consultas optimizadas para mejor rendimiento con la base de datos
 
+<<<<<<< HEAD
 import { supabase, safeQuery, withConnectionRetry } from './supabase';
+=======
+import { supabase } from './supabase';
+>>>>>>> 56f80df (Primer commit)
 import { isDemoMode } from './supabase';
 
 // Cache simple en memoria para consultas frecuentes
@@ -49,6 +53,7 @@ export const getDashboardStats = async (targetDate?: string) => {
       };
     }
     
+<<<<<<< HEAD
     // Usar withConnectionRetry para consultas críticas
     const [salesCount, productsCount, customersCount, todaySales, totalRevenue] = await withConnectionRetry(async () => {
       return await Promise.all([
@@ -63,6 +68,20 @@ export const getDashboardStats = async (targetDate?: string) => {
         supabase.from('sales').select('total_amount')
       ]);
     });
+=======
+    // Consultas básicas sin RPC
+    const [salesCount, productsCount, customersCount, todaySales, totalRevenue] = await Promise.all([
+      supabase.from('sales').select('id', { count: 'exact', head: true }),
+      supabase.from('products').select('id', { count: 'exact', head: true }),
+      supabase.from('customers').select('id', { count: 'exact', head: true }),
+      supabase
+        .from('sales')
+        .select('total_amount')
+        .gte('created_at', today)
+        .lt('created_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+      supabase.from('sales').select('total_amount')
+    ]);
+>>>>>>> 56f80df (Primer commit)
 
     const todayTotal = todaySales.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
     const revenueTotal = totalRevenue.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
@@ -131,6 +150,7 @@ export const getProductsOptimized = async (limit: number = 50, offset: number = 
     return demoProducts;
   }
   try {
+<<<<<<< HEAD
     const result = await safeQuery(
       () => supabase
         .from('products_detailed')
@@ -146,6 +166,18 @@ export const getProductsOptimized = async (limit: number = 50, offset: number = 
     }
     
     return result.data;
+=======
+    const { data, error } = await supabase
+      .from('products_detailed')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    setCachedData(cacheKey, data || []);
+    return data || [];
+>>>>>>> 56f80df (Primer commit)
   } catch (error) {
     console.error('Error getting products:', error);
     return [];
@@ -471,6 +503,7 @@ export const getLowStockProducts = async (threshold: number = 10) => {
     return demoLowStockProducts;
   }
   try {
+<<<<<<< HEAD
     const result = await safeQuery(
       () => supabase
         .from('products')
@@ -493,6 +526,25 @@ export const getLowStockProducts = async (threshold: number = 10) => {
     }
     
     return result.data;
+=======
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        id,
+        name,
+        stock,
+        sale_price,
+        category:categories(name),
+        supplier:suppliers(name)
+      `)
+      .lte('stock', threshold)
+      .order('stock', { ascending: true });
+
+    if (error) throw error;
+
+    setCachedData(cacheKey, data || []);
+    return data || [];
+>>>>>>> 56f80df (Primer commit)
   } catch (error) {
     console.error('Error getting low stock products:', error);
     return [];

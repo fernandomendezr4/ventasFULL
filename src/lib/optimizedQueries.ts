@@ -1,6 +1,6 @@
 // Consultas optimizadas para mejor rendimiento con la base de datos
 
-import { supabase } from './supabase';
+import { supabase, safeQuery, withConnectionRetry } from './supabase';
 import { isDemoMode } from './supabase';
 
 // Cache simple en memoria para consultas frecuentes
@@ -49,18 +49,20 @@ export const getDashboardStats = async (targetDate?: string) => {
       };
     }
     
-    // Consultas básicas sin RPC
-    const [salesCount, productsCount, customersCount, todaySales, totalRevenue] = await Promise.all([
-      supabase.from('sales').select('id', { count: 'exact', head: true }),
-      supabase.from('products').select('id', { count: 'exact', head: true }),
-      supabase.from('customers').select('id', { count: 'exact', head: true }),
-      supabase
-        .from('sales')
-        .select('total_amount')
-        .gte('created_at', today)
-        .lt('created_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-      supabase.from('sales').select('total_amount')
-    ]);
+    // Usar withConnectionRetry para consultas críticas
+    const [salesCount, productsCount, customersCount, todaySales, totalRevenue] = await withConnectionRetry(async () => {
+      return await Promise.all([
+        supabase.from('sales').select('id', { count: 'exact', head: true }),
+        supabase.from('products').select('id', { count: 'exact', head: true }),
+        supabase.from('customers').select('id', { count: 'exact', head: true }),
+        supabase
+          .from('sales')
+          .select('total_amount')
+          .gte('created_at', today)
+          .lt('created_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
+        supabase.from('sales').select('total_amount')
+      ]);
+    });
 
     const todayTotal = todaySales.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
     const revenueTotal = totalRevenue.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
@@ -129,16 +131,21 @@ export const getProductsOptimized = async (limit: number = 50, offset: number = 
     return demoProducts;
   }
   try {
-    const { data, error } = await supabase
-      .from('products_detailed')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const result = await safeQuery(
+      () => supabase
+        .from('products_detailed')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1),
+      [],
+      { retries: 3, timeout: 15000 }
+    );
 
-    if (error) throw error;
-
-    setCachedData(cacheKey, data || []);
-    return data || [];
+    if (!result.error) {
+      setCachedData(cacheKey, result.data);
+    }
+    
+    return result.data;
   } catch (error) {
     console.error('Error getting products:', error);
     return [];
@@ -464,23 +471,28 @@ export const getLowStockProducts = async (threshold: number = 10) => {
     return demoLowStockProducts;
   }
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(`
-        id,
-        name,
-        stock,
-        sale_price,
-        category:categories(name),
-        supplier:suppliers(name)
-      `)
-      .lte('stock', threshold)
-      .order('stock', { ascending: true });
+    const result = await safeQuery(
+      () => supabase
+        .from('products')
+        .select(`
+          id,
+          name,
+          stock,
+          sale_price,
+          category:categories(name),
+          supplier:suppliers(name)
+        `)
+        .lte('stock', threshold)
+        .order('stock', { ascending: true }),
+      [],
+      { retries: 2, timeout: 10000 }
+    );
 
-    if (error) throw error;
-
-    setCachedData(cacheKey, data || []);
-    return data || [];
+    if (!result.error) {
+      setCachedData(cacheKey, result.data);
+    }
+    
+    return result.data;
   } catch (error) {
     console.error('Error getting low stock products:', error);
     return [];

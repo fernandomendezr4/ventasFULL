@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, isDemoMode, testConnection } from '../lib/supabase';
+import { supabase, isDemoMode, testConnection, addConnectionListener, type ConnectionStatus } from '../lib/supabase';
 
 interface User {
   id: string;
@@ -24,7 +24,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasPermission: (permissionName: string) => boolean;
   hasAnyPermission: (permissionNames: string[]) => boolean;
-  connectionStatus: 'checking' | 'connected' | 'disconnected';
+  connectionStatus: ConnectionStatus;
   retryConnection: () => Promise<void>;
 }
 
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 3;
 
@@ -130,12 +130,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      setConnectionStatus('connecting');
       const isConnected = await testConnection();
       setConnectionStatus(isConnected ? 'connected' : 'disconnected');
       return isConnected;
     } catch (error) {
       console.error('Connection check failed:', error);
-      setConnectionStatus('disconnected');
+      setConnectionStatus('error');
       return false;
     }
   };
@@ -144,11 +145,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const retryConnection = async () => {
     if (retryCount >= maxRetries) {
       console.warn('Max retry attempts reached');
+      setConnectionStatus('error');
       return;
     }
 
     setRetryCount(prev => prev + 1);
-    setConnectionStatus('checking');
+    setConnectionStatus('connecting');
     
     // Esperar un poco antes de reintentar
     await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
@@ -158,10 +160,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let connectionUnsubscribe: (() => void) | null = null;
     
     const initializeAuth = async () => {
-      // Verificar conexión primero
-      await checkConnectionStatus();
+      // Configurar listener de conexión
+      if (!isDemoMode) {
+        connectionUnsubscribe = addConnectionListener((status) => {
+          if (mounted) {
+            setConnectionStatus(status);
+          }
+        });
+      } else {
+        setConnectionStatus('disconnected');
+      }
       
       if (!mounted) return;
       
@@ -274,6 +285,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Cleanup subscription on unmount
     return () => {
       mounted = false;
+      if (connectionUnsubscribe) {
+        connectionUnsubscribe();
+      }
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };

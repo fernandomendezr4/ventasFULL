@@ -112,22 +112,9 @@ export default function AuditReportGenerator({
       }
 
       // Intentar usar función RPC
-      const { data, error } = await supabase
-        .rpc('generate_audit_report', {
-          p_report_type: reportConfig.report_type,
-          p_date_from: reportConfig.date_from + 'T00:00:00Z',
-          p_date_to: reportConfig.date_to + 'T23:59:59Z'
-        });
-
-      if (error) {
-        console.error('Error with RPC, generating manual report:', error);
-        await generateManualReport();
-        return;
-      }
-
-      alert('Reporte generado exitosamente. ID: ' + data);
-      onReportGenerated();
-      onClose();
+      // Since generate_audit_report function doesn't exist, use manual generation
+      console.log('generate_audit_report function not found, using manual generation');
+      await generateManualReport();
     } catch (error) {
       console.error('Error generating report:', error);
       alert('Error al generar reporte: ' + (error as Error).message);

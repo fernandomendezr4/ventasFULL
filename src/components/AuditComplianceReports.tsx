@@ -102,19 +102,9 @@ export default function AuditComplianceReports() {
 
       // Intentar cargar reportes de compliance reales
       try {
-        const { data: reportsData, error: reportsError } = await supabase
-          .from('audit_reports')
-          .select('*')
-          .eq('report_type', 'compliance')
-          .order('generated_at', { ascending: false })
-          .limit(20);
-
-        if (reportsError) {
-          console.error('Error loading compliance reports:', reportsError);
-          setReports([]);
-        } else {
-          setReports(reportsData || []);
-        }
+        // Since audit_reports table doesn't exist, use fallback to empty array
+        console.log('audit_reports table not found, using demo data only');
+        setReports([]);
       } catch (error) {
         console.error('Error loading compliance reports:', error);
         setReports([]);
@@ -167,23 +157,9 @@ export default function AuditComplianceReports() {
       }
 
       // Generar reporte real
-      const { data, error } = await supabase
-        .rpc('generate_audit_report', {
-          p_report_type: 'compliance',
-          p_date_from: generatorConfig.date_from + 'T00:00:00Z',
-          p_date_to: generatorConfig.date_to + 'T23:59:59Z'
-        });
-
-      if (error) {
-        console.error('Error generating compliance report:', error);
-        // Fallback: crear reporte manual
-        await generateManualComplianceReport();
-        return;
-      }
-
-      alert('Reporte de cumplimiento generado exitosamente');
-      setShowGenerator(false);
-      loadComplianceData();
+      // Since generate_audit_report function doesn't exist, use manual generation
+      console.log('generate_audit_report function not found, using manual generation');
+      await generateManualComplianceReport();
     } catch (error) {
       console.error('Error generating compliance report:', error);
       alert('Error al generar reporte: ' + (error as Error).message);

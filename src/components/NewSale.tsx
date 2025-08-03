@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, User, Search, Trash2, Calculator, CreditCard, Banknote, Building2, Smartphone } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, User, Search, Trash2, Calculator, CreditCard, Banknote, Building2, Smartphone, Hash, AlertTriangle } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
-import { Product, Customer, CartItem } from '../lib/types';
+import { Product, Customer, CartItem, ProductImeiSerial } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
+import ImeiSerialSelector from './ImeiSerialSelector';
+
+// Extender CartItem para incluir IMEI/Serial seleccionados
+interface ExtendedCartItem extends CartItem {
+  selectedImeiSerials?: ProductImeiSerial[];
+  needsImeiSelection?: boolean;
+}
 
 // Datos demo
 const demoProducts: Product[] = [
@@ -93,11 +100,13 @@ export default function NewSale() {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<ExtendedCartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [showImeiSelector, setShowImeiSelector] = useState(false);
+  const [currentImeiProduct, setCurrentImeiProduct] = useState<{ product: Product; cartIndex: number } | null>(null);
   const [paymentType, setPaymentType] = useState<'cash' | 'installment'>('cash');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amountReceived, setAmountReceived] = useState('');
@@ -225,14 +234,100 @@ export default function NewSale() {
         alert('No hay suficiente stock disponible');
         return;
       }
-      setCart(cart.map(item =>
-        item.product.id === product.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
+      
+      const newQuantity = existingItem.quantity + 1;
+      
+      // Si el producto requiere IMEI/Serial, verificar disponibilidad
+      if (product.requires_imei_serial) {
+        // Verificar que hay suficientes IMEI/Serial disponibles
+        checkImeiAvailability(product, newQuantity).then(available => {
+          if (!available) {
+            alert('No hay suficientes unidades con IMEI/Serial disponibles');
+            return;
+          }
+          
+          setCart(cart.map(item =>
+            item.product.id === product.id
+              ? { ...item, quantity: newQuantity, needsImeiSelection: true }
+              : item
+          ));
+        });
+      } else {
+        setCart(cart.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: newQuantity }
+            : item
+        ));
+      }
     } else {
-      setCart([...cart, { product, quantity: 1 }]);
+      // Verificar disponibilidad para productos nuevos
+      if (product.requires_imei_serial) {
+        checkImeiAvailability(product, 1).then(available => {
+          if (!available) {
+            alert('No hay unidades con IMEI/Serial disponibles para este producto');
+            return;
+          }
+          
+          setCart([...cart, { 
+            product, 
+            quantity: 1, 
+            needsImeiSelection: true,
+            selectedImeiSerials: []
+          }]);
+        });
+      } else {
+        setCart([...cart, { product, quantity: 1 }]);
+      }
     }
+  };
+
+  const checkImeiAvailability = async (product: Product, requiredQuantity: number): Promise<boolean> => {
+    if (!product.requires_imei_serial) return true;
+    
+    if (!supabase) {
+      // En modo demo, simular disponibilidad
+      return requiredQuantity <= 5;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('product_imei_serials')
+        .select('id')
+        .eq('product_id', product.id)
+        .eq('status', 'available')
+        .limit(requiredQuantity);
+      
+      if (error) throw error;
+      return (data?.length || 0) >= requiredQuantity;
+    } catch (error) {
+      console.error('Error checking IMEI availability:', error);
+      return false;
+    }
+  };
+
+  const handleImeiSelection = (cartIndex: number) => {
+    const cartItem = cart[cartIndex];
+    if (!cartItem || !cartItem.product.requires_imei_serial) return;
+    
+    setCurrentImeiProduct({ product: cartItem.product, cartIndex });
+    setShowImeiSelector(true);
+  };
+
+  const handleImeiSelectionComplete = (selectedImeiSerials: ProductImeiSerial[]) => {
+    if (!currentImeiProduct) return;
+    
+    const { cartIndex } = currentImeiProduct;
+    setCart(prev => prev.map((item, index) => 
+      index === cartIndex 
+        ? { 
+            ...item, 
+            selectedImeiSerials,
+            needsImeiSelection: false
+          }
+        : item
+    ));
+    
+    setCurrentImeiProduct(null);
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
@@ -247,11 +342,32 @@ export default function NewSale() {
       return;
     }
 
-    setCart(cart.map(item =>
-      item.product.id === productId
-        ? { ...item, quantity }
-        : item
-    ));
+    // Si el producto requiere IMEI/Serial, verificar disponibilidad
+    if (product?.requires_imei_serial) {
+      checkImeiAvailability(product, quantity).then(available => {
+        if (!available) {
+          alert('No hay suficientes unidades con IMEI/Serial disponibles');
+          return;
+        }
+        
+        setCart(cart.map(item =>
+          item.product.id === productId
+            ? { 
+                ...item, 
+                quantity,
+                needsImeiSelection: true,
+                selectedImeiSerials: [] // Reset selection when quantity changes
+              }
+            : item
+        ));
+      });
+    } else {
+      setCart(cart.map(item =>
+        item.product.id === productId
+          ? { ...item, quantity }
+          : item
+      ));
+    }
   };
 
   const removeFromCart = (productId: string) => {
@@ -317,6 +433,17 @@ export default function NewSale() {
   };
 
   const completeSale = async () => {
+    // Validar que todos los productos con IMEI/Serial requerido tengan selección
+    const itemsNeedingImei = cart.filter(item => 
+      item.product.requires_imei_serial && 
+      (!item.selectedImeiSerials || item.selectedImeiSerials.length !== item.quantity)
+    );
+    
+    if (itemsNeedingImei.length > 0) {
+      alert('Debe seleccionar IMEI/Serial para todos los productos que lo requieren');
+      return;
+    }
+    
     if (isDemoMode) {
       // En modo demo, simular venta exitosa
       const demoSale = {
@@ -411,11 +538,35 @@ export default function NewSale() {
         total_price: item.product.sale_price * item.quantity
       }));
 
-      const { error: itemsError } = await supabase!
+      const { data: createdItems, error: itemsError } = await supabase!
         .from('sale_items')
-        .insert(saleItems);
+        .insert(saleItems)
+        .select();
 
       if (itemsError) throw itemsError;
+
+      // Procesar IMEI/Serial para productos que lo requieren
+      for (let i = 0; i < cart.length; i++) {
+        const cartItem = cart[i];
+        const saleItem = createdItems[i];
+        
+        if (cartItem.product.requires_imei_serial && cartItem.selectedImeiSerials) {
+          try {
+            // Completar venta con IMEI/Serial específicos
+            const { error: imeiError } = await supabase!.rpc('complete_imei_serial_sale', {
+              p_sale_item_id: saleItem.id,
+              p_imei_serial_ids: cartItem.selectedImeiSerials.map(imei => imei.id)
+            });
+            
+            if (imeiError) {
+              console.error('Error processing IMEI/Serial for item:', imeiError);
+              // No fallar toda la venta por esto, solo loggearlo
+            }
+          } catch (error) {
+            console.error('Error in IMEI/Serial processing:', error);
+          }
+        }
+      }
 
       // Actualizar stock de productos
       for (const item of cart) {
@@ -708,6 +859,29 @@ export default function NewSale() {
                     <div className="flex-1">
                       <h4 className="font-medium text-slate-900">{item.product.name}</h4>
                       <p className="text-sm text-slate-600">{formatCurrency(item.product.sale_price)}</p>
+                      
+                      {/* IMEI/Serial Status */}
+                      {item.product.requires_imei_serial && (
+                        <div className="mt-2">
+                          {item.needsImeiSelection || !item.selectedImeiSerials || item.selectedImeiSerials.length !== item.quantity ? (
+                            <button
+                              onClick={() => handleImeiSelection(cart.indexOf(item))}
+                              className="flex items-center text-xs text-orange-600 hover:text-orange-800 transition-colors duration-200"
+                            >
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Seleccionar {item.product.imei_serial_type === 'imei' ? 'IMEI' : 
+                                         item.product.imei_serial_type === 'serial' ? 'Serial' : 'IMEI/Serial'}
+                            </button>
+                          ) : (
+                            <div className="flex items-center text-xs text-green-600">
+                              <Hash className="h-3 w-3 mr-1" />
+                              <span>
+                                {item.selectedImeiSerials.length} unidad(es) seleccionada(s)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -847,7 +1021,10 @@ export default function NewSale() {
 
               <button
                 onClick={completeSale}
-                disabled={loading || cart.length === 0}
+                disabled={loading || cart.length === 0 || cart.some(item => 
+                  item.product.requires_imei_serial && 
+                  (!item.selectedImeiSerials || item.selectedImeiSerials.length !== item.quantity)
+                )}
                 className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
               >
                 {loading ? (
@@ -929,6 +1106,22 @@ export default function NewSale() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* IMEI/Serial Selector Modal */}
+      {showImeiSelector && currentImeiProduct && (
+        <ImeiSerialSelector
+          isOpen={showImeiSelector}
+          onClose={() => {
+            setShowImeiSelector(false);
+            setCurrentImeiProduct(null);
+          }}
+          onSelect={handleImeiSelectionComplete}
+          productId={currentImeiProduct.product.id}
+          productName={currentImeiProduct.product.name}
+          requiredQuantity={cart[currentImeiProduct.cartIndex]?.quantity || 1}
+          imeiSerialType={currentImeiProduct.product.imei_serial_type}
+        />
       )}
     </div>
   );

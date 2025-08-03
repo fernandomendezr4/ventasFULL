@@ -579,7 +579,7 @@ export interface ProductWithCategory extends Product {
 
 export interface SaleItemWithProductAndImei extends SaleItem {
   product: Product;
-  product_imei_serials?: ProductImeiSerial[];
+  sale_item_imei_serials?: ProductImeiSerial[];
 }
 
 export interface SaleWithItems extends Sale {

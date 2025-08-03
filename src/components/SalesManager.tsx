@@ -426,6 +426,24 @@ export default function SalesManager() {
                               Desc: {formatCurrency(sale.discount_amount)}
                             </span>
                           )}
+                          
+                          {/* IMEI/Serial Status Indicator */}
+                          {sale.sale_items.some(item => item.product.has_imei_serial) && (
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              sale.sale_items.every(item => 
+                                !item.product.has_imei_serial || 
+                                (item.sale_item_imei_serials && item.sale_item_imei_serials.length === item.quantity)
+                              ) 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              <Hash className="h-3 w-3 mr-1" />
+                              {sale.sale_items.every(item => 
+                                !item.product.has_imei_serial || 
+                                (item.sale_item_imei_serials && item.sale_item_imei_serials.length === item.quantity)
+                              ) ? 'IMEI/Serial OK' : 'IMEI/Serial Incompleto'}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-slate-600">

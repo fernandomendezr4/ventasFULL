@@ -171,16 +171,19 @@ export default function UserManager() {
           'Email Ya Registrado',
           'Este email ya está registrado en el sistema. Verifica si el usuario ya existe o usa un email diferente.'
         );
+        return;
       } else if (errorMessage.includes('duplicate key value violates unique constraint')) {
         showError(
           'Email Duplicado',
           'Este email ya está en uso. Por favor usa un email diferente.'
         );
+        return;
       } else {
         showError(
           'Error al Guardar Usuario',
           'No se pudo guardar el usuario. ' + errorMessage
         );
+        return;
       }
     }
   };

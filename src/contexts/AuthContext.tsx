@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, isDemoMode } from '../lib/supabase';
+import { supabase, isDemoMode, testConnection } from '../lib/supabase';
 
 interface User {
   id: string;

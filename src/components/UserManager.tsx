@@ -9,7 +9,7 @@ import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
 
 export default function UserManager() {
-  const { user } = useAuth();
+  const { user: currentUser } = useAuth();
   const { notification, showSuccess, showError, showWarning, hideNotification } = useNotification();
   const { confirmation, showConfirmation, hideConfirmation, handleConfirm } = useConfirmation();
   const [users, setUsers] = useState<UserType[]>([]);
@@ -36,13 +36,13 @@ export default function UserManager() {
 
   // Determinar qué roles puede crear el usuario actual
   const getAvailableRoles = () => {
-    if (user?.role === 'admin') {
+    if (currentUser?.role === 'admin') {
       return [
         { value: 'employee', label: 'Empleado' },
         { value: 'manager', label: 'Gerente' },
         { value: 'admin', label: 'Administrador' }
       ];
-    } else if (user?.role === 'manager') {
+    } else if (currentUser?.role === 'manager') {
       return [
         { value: 'employee', label: 'Empleado' },
         { value: 'manager', label: 'Gerente' }
@@ -60,7 +60,7 @@ export default function UserManager() {
       let query = supabase.from('users').select('*');
       
       // Si el usuario es gerente, filtrar para que solo vea empleados y gerentes
-      if (user?.role === 'manager') {
+      if (currentUser?.role === 'manager') {
         query = query.in('role', ['employee', 'manager']);
       }
       
@@ -79,7 +79,7 @@ export default function UserManager() {
     e.preventDefault();
     
     // Validar que el usuario actual puede crear el rol seleccionado
-    if (user?.role === 'manager' && formData.role === 'admin') {
+    if (currentUser?.role === 'manager' && formData.role === 'admin') {
       showError(
         'Permisos Insuficientes',
         'Los gerentes no pueden crear usuarios administradores. Solo pueden crear gerentes y empleados.'
@@ -90,7 +90,7 @@ export default function UserManager() {
     try {
       if (editingUser) {
         // Validar que no se esté intentando cambiar a admin si es manager
-        if (user?.role === 'manager' && formData.role === 'admin') {
+        if (currentUser?.role === 'manager' && formData.role === 'admin') {
           showError(
             'Permisos Insuficientes',
             'Los gerentes no pueden asignar el rol de administrador.'
@@ -190,7 +190,7 @@ export default function UserManager() {
 
   const handleChangePassword = async (user: UserType) => {
     // Validar que el gerente no pueda cambiar contraseñas de administradores
-    if (user?.role === 'manager' && user.role === 'admin') {
+    if (currentUser?.role === 'manager' && user.role === 'admin') {
       showError(
         'Permisos Insuficientes',
         'Los gerentes no pueden cambiar contraseñas de usuarios administradores.'
@@ -248,7 +248,7 @@ export default function UserManager() {
 
   const handleEdit = (user: UserType) => {
     // Validar que el gerente no pueda editar administradores
-    if (user?.role === 'manager' && user.role === 'admin') {
+    if (currentUser?.role === 'manager' && user.role === 'admin') {
       showError(
         'Permisos Insuficientes',
         'Los gerentes no pueden editar usuarios administradores.'
@@ -272,7 +272,7 @@ export default function UserManager() {
     if (!user) return;
     
     // Validar que el gerente no pueda eliminar administradores
-    if (user?.role === 'manager' && user.role === 'admin') {
+    if (currentUser?.role === 'manager' && user.role === 'admin') {
       showError(
         'Permisos Insuficientes',
         'Los gerentes no pueden eliminar usuarios administradores.'
@@ -285,7 +285,14 @@ export default function UserManager() {
       `¿Estás seguro de que quieres eliminar al usuario "${user.name}"? Esta acción no se puede deshacer.`,
       async () => {
         try {
-          // First, update any cash_register_discrepancies that reference this user
+          // First, remove user from Supabase Auth
+          const { error: authError } = await supabase.auth.admin.deleteUser(id);
+          if (authError) {
+            console.warn('Warning: Could not delete user from auth system:', authError);
+            // Continue with deletion even if auth deletion fails
+          }
+
+          // Update any cash_register_discrepancies that reference this user
           const { error: discrepancyError } = await supabase
             .from('cash_register_discrepancies')
             .update({ created_by: null })
@@ -351,7 +358,7 @@ export default function UserManager() {
 
   const filteredUsers = users.filter(user => {
     // Los gerentes no pueden ver administradores (filtro adicional por seguridad)
-    if (user?.role === 'manager' && user.role === 'admin') {
+    if (currentUser?.role === 'manager' && user.role === 'admin') {
       return false;
     }
     
@@ -690,7 +697,7 @@ export default function UserManager() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleEdit(user)}
-                    disabled={user?.role === 'manager' && user.role === 'admin'}
+                    disabled={currentUser?.role === 'manager' && user.role === 'admin'}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
                     title="Editar usuario"
                   >
@@ -698,7 +705,7 @@ export default function UserManager() {
                   </button>
                   <button
                     onClick={() => handleChangePassword(user)}
-                    disabled={user?.role === 'manager' && user.role === 'admin'}
+                    disabled={currentUser?.role === 'manager' && user.role === 'admin'}
                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
                     title="Cambiar contraseña"
                   >
@@ -707,10 +714,10 @@ export default function UserManager() {
                     </svg>
                   </button>
                   {/* Solo admins pueden eliminar usuarios, y gerentes no pueden eliminar admins */}
-                  {(user?.role === 'admin' || (user?.role === 'manager' && user.role !== 'admin')) && (
+                  {(currentUser?.role === 'admin' || (currentUser?.role === 'manager' && user.role !== 'admin')) && (
                     <button
                       onClick={() => handleDelete(user.id)}
-                      disabled={user?.role === 'manager' && user.role === 'admin'}
+                      disabled={currentUser?.role === 'manager' && user.role === 'admin'}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
                       title="Eliminar usuario"
                     >

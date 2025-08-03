@@ -577,12 +577,14 @@ export interface ProductWithCategory extends Product {
   defective_units?: number;
 }
 
+export interface SaleItemWithProductAndImei extends SaleItem {
+  product: Product;
+  product_imei_serials?: ProductImeiSerial[];
+}
+
 export interface SaleWithItems extends Sale {
-  sale_items: (SaleItem & { product: Product })[];
+  sale_items: SaleItemWithProductAndImei[];
   customer: Customer | null;
-    sale_item_imei_serials?: Array<{
-      imei_serial: ProductImeiSerial;
-    }>;
   user: User | null;
 }
 

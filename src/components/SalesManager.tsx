@@ -67,13 +67,11 @@ export default function SalesManager() {
             unit_price,
             total_price,
             product:products (id, name, has_imei_serial, imei_serial_type),
-            sale_item_imei_serials (
-              imei_serial:product_imei_serials (
-                id,
-                imei_number,
-                serial_number,
-                notes
-              )
+            product_imei_serials (
+              id,
+              imei_number,
+              serial_number,
+              notes
             )
           )
         `)
@@ -691,21 +689,21 @@ export default function SalesManager() {
                       </p>
                       
                       {/* Mostrar IMEI/Serial si están disponibles */}
-                      {item.product.has_imei_serial && item.sale_item_imei_serials && item.sale_item_imei_serials.length > 0 && (
+                      {item.product.has_imei_serial && item.product_imei_serials && item.product_imei_serials.length > 0 && (
                         <div className="mt-2 space-y-1">
-                          {item.sale_item_imei_serials.map((imeiSerial, imeiIndex) => (
+                          {item.product_imei_serials.map((imeiSerial, imeiIndex) => (
                             <div key={imeiIndex} className="text-xs text-purple-600 font-mono bg-purple-50 px-2 py-1 rounded">
-                              {item.product.imei_serial_type === 'imei' && imeiSerial.imei_serial.imei_number && (
-                                <span>IMEI: {imeiSerial.imei_serial.imei_number}</span>
+                              {item.product.imei_serial_type === 'imei' && imeiSerial.imei_number && (
+                                <span>IMEI: {imeiSerial.imei_number}</span>
                               )}
-                              {item.product.imei_serial_type === 'serial' && imeiSerial.imei_serial.serial_number && (
-                                <span>Serial: {imeiSerial.imei_serial.serial_number}</span>
+                              {item.product.imei_serial_type === 'serial' && imeiSerial.serial_number && (
+                                <span>Serial: {imeiSerial.serial_number}</span>
                               )}
                               {item.product.imei_serial_type === 'both' && (
                                 <span>
-                                  {imeiSerial.imei_serial.imei_number && `IMEI: ${imeiSerial.imei_serial.imei_number}`}
-                                  {imeiSerial.imei_serial.imei_number && imeiSerial.imei_serial.serial_number && ' | '}
-                                  {imeiSerial.imei_serial.serial_number && `Serial: ${imeiSerial.imei_serial.serial_number}`}
+                                  {imeiSerial.imei_number && `IMEI: ${imeiSerial.imei_number}`}
+                                  {imeiSerial.imei_number && imeiSerial.serial_number && ' | '}
+                                  {imeiSerial.serial_number && `Serial: ${imeiSerial.serial_number}`}
                                 </span>
                               )}
                             </div>

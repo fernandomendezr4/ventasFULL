@@ -1,18 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Search, Edit, Trash2, Package, AlertTriangle, Filter, X, Download, Upload } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { Product, Category, Supplier } from '../lib/types';
+import { Plus, Search, Edit, Trash2, Package, AlertTriangle, Filter, X, Download, Upload, Eye, Hash } from 'lucide-react';
+import { supabase, isDemoMode } from '../lib/supabase';
+import { ProductWithCategory, Category, Supplier } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
-import { useNotification } from '../hooks/useNotification';
-import { useConfirmation } from '../hooks/useConfirmation';
+import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
-import NotificationModal from './NotificationModal';
-import ConfirmationModal from './ConfirmationModal';
 import ImeiSerialManager from './ImeiSerialManager';
 import BulkProductImport from './BulkProductImport';
+import ProductDetailsModal from './ProductDetailsModal';
 
 // Datos demo para cuando no hay conexión a Supabase
-const demoProducts: Product[] = [
+const demoProducts: ProductWithCategory[] = [
   {
     id: 'demo-product-1',
     name: 'iPhone 15 Pro',
@@ -21,8 +19,8 @@ const demoProducts: Product[] = [
     purchase_price: 3800000,
     stock: 5,
     barcode: '123456789',
-    category_id: null,
-    supplier_id: null,
+    category_id: 'demo-cat-1',
+    supplier_id: 'demo-sup-1',
     created_at: new Date().toISOString(),
     has_imei_serial: true,
     imei_serial_type: 'imei',
@@ -30,7 +28,9 @@ const demoProducts: Product[] = [
     bulk_import_batch: '',
     import_notes: '',
     imported_at: null,
-    imported_by: null
+    imported_by: null,
+    category: { id: 'demo-cat-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
+    supplier: { id: 'demo-sup-1', name: 'Proveedor Demo', contact_person: 'Juan Pérez', email: 'juan@proveedor.com', phone: '123456789', address: 'Calle 123', created_at: new Date().toISOString() }
   },
   {
     id: 'demo-product-2',
@@ -40,8 +40,8 @@ const demoProducts: Product[] = [
     purchase_price: 2600000,
     stock: 8,
     barcode: '987654321',
-    category_id: null,
-    supplier_id: null,
+    category_id: 'demo-cat-1',
+    supplier_id: 'demo-sup-1',
     created_at: new Date().toISOString(),
     has_imei_serial: true,
     imei_serial_type: 'imei',
@@ -49,12 +49,45 @@ const demoProducts: Product[] = [
     bulk_import_batch: '',
     import_notes: '',
     imported_at: null,
-    imported_by: null
+    imported_by: null,
+    category: { id: 'demo-cat-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
+    supplier: { id: 'demo-sup-1', name: 'Proveedor Demo', contact_person: 'Juan Pérez', email: 'juan@proveedor.com', phone: '123456789', address: 'Calle 123', created_at: new Date().toISOString() }
+  },
+  {
+    id: 'demo-product-3',
+    name: 'Audífonos Bluetooth',
+    description: 'Audífonos inalámbricos premium',
+    sale_price: 250000,
+    purchase_price: 180000,
+    stock: 2,
+    barcode: '456789123',
+    category_id: 'demo-cat-2',
+    supplier_id: 'demo-sup-1',
+    created_at: new Date().toISOString(),
+    has_imei_serial: false,
+    imei_serial_type: 'serial',
+    requires_imei_serial: false,
+    bulk_import_batch: '',
+    import_notes: '',
+    imported_at: null,
+    imported_by: null,
+    category: { id: 'demo-cat-2', name: 'Accesorios', description: 'Accesorios tecnológicos', created_at: new Date().toISOString() },
+    supplier: { id: 'demo-sup-1', name: 'Proveedor Demo', contact_person: 'Juan Pérez', email: 'juan@proveedor.com', phone: '123456789', address: 'Calle 123', created_at: new Date().toISOString() }
   }
 ];
 
+const demoCategories: Category[] = [
+  { id: 'demo-cat-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
+  { id: 'demo-cat-2', name: 'Accesorios', description: 'Accesorios tecnológicos', created_at: new Date().toISOString() }
+];
+
+const demoSuppliers: Supplier[] = [
+  { id: 'demo-sup-1', name: 'Proveedor Demo', contact_person: 'Juan Pérez', email: 'juan@proveedor.com', phone: '123456789', address: 'Calle 123', created_at: new Date().toISOString() }
+];
+
 export default function ProductManager() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const { user } = useAuth();
+  const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,18 +95,14 @@ export default function ProductManager() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<ProductWithCategory | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductWithCategory | null>(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showImeiManager, setShowImeiManager] = useState(false);
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'stock' | 'price' | 'sales'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'stock' | 'price' | 'created_at'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  const { showNotification } = useNotification();
-  const { notification, hideNotification, showSuccess, showError } = useNotification();
-  const { showConfirmation } = useConfirmation();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -94,16 +123,11 @@ export default function ProductManager() {
   }, []);
 
   const loadData = async () => {
-    if (!supabase) {
+    if (isDemoMode || !supabase) {
       // Modo demo
       setProducts(demoProducts);
-      setCategories([
-        { id: 'demo-cat-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
-        { id: 'demo-cat-2', name: 'Accesorios', description: 'Accesorios tecnológicos', created_at: new Date().toISOString() }
-      ]);
-      setSuppliers([
-        { id: 'demo-sup-1', name: 'Proveedor Demo', contact_person: 'Juan Pérez', email: 'juan@proveedor.com', phone: '123456789', address: 'Calle 123', created_at: new Date().toISOString() }
-      ]);
+      setCategories(demoCategories);
+      setSuppliers(demoSuppliers);
       setLoading(false);
       return;
     }
@@ -115,8 +139,8 @@ export default function ProductManager() {
         .from('products')
         .select(`
           *,
-          category:categories(name),
-          supplier:suppliers(name)
+          category:categories(id, name, description),
+          supplier:suppliers(id, name, contact_person, email, phone, address)
         `)
         .order('created_at', { ascending: false });
       
@@ -135,7 +159,7 @@ export default function ProductManager() {
       setSuppliers(suppliersResult.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
-      showError('Error al cargar datos', 'No se pudieron cargar los productos. Verifica tu conexión.');
+      alert('Error al cargar datos: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -177,6 +201,10 @@ export default function ProductManager() {
           aValue = a.sale_price;
           bValue = b.sale_price;
           break;
+        case 'created_at':
+          aValue = new Date(a.created_at).getTime();
+          bValue = new Date(b.created_at).getTime();
+          break;
         default:
           return 0;
       }
@@ -189,11 +217,27 @@ export default function ProductManager() {
     return filtered;
   }, [products, searchTerm, selectedCategory, selectedSupplier, stockFilter, sortBy, sortOrder]);
 
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      sale_price: '',
+      purchase_price: '',
+      stock: '',
+      category_id: '',
+      supplier_id: '',
+      barcode: '',
+      has_imei_serial: false,
+      imei_serial_type: 'serial',
+      requires_imei_serial: false
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name.trim() || !formData.sale_price) {
-      showError('Campos requeridos', 'El nombre y precio de venta son obligatorios');
+      alert('El nombre y precio de venta son obligatorios');
       return;
     }
 
@@ -212,20 +256,26 @@ export default function ProductManager() {
         requires_imei_serial: formData.requires_imei_serial
       };
 
-      if (!supabase) {
+      if (isDemoMode || !supabase) {
         // Modo demo
-        const newProduct = {
+        const newProduct: ProductWithCategory = {
           id: `demo-product-${Date.now()}`,
           ...productData,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          bulk_import_batch: '',
+          import_notes: '',
+          imported_at: null,
+          imported_by: null,
+          category: categories.find(c => c.id === productData.category_id) || null,
+          supplier: suppliers.find(s => s.id === productData.supplier_id) || null
         };
         
         if (editingProduct) {
           setProducts(prev => prev.map(p => p.id === editingProduct.id ? newProduct : p));
-          showSuccess('Producto actualizado', 'El producto se actualizó correctamente en modo demo');
+          alert('Producto actualizado correctamente en modo demo');
         } else {
           setProducts(prev => [...prev, newProduct]);
-          showSuccess('Producto creado', 'El producto se creó correctamente en modo demo');
+          alert('Producto creado correctamente en modo demo');
         }
       } else {
         if (editingProduct) {
@@ -235,14 +285,14 @@ export default function ProductManager() {
             .eq('id', editingProduct.id);
 
           if (error) throw error;
-          showSuccess('Producto actualizado', 'El producto se actualizó correctamente');
+          alert('Producto actualizado correctamente');
         } else {
           const { error } = await supabase
             .from('products')
             .insert([productData]);
 
           if (error) throw error;
-          showSuccess('Producto creado', 'El producto se creó correctamente');
+          alert('Producto creado correctamente');
         }
         
         await loadData();
@@ -250,26 +300,14 @@ export default function ProductManager() {
 
       setShowForm(false);
       setEditingProduct(null);
-      setFormData({
-        name: '',
-        description: '',
-        sale_price: '',
-        purchase_price: '',
-        stock: '',
-        category_id: '',
-        supplier_id: '',
-        barcode: '',
-        has_imei_serial: false,
-        imei_serial_type: 'serial',
-        requires_imei_serial: false
-      });
+      resetForm();
     } catch (error) {
       console.error('Error saving product:', error);
-      showError('Error al guardar', 'No se pudo guardar el producto: ' + (error as Error).message);
+      alert('Error al guardar producto: ' + (error as Error).message);
     }
   };
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = (product: ProductWithCategory) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -287,55 +325,48 @@ export default function ProductManager() {
     setShowForm(true);
   };
 
-  const handleDelete = async (product: Product) => {
-    showConfirmation(
-      'Confirmar eliminación',
-      `¿Estás seguro de que quieres eliminar el producto "${product.name}"? Esta acción no se puede deshacer.`,
-      async () => {
-        try {
-          if (!supabase) {
-            // Modo demo
-            setProducts(prev => prev.filter(p => p.id !== product.id));
-            showSuccess('Producto eliminado', 'El producto se eliminó correctamente en modo demo');
-            return;
-          }
+  const handleDelete = async (product: ProductWithCategory) => {
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar el producto "${product.name}"?`)) {
+      return;
+    }
 
-          const { error } = await supabase
-            .from('products')
-            .delete()
-            .eq('id', product.id);
-
-          if (error) throw error;
-
-          setProducts(prev => prev.filter(p => p.id !== product.id));
-          showSuccess('Producto eliminado', 'El producto se eliminó correctamente');
-        } catch (error) {
-          console.error('Error deleting product:', error);
-          showError('Error al eliminar', 'No se pudo eliminar el producto: ' + (error as Error).message);
-        }
-      },
-      {
-        confirmText: 'Eliminar',
-        cancelText: 'Cancelar',
-        type: 'danger'
+    try {
+      if (isDemoMode || !supabase) {
+        // Modo demo
+        setProducts(prev => prev.filter(p => p.id !== product.id));
+        alert('Producto eliminado correctamente en modo demo');
+        return;
       }
-    );
+
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', product.id);
+
+      if (error) throw error;
+
+      setProducts(prev => prev.filter(p => p.id !== product.id));
+      alert('Producto eliminado correctamente');
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('Error al eliminar producto: ' + (error as Error).message);
+    }
   };
 
-  const handleViewDetails = (product: Product) => {
+  const handleViewDetails = (product: ProductWithCategory) => {
     setSelectedProduct(product);
     setShowDetailsModal(true);
   };
 
-  const handleManageImeiSerial = (product: Product) => {
+  const handleManageImeiSerial = (product: ProductWithCategory) => {
     setSelectedProduct(product);
     setShowImeiManager(true);
   };
 
   const getStockStatusColor = (stock: number) => {
-    if (stock === 0) return 'text-red-600 bg-red-50';
-    if (stock <= 5) return 'text-yellow-600 bg-yellow-50';
-    return 'text-green-600 bg-green-50';
+    if (stock === 0) return 'text-red-600 bg-red-50 border-red-200';
+    if (stock <= 5) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+    return 'text-green-600 bg-green-50 border-green-200';
   };
 
   const getStockStatusText = (stock: number) => {
@@ -354,8 +385,8 @@ export default function ProductManager() {
           product.sale_price,
           product.purchase_price || 0,
           product.stock,
-          `"${product.category_name || ''}"`,
-          `"${product.supplier_name || ''}"`,
+          `"${product.category?.name || ''}"`,
+          `"${product.supplier?.name || ''}"`,
           `"${product.barcode || ''}"`
         ].join(','))
       ].join('\n');
@@ -370,10 +401,10 @@ export default function ProductManager() {
       link.click();
       document.body.removeChild(link);
       
-      showNotification('Productos exportados exitosamente', 'success');
+      alert('Productos exportados exitosamente');
     } catch (error) {
       console.error('Error exporting products:', error);
-      showNotification('Error al exportar productos', 'error');
+      alert('Error al exportar productos');
     }
   };
 
@@ -382,8 +413,20 @@ export default function ProductManager() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
+          <div className="h-8 bg-slate-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
+              <div className="h-4 bg-slate-200 rounded w-3/4 mb-4"></div>
+              <div className="h-3 bg-slate-200 rounded w-1/2 mb-2"></div>
+              <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -393,11 +436,11 @@ export default function ProductManager() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Package className="w-6 h-6" />
-            Gestión de Productos
-          </h1>
-          <p className="text-gray-600 mt-1">
+          <h2 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
+            <Package className="h-8 w-8 text-blue-600" />
+            Productos
+          </h2>
+          <p className="text-slate-600 mt-1">
             {products.length} productos totales
             {lowStockCount > 0 && (
               <span className="ml-2 text-yellow-600">
@@ -414,21 +457,25 @@ export default function ProductManager() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={exportProducts}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
           >
             <Download className="w-4 h-4" />
             Exportar
           </button>
           <button
             onClick={() => setShowBulkImport(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors duration-200"
           >
             <Upload className="w-4 h-4" />
             Importar
           </button>
           <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => {
+              setShowForm(true);
+              setEditingProduct(null);
+              resetForm();
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
           >
             <Plus className="w-4 h-4" />
             Nuevo Producto
@@ -437,17 +484,17 @@ export default function ProductManager() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border space-y-4">
+      <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Buscar productos..."
+                placeholder="Buscar productos por nombre, descripción o código..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -456,7 +503,7 @@ export default function ProductManager() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">Todas las categorías</option>
               {categories.map(category => (
@@ -469,7 +516,7 @@ export default function ProductManager() {
             <select
               value={selectedSupplier}
               onChange={(e) => setSelectedSupplier(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">Todos los proveedores</option>
               {suppliers.map(supplier => (
@@ -482,7 +529,7 @@ export default function ProductManager() {
             <select
               value={stockFilter}
               onChange={(e) => setStockFilter(e.target.value as 'all' | 'low' | 'out')}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">Todo el stock</option>
               <option value="low">Stock bajo (≤5)</option>
@@ -496,7 +543,7 @@ export default function ProductManager() {
                 setSortBy(field as any);
                 setSortOrder(order as 'asc' | 'desc');
               }}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="name-asc">Nombre A-Z</option>
               <option value="name-desc">Nombre Z-A</option>
@@ -504,12 +551,14 @@ export default function ProductManager() {
               <option value="stock-desc">Stock mayor</option>
               <option value="price-asc">Precio menor</option>
               <option value="price-desc">Precio mayor</option>
+              <option value="created_at-desc">Más recientes</option>
+              <option value="created_at-asc">Más antiguos</option>
             </select>
           </div>
         </div>
 
         {(searchTerm || selectedCategory || selectedSupplier || stockFilter !== 'all') && (
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2 text-sm text-slate-600 mt-3">
             <Filter className="w-4 h-4" />
             <span>Mostrando {filteredProducts.length} de {products.length} productos</span>
             <button
@@ -519,7 +568,7 @@ export default function ProductManager() {
                 setSelectedSupplier('');
                 setStockFilter('all');
               }}
-              className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              className="text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors duration-200"
             >
               <X className="w-3 h-3" />
               Limpiar filtros
@@ -529,23 +578,35 @@ export default function ProductManager() {
       </div>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredProducts.map((product) => (
-          <div key={product.id} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
-            <div className="p-4">
-              <div className="flex justify-between items-start mb-3">
-                <h3 className="font-semibold text-gray-900 line-clamp-2">{product.name}</h3>
-                <div className="flex gap-1">
+          <div key={product.id} className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all duration-200 group">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-slate-900 line-clamp-2 mb-2">{product.name}</h3>
+                  {product.description && (
+                    <p className="text-sm text-slate-600 line-clamp-2 mb-3">{product.description}</p>
+                  )}
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <button
+                    onClick={() => handleViewDetails(product)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                    title="Ver detalles"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => handleEdit(product)}
-                    className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
                     title="Editar producto"
                   >
                     <Edit className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(product)}
-                    className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
                     title="Eliminar producto"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -553,38 +614,44 @@ export default function ProductManager() {
                 </div>
               </div>
 
-              {product.description && (
-                <p className="text-sm text-gray-600 mb-3 line-clamp-2">{product.description}</p>
-              )}
-
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Precio:</span>
-                  <span className="font-semibold text-green-600">
+                  <span className="text-sm text-slate-600">Precio:</span>
+                  <span className="font-bold text-green-600 text-lg">
                     {formatCurrency(product.sale_price)}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Stock:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStockStatusColor(product.stock)}`}>
+                  <span className="text-sm text-slate-600">Stock:</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStockStatusColor(product.stock)}`}>
                     {product.stock} - {getStockStatusText(product.stock)}
                   </span>
                 </div>
 
-                {categories.find(c => c.id === product.category_id)?.name && (
+                {product.category && (
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Categoría:</span>
-                    <span className="text-sm text-gray-700">{categories.find(c => c.id === product.category_id)?.name}</span>
+                    <span className="text-sm text-slate-600">Categoría:</span>
+                    <span className="text-sm text-slate-900 font-medium">{product.category.name}</span>
+                  </div>
+                )}
+
+                {product.supplier && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-600">Proveedor:</span>
+                    <span className="text-sm text-slate-900">{product.supplier.name}</span>
                   </div>
                 )}
 
                 {product.has_imei_serial && (
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">IMEI/Serial:</span>
+                    <span className="text-sm text-slate-600 flex items-center">
+                      <Hash className="h-3 w-3 mr-1" />
+                      IMEI/Serial:
+                    </span>
                     <button
                       onClick={() => handleManageImeiSerial(product)}
-                      className="text-sm text-blue-600 hover:text-blue-800"
+                      className="text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors duration-200"
                     >
                       Gestionar
                     </button>
@@ -592,21 +659,35 @@ export default function ProductManager() {
                 )}
 
                 {product.barcode && (
-                  <div className="text-xs text-gray-500 font-mono bg-gray-50 p-1 rounded">
+                  <div className="text-xs text-slate-500 font-mono bg-slate-50 p-2 rounded border">
                     {product.barcode}
                   </div>
                 )}
               </div>
+
+              {/* Profit calculation if purchase price exists */}
+              {product.purchase_price && product.purchase_price > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-200">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-600">Ganancia:</span>
+                    <span className={`font-medium ${
+                      product.sale_price > product.purchase_price ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(product.sale_price - product.purchase_price)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}
       </div>
 
       {filteredProducts.length === 0 && !loading && (
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron productos</h3>
-          <p className="text-gray-600 mb-4">
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+          <Package className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-slate-900 mb-2">No se encontraron productos</h3>
+          <p className="text-slate-600 mb-6">
             {searchTerm || selectedCategory || selectedSupplier || stockFilter !== 'all'
               ? 'Intenta ajustar los filtros de búsqueda'
               : 'Comienza agregando tu primer producto'
@@ -614,11 +695,15 @@ export default function ProductManager() {
           </p>
           {!searchTerm && !selectedCategory && !selectedSupplier && stockFilter === 'all' && (
             <button
-              onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={() => {
+                setShowForm(true);
+                setEditingProduct(null);
+                resetForm();
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
             >
-              <Plus className="w-4 h-4" />
-              Agregar Producto
+              <Plus className="w-5 h-5" />
+              Agregar Primer Producto
             </button>
           )}
         </div>
@@ -627,105 +712,108 @@ export default function ProductManager() {
       {/* Product Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-semibold text-slate-900">
                   {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-                </h2>
+                </h3>
                 <button
                   onClick={() => {
                     setShowForm(false);
                     setEditingProduct(null);
                     resetForm();
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
+            </div>
 
+            <div className="p-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Nombre *
                     </label>
                     <input
                       type="text"
-                      name="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
+                      placeholder="Nombre del producto"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Código de Barras
                     </label>
                     <input
                       type="text"
-                      name="barcode"
                       value={formData.barcode}
                       onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Código de barras"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Descripción
                   </label>
                   <textarea
-                    name="description"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Descripción del producto"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Precio de Venta *
                     </label>
                     <FormattedNumberInput
                       value={formData.sale_price}
                       onChange={(value) => setFormData({ ...formData, sale_price: value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0.00"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
                       min="0"
+                      required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Precio de Compra
                     </label>
                     <FormattedNumberInput
                       value={formData.purchase_price}
                       onChange={(value) => setFormData({ ...formData, purchase_price: value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0.00"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
                       min="0"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Stock *
                     </label>
                     <input
                       type="number"
-                      name="stock"
                       value={formData.stock}
                       onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                       min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0"
                       required
                     />
                   </div>
@@ -733,14 +821,13 @@ export default function ProductManager() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Categoría
                     </label>
                     <select
-                      name="category_id"
                       value={formData.category_id}
                       onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Seleccionar categoría</option>
                       {categories.map(category => (
@@ -752,14 +839,13 @@ export default function ProductManager() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
                       Proveedor
                     </label>
                     <select
-                      name="supplier_id"
                       value={formData.supplier_id}
                       onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Seleccionar proveedor</option>
                       {suppliers.map(supplier => (
@@ -772,32 +858,30 @@ export default function ProductManager() {
                 </div>
 
                 {/* IMEI/Serial Configuration */}
-                <div className="border-t pt-4">
+                <div className="border-t border-slate-200 pt-4">
                   <div className="flex items-center gap-2 mb-3">
                     <input
                       type="checkbox"
                       id="has_imei_serial"
-                      name="has_imei_serial"
                       checked={formData.has_imei_serial}
                       onChange={(e) => setFormData({ ...formData, has_imei_serial: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                     />
-                    <label htmlFor="has_imei_serial" className="text-sm font-medium text-gray-700">
+                    <label htmlFor="has_imei_serial" className="text-sm font-medium text-slate-700">
                       Este producto tiene IMEI/Serial
                     </label>
                   </div>
 
                   {formData.has_imei_serial && (
-                    <div className="space-y-3 ml-6">
+                    <div className="space-y-3 ml-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
                           Tipo de identificador
                         </label>
                         <select
-                          name="imei_serial_type"
                           value={formData.imei_serial_type}
                           onChange={(e) => setFormData({ ...formData, imei_serial_type: e.target.value as 'imei' | 'serial' | 'both' })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="serial">Número de Serie</option>
                           <option value="imei">IMEI</option>
@@ -809,12 +893,11 @@ export default function ProductManager() {
                         <input
                           type="checkbox"
                           id="requires_imei_serial"
-                          name="requires_imei_serial"
                           checked={formData.requires_imei_serial}
                           onChange={(e) => setFormData({ ...formData, requires_imei_serial: e.target.checked })}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                         />
-                        <label htmlFor="requires_imei_serial" className="text-sm text-gray-700">
+                        <label htmlFor="requires_imei_serial" className="text-sm text-slate-700">
                           Requerir IMEI/Serial para vender
                         </label>
                       </div>
@@ -828,27 +911,15 @@ export default function ProductManager() {
                     onClick={() => {
                       setShowForm(false);
                       setEditingProduct(null);
-                      setFormData({
-                        name: '',
-                        description: '',
-                        sale_price: '',
-                        purchase_price: '',
-                        stock: '',
-                        category_id: '',
-                        supplier_id: '',
-                        barcode: '',
-                        has_imei_serial: false,
-                        imei_serial_type: 'serial',
-                        requires_imei_serial: false
-                      });
+                      resetForm();
                     }}
-                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 transition-colors duration-200"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
                   >
                     {editingProduct ? 'Actualizar' : 'Crear'}
                   </button>
@@ -861,71 +932,14 @@ export default function ProductManager() {
 
       {/* Product Details Modal */}
       {showDetailsModal && selectedProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-auto max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-slate-900">
-                  Detalles del Producto
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedProduct(null);
-                  }}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-lg">{selectedProduct.name}</h4>
-                  {selectedProduct.description && (
-                    <p className="text-slate-600 mt-1">{selectedProduct.description}</p>
-                  )}
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-sm text-slate-600">Precio de Venta:</span>
-                    <p className="font-bold text-green-600">{formatCurrency(selectedProduct.sale_price)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-slate-600">Stock:</span>
-                    <p className="font-bold text-slate-900">{selectedProduct.stock} unidades</p>
-                  </div>
-                  {selectedProduct.purchase_price && selectedProduct.purchase_price > 0 && (
-                    <div>
-                      <span className="text-sm text-slate-600">Precio de Compra:</span>
-                      <p className="font-bold text-slate-900">{formatCurrency(selectedProduct.purchase_price)}</p>
-                    </div>
-                  )}
-                  {selectedProduct.barcode && (
-                    <div>
-                      <span className="text-sm text-slate-600">Código de Barras:</span>
-                      <p className="font-mono text-slate-900">{selectedProduct.barcode}</p>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="pt-4 border-t border-slate-200">
-                  <span className="text-sm text-slate-600">Fecha de Creación:</span>
-                  <p className="text-slate-900">
-                    {new Date(selectedProduct.created_at).toLocaleDateString('es-ES', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProductDetailsModal
+          isOpen={showDetailsModal}
+          onClose={() => {
+            setShowDetailsModal(false);
+            setSelectedProduct(null);
+          }}
+          product={selectedProduct}
+        />
       )}
 
       {/* Bulk Import Modal */}
@@ -956,28 +970,6 @@ export default function ProductManager() {
           }}
         />
       )}
-
-      {/* Notification Modal */}
-      <NotificationModal
-        isOpen={notification.isOpen}
-        onClose={hideNotification}
-        type={notification.type}
-        title={notification.title}
-        message={notification.message}
-      />
-
-      {/* Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={confirmation.isOpen}
-        onClose={hideConfirmation}
-        onConfirm={handleConfirm}
-        title={confirmation.title}
-        message={confirmation.message}
-        confirmText={confirmation.confirmText}
-        cancelText={confirmation.cancelText}
-        type={confirmation.type}
-        loading={confirmation.loading}
-      />
     </div>
   );
 }

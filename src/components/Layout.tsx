@@ -69,6 +69,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
   const adminTabs = [
     { id: 'users', label: 'Usuarios', icon: User, category: 'admin', permission: 'manage_users' },
+    { id: 'audit', label: 'Auditoría', icon: Shield, category: 'admin', permission: 'view_audit' },
     { id: 'settings', label: 'Configuración', icon: Settings, category: 'admin', permission: 'manage_settings' },
   ];
 

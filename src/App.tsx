@@ -19,6 +19,7 @@ import InstallmentManager from './components/InstallmentManager';
 import Settings from './components/Settings';
 import PerformanceMonitor from './components/PerformanceMonitor';
 import LazyLoader from './components/LazyLoader';
+import AuditSystemManager from './components/AuditSystemManager';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -157,6 +158,12 @@ function AppContent() {
         return (
           <ViewTransition transitionKey="settings" type="fade">
             <Settings />
+          </ViewTransition>
+        );
+      case 'audit':
+        return (
+          <ViewTransition transitionKey="audit" type="fade">
+            <AuditSystemManager />
           </ViewTransition>
         );
       default:

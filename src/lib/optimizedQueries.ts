@@ -279,9 +279,18 @@ export const getLowStockProducts = async (threshold: number = 10) => {
   if (cached) return cached;
 
   try {
-    const { data, error } = await supabase.rpc('get_low_stock_products', {
-      threshold
-    });
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        id,
+        name,
+        stock,
+        sale_price,
+        category:categories(name),
+        supplier:suppliers(name)
+      `)
+      .lte('stock', threshold)
+      .order('stock', { ascending: true });
 
     if (error) throw error;
 

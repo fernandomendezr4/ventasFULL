@@ -25,63 +25,6 @@ let connectionState = {
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
 
-let supabaseClient: any = null;
-
-// Configuración optimizada de Supabase
-if (!isDemoMode) {
-  try {
-    supabaseClient = createClient<Database>(supabaseUrl, supabaseKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false,
-        flowType: 'pkce',
-        storageKey: 'sb-auth-token',
-        debug: false
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'ventasfull-app',
-          'X-Client-Version': '1.0.0'
-        },
-        fetch: (url, options = {}) => {
-          // Agregar timeout personalizado
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos timeout
-
-          return fetch(url, {
-            ...options,
-            signal: controller.signal,
-            headers: {
-              ...options.headers,
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-            }
-          }).finally(() => {
-            clearTimeout(timeoutId);
-          });
-        }
-      },
-      db: {
-        schema: 'public'
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 10
-        }
-      }
-    });
-
-    // Inicializar monitoreo de conexión
-    initializeConnectionMonitoring();
-  } catch (error) {
-    console.error('Error creating Supabase client:', error);
-    supabaseClient = null;
-  }
-}
-
-export const supabase = supabaseClient;
-
 // Sistema de listeners para cambios de estado de conexión
 export const addConnectionListener = (callback: (status: ConnectionStatus) => void) => {
   connectionState.listeners.add(callback);
@@ -204,6 +147,63 @@ function initializeConnectionMonitoring() {
   // Verificar conexión inicial
   checkConnectionHealth();
 }
+
+let supabaseClient: any = null;
+
+// Configuración optimizada de Supabase
+if (!isDemoMode) {
+  try {
+    supabaseClient = createClient<Database>(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        flowType: 'pkce',
+        storageKey: 'sb-auth-token',
+        debug: false
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'ventasfull-app',
+          'X-Client-Version': '1.0.0'
+        },
+        fetch: (url, options = {}) => {
+          // Agregar timeout personalizado
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos timeout
+
+          return fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+              ...options.headers,
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          }).finally(() => {
+            clearTimeout(timeoutId);
+          });
+        }
+      },
+      db: {
+        schema: 'public'
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      }
+    });
+
+    // Inicializar monitoreo de conexión
+    initializeConnectionMonitoring();
+  } catch (error) {
+    console.error('Error creating Supabase client:', error);
+    supabaseClient = null;
+  }
+}
+
+export const supabase = supabaseClient;
 
 // Función para forzar reconexión manual
 export const forceReconnection = async (): Promise<boolean> => {

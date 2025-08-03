@@ -6,6 +6,7 @@ import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
+import { isDemoMode } from '../lib/supabase';
 
 export default function InstallmentManager() {
   const { user } = useAuth();
@@ -30,6 +31,12 @@ export default function InstallmentManager() {
   const checkCashRegister = async () => {
     if (!user) return;
     
+    if (isDemoMode) {
+      // Demo mode: simulate no open cash register
+      setCurrentCashRegister(null);
+      return;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('cash_registers')
@@ -52,6 +59,63 @@ export default function InstallmentManager() {
   const loadInstallmentSales = async () => {
     try {
       setLoading(true);
+      
+      if (isDemoMode) {
+        // Demo mode: provide sample installment sales data
+        const demoSales = [
+          {
+            id: 'demo-sale-1',
+            total_amount: 1500000,
+            total_paid: 500000,
+            payment_type: 'installment',
+            payment_status: 'partial',
+            subtotal: 1500000,
+            discount_amount: 0,
+            created_at: new Date().toISOString(),
+            customer: {
+              id: 'demo-customer-1',
+              name: 'Juan Pérez',
+              phone: '3001234567',
+              email: 'juan@email.com',
+              cedula: '12345678'
+            },
+            user: {
+              id: 'demo-user-1',
+              name: 'Vendedor Demo',
+              email: 'vendedor@demo.com'
+            },
+            sale_items: []
+          },
+          {
+            id: 'demo-sale-2',
+            total_amount: 800000,
+            total_paid: 800000,
+            payment_type: 'installment',
+            payment_status: 'paid',
+            subtotal: 800000,
+            discount_amount: 0,
+            created_at: new Date(Date.now() - 86400000).toISOString(),
+            customer: {
+              id: 'demo-customer-2',
+              name: 'María García',
+              phone: '3009876543',
+              email: 'maria@email.com',
+              cedula: '87654321'
+            },
+            user: {
+              id: 'demo-user-1',
+              name: 'Vendedor Demo',
+              email: 'vendedor@demo.com'
+            },
+            sale_items: []
+          }
+        ];
+        
+        setInstallmentSales(demoSales as SaleWithItems[]);
+        setLoading(false);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('sales')
         .select(`
@@ -79,6 +143,33 @@ export default function InstallmentManager() {
 
   const loadInstallments = async () => {
     try {
+      if (isDemoMode) {
+        // Demo mode: provide sample installments data
+        const demoInstallments = [
+          {
+            id: 'demo-installment-1',
+            sale_id: 'demo-sale-1',
+            amount_paid: 300000,
+            payment_date: new Date().toISOString(),
+            payment_method: 'cash',
+            notes: 'Primer abono',
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'demo-installment-2',
+            sale_id: 'demo-sale-1',
+            amount_paid: 200000,
+            payment_date: new Date(Date.now() - 86400000).toISOString(),
+            payment_method: 'cash',
+            notes: 'Segundo abono',
+            created_at: new Date(Date.now() - 86400000).toISOString()
+          }
+        ];
+        
+        setInstallments(demoInstallments);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('payment_installments')
         .select('*')
@@ -94,6 +185,11 @@ export default function InstallmentManager() {
   const handlePayment = async () => {
     if (!selectedSale || !paymentAmount) {
       alert('Complete todos los campos requeridos');
+      return;
+    }
+
+    if (isDemoMode) {
+      alert('Función no disponible en modo demo');
       return;
     }
 

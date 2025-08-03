@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Users, Mail, Phone, MapPin, Search, Filter } from 
 import { supabase } from '../lib/supabase';
 import { Customer } from '../lib/types';
 import FormattedNumberInput from './FormattedNumberInput';
+import { isDemoMode } from '../lib/supabase';
 
 export default function CustomerManager() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -27,6 +28,44 @@ export default function CustomerManager() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
+      
+      if (isDemoMode) {
+        // Demo mode: provide sample customers data
+        const demoCustomers = [
+          {
+            id: 'demo-customer-1',
+            name: 'Juan Pérez',
+            email: 'juan@email.com',
+            phone: '3001234567',
+            address: 'Calle 123 #45-67, Bogotá',
+            cedula: '12345678',
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'demo-customer-2',
+            name: 'María García',
+            email: 'maria@email.com',
+            phone: '3009876543',
+            address: 'Carrera 45 #12-34, Medellín',
+            cedula: '87654321',
+            created_at: new Date(Date.now() - 86400000).toISOString()
+          },
+          {
+            id: 'demo-customer-3',
+            name: 'Carlos López',
+            email: 'carlos@email.com',
+            phone: '3005555555',
+            address: 'Avenida 80 #23-45, Cali',
+            cedula: '11223344',
+            created_at: new Date(Date.now() - 172800000).toISOString()
+          }
+        ];
+        
+        setCustomers(demoCustomers);
+        setLoading(false);
+        return;
+      }
+      
       console.log('Cargando clientes...');
       const { data, error } = await supabase
         .from('customers')
@@ -50,6 +89,12 @@ export default function CustomerManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isDemoMode) {
+      alert('Función no disponible en modo demo');
+      return;
+    }
+    
     try {
       console.log('Guardando cliente:', formData);
       
@@ -93,6 +138,11 @@ export default function CustomerManager() {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
+      if (isDemoMode) {
+        alert('Función no disponible en modo demo');
+        return;
+      }
+      
       try {
         const { error } = await supabase
           .from('customers')

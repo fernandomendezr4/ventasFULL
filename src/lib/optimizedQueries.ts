@@ -1,6 +1,7 @@
 // Consultas optimizadas para mejor rendimiento con la base de datos
 
 import { supabase } from './supabase';
+import { isDemoMode } from './supabase';
 
 // Cache simple en memoria para consultas frecuentes
 const queryCache = new Map<string, { data: any; timestamp: number; ttl: number }>();
@@ -35,6 +36,18 @@ setInterval(() => {
 export const getDashboardStats = async (targetDate?: string) => {
   try {
     const today = targetDate || new Date().toISOString().split('T')[0];
+    
+    if (isDemoMode) {
+      // Demo mode: return sample dashboard stats
+      return {
+        total_sales: 150,
+        total_products: 45,
+        total_customers: 25,
+        today_sales: 2500000,
+        total_revenue: 15000000,
+        low_stock_count: 3
+      };
+    }
     
     // Consultas básicas sin RPC
     const [salesCount, productsCount, customersCount, todaySales, totalRevenue] = await Promise.all([
@@ -83,6 +96,38 @@ export const getProductsOptimized = async (limit: number = 50, offset: number = 
   
   if (cached) return cached;
 
+  if (isDemoMode) {
+    // Demo mode: return sample products data
+    const demoProducts = [
+      {
+        id: 'demo-product-1',
+        name: 'iPhone 15 Pro',
+        description: 'Smartphone Apple iPhone 15 Pro 128GB',
+        sale_price: 4500000,
+        stock: 5,
+        category_name: 'Smartphones',
+        supplier_name: 'Apple Store',
+        created_at: new Date().toISOString(),
+        has_imei_serial: true,
+        imei_serial_type: 'imei'
+      },
+      {
+        id: 'demo-product-2',
+        name: 'Samsung Galaxy S24',
+        description: 'Smartphone Samsung Galaxy S24 256GB',
+        sale_price: 3200000,
+        stock: 8,
+        category_name: 'Smartphones',
+        supplier_name: 'Samsung',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        has_imei_serial: true,
+        imei_serial_type: 'imei'
+      }
+    ];
+    
+    setCachedData(cacheKey, demoProducts);
+    return demoProducts;
+  }
   try {
     const { data, error } = await supabase
       .from('products_detailed')
@@ -101,6 +146,25 @@ export const getProductsOptimized = async (limit: number = 50, offset: number = 
 };
 
 export const searchProducts = async (searchTerm: string, categoryId?: string) => {
+  if (isDemoMode) {
+    // Demo mode: return filtered sample data
+    const demoProducts = [
+      {
+        id: 'demo-product-1',
+        name: 'iPhone 15 Pro',
+        description: 'Smartphone Apple iPhone 15 Pro 128GB',
+        sale_price: 4500000,
+        stock: 5,
+        category_name: 'Smartphones',
+        supplier_name: 'Apple Store'
+      }
+    ];
+    
+    return demoProducts.filter(product => 
+      !searchTerm || product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }
+  
   try {
     let query = supabase
       .from('products_detailed')
@@ -143,6 +207,26 @@ export const getSalesOptimized = async (
     customerId?: string;
   }
 ) => {
+  if (isDemoMode) {
+    // Demo mode: return sample sales data
+    const demoSales = [
+      {
+        id: 'demo-sale-1',
+        total_amount: 1500000,
+        subtotal: 1500000,
+        discount_amount: 0,
+        payment_type: 'cash',
+        payment_status: 'paid',
+        total_paid: 1500000,
+        created_at: new Date().toISOString(),
+        customer: { id: 'demo-customer-1', name: 'Juan Pérez', phone: '3001234567' },
+        user: { id: 'demo-user-1', name: 'Vendedor Demo' }
+      }
+    ];
+    
+    return demoSales;
+  }
+  
   try {
     let query = supabase
       .from('sales')
@@ -191,6 +275,46 @@ export const getSaleWithItems = async (saleId: string) => {
   
   if (cached) return cached;
 
+  if (isDemoMode) {
+    // Demo mode: return sample sale with items
+    const demoSaleWithItems = {
+      id: saleId,
+      total_amount: 1500000,
+      subtotal: 1500000,
+      discount_amount: 0,
+      payment_type: 'cash',
+      payment_status: 'paid',
+      total_paid: 1500000,
+      created_at: new Date().toISOString(),
+      sale_items: [
+        {
+          id: 'demo-item-1',
+          quantity: 1,
+          unit_price: 1500000,
+          total_price: 1500000,
+          product: {
+            id: 'demo-product-1',
+            name: 'iPhone 15 Pro',
+            barcode: '123456789',
+            category: { name: 'Smartphones' }
+          }
+        }
+      ],
+      customer: {
+        id: 'demo-customer-1',
+        name: 'Juan Pérez',
+        phone: '3001234567',
+        email: 'juan@email.com',
+        address: 'Calle 123 #45-67',
+        cedula: '12345678',
+        created_at: new Date().toISOString()
+      },
+      user: { name: 'Vendedor Demo', email: 'vendedor@demo.com' }
+    };
+    
+    setCachedData(cacheKey, demoSaleWithItems);
+    return demoSaleWithItems;
+  }
   try {
     const { data, error } = await supabase
       .from('sales')
@@ -229,6 +353,17 @@ export const getSaleWithItems = async (saleId: string) => {
 // =====================================================
 
 export const getCashRegisterBalance = async (registerId: string) => {
+  if (isDemoMode) {
+    // Demo mode: return sample balance data
+    return {
+      register_id: registerId,
+      opening_amount: 100000,
+      current_balance: 250000,
+      total_sales: 150000,
+      total_movements: 5
+    };
+  }
+  
   try {
     const { data, error } = await supabase.rpc('get_cash_register_balance', {
       register_id: registerId
@@ -248,6 +383,32 @@ export const getCashRegisterMovements = async (registerId: string) => {
   
   if (cached) return cached;
 
+  if (isDemoMode) {
+    // Demo mode: return sample movements data
+    const demoMovements = [
+      {
+        id: 'demo-movement-1',
+        type: 'opening',
+        category: 'apertura',
+        amount: 100000,
+        description: 'Apertura de caja',
+        created_at: new Date().toISOString(),
+        created_by_user: { name: 'Vendedor Demo' }
+      },
+      {
+        id: 'demo-movement-2',
+        type: 'sale',
+        category: 'venta',
+        amount: 150000,
+        description: 'Venta #demo-sale-1',
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+        created_by_user: { name: 'Vendedor Demo' }
+      }
+    ];
+    
+    setCachedData(cacheKey, demoMovements);
+    return demoMovements;
+  }
   try {
     const { data, error } = await supabase
       .from('cash_movements')
@@ -278,6 +439,30 @@ export const getLowStockProducts = async (threshold: number = 10) => {
   
   if (cached) return cached;
 
+  if (isDemoMode) {
+    // Demo mode: return sample low stock products
+    const demoLowStockProducts = [
+      {
+        id: 'demo-product-low-1',
+        name: 'Cargador USB-C',
+        stock: 3,
+        sale_price: 25000,
+        category: { name: 'Accesorios' },
+        supplier: { name: 'Proveedor Demo' }
+      },
+      {
+        id: 'demo-product-low-2',
+        name: 'Protector de Pantalla',
+        stock: 5,
+        sale_price: 15000,
+        category: { name: 'Accesorios' },
+        supplier: { name: 'Proveedor Demo' }
+      }
+    ];
+    
+    setCachedData(cacheKey, demoLowStockProducts);
+    return demoLowStockProducts;
+  }
   try {
     const { data, error } = await supabase
       .from('products')
@@ -308,6 +493,33 @@ export const getInventorySummary = async () => {
   
   if (cached) return cached;
 
+  if (isDemoMode) {
+    // Demo mode: return sample inventory summary
+    const demoInventory = [
+      {
+        product_id: 'demo-product-1',
+        product_name: 'iPhone 15 Pro',
+        current_stock: 5,
+        sale_price: 4500000,
+        purchase_price: 4000000,
+        category_name: 'Smartphones',
+        supplier_name: 'Apple Store',
+        total_sold_last_30_days: 3,
+        revenue_last_30_days: 13500000,
+        stock_status: 'normal',
+        profit_per_unit: 500000,
+        profit_margin_percent: 12.5,
+        inventory_value_cost: 20000000,
+        inventory_value_retail: 22500000,
+        created_at: new Date().toISOString(),
+        has_imei_serial: true,
+        imei_serial_type: 'imei'
+      }
+    ];
+    
+    setCachedData(cacheKey, demoInventory);
+    return demoInventory;
+  }
   try {
     const { data, error } = await supabase
       .from('inventory_summary')
@@ -334,6 +546,31 @@ export const getCustomerSummary = async () => {
   
   if (cached) return cached;
 
+  if (isDemoMode) {
+    // Demo mode: return sample customer summary
+    const demoCustomerSummary = [
+      {
+        customer_id: 'demo-customer-1',
+        customer_name: 'Juan Pérez',
+        email: 'juan@email.com',
+        phone: '3001234567',
+        cedula: '12345678',
+        customer_since: new Date(Date.now() - 30 * 86400000).toISOString(),
+        total_purchases: 5,
+        total_spent: 7500000,
+        average_purchase_amount: 1500000,
+        last_purchase_date: new Date().toISOString(),
+        first_purchase_date: new Date(Date.now() - 30 * 86400000).toISOString(),
+        customer_status: 'active',
+        pending_installment_balance: 1000000,
+        total_installment_sales: 2,
+        days_since_last_purchase: 0
+      }
+    ];
+    
+    setCachedData(cacheKey, demoCustomerSummary);
+    return demoCustomerSummary;
+  }
   try {
     const { data, error } = await supabase
       .from('customer_summary')
@@ -355,6 +592,10 @@ export const getCustomerSummary = async () => {
 // =====================================================
 
 export const runDatabaseMaintenance = async () => {
+  if (isDemoMode) {
+    return 'Mantenimiento completado (modo demo)';
+  }
+  
   try {
     const { data, error } = await supabase.rpc('auto_maintenance');
     
@@ -367,6 +608,14 @@ export const runDatabaseMaintenance = async () => {
 };
 
 export const checkDatabaseIntegrity = async () => {
+  if (isDemoMode) {
+    return [
+      { check: 'Integridad de datos', status: 'OK', details: 'Modo demo - sin problemas' },
+      { check: 'Índices', status: 'OK', details: 'Todos los índices funcionando' },
+      { check: 'Restricciones', status: 'OK', details: 'Sin violaciones detectadas' }
+    ];
+  }
+  
   try {
     const { data, error } = await supabase.rpc('check_database_integrity');
     
@@ -379,6 +628,10 @@ export const checkDatabaseIntegrity = async () => {
 };
 
 export const refreshViews = async () => {
+  if (isDemoMode) {
+    return 'Vistas refrescadas (modo demo)';
+  }
+  
   try {
     const { data, error } = await supabase.rpc('refresh_materialized_views');
     

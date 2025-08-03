@@ -5,25 +5,56 @@ import { Product, Category, Supplier } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useNotification } from '../hooks/useNotification';
 import { useConfirmation } from '../hooks/useConfirmation';
-import ProductDetailsModal from './ProductDetailsModal';
-import ProductQuickActions from './ProductQuickActions';
+import FormattedNumberInput from './FormattedNumberInput';
+import NotificationModal from './NotificationModal';
+import ConfirmationModal from './ConfirmationModal';
+import ImeiSerialManager from './ImeiSerialManager';
 import BulkProductImport from './BulkProductImport';
-import { ImeiSerialManager } from './ImeiSerialManager';
-import { FormattedNumberInput } from './FormattedNumberInput';
-import { ProductFormValidation } from './ProductFormValidation';
-import { useProductForm } from '../hooks/useProductForm';
-import { useOptimizedQueries } from '../hooks/useOptimizedQueries';
 
-interface ProductWithDetails extends Product {
-  category_name?: string;
-  supplier_name?: string;
-  available_imei_serial_count?: number;
-  total_sold_all_time?: number;
-  last_sale_date?: string;
-}
+// Datos demo para cuando no hay conexión a Supabase
+const demoProducts: Product[] = [
+  {
+    id: 'demo-product-1',
+    name: 'iPhone 15 Pro',
+    description: 'Smartphone Apple último modelo',
+    sale_price: 4500000,
+    purchase_price: 3800000,
+    stock: 5,
+    barcode: '123456789',
+    category_id: null,
+    supplier_id: null,
+    created_at: new Date().toISOString(),
+    has_imei_serial: true,
+    imei_serial_type: 'imei',
+    requires_imei_serial: true,
+    bulk_import_batch: '',
+    import_notes: '',
+    imported_at: null,
+    imported_by: null
+  },
+  {
+    id: 'demo-product-2',
+    name: 'Samsung Galaxy S24',
+    description: 'Smartphone Samsung premium',
+    sale_price: 3200000,
+    purchase_price: 2600000,
+    stock: 8,
+    barcode: '987654321',
+    category_id: null,
+    supplier_id: null,
+    created_at: new Date().toISOString(),
+    has_imei_serial: true,
+    imei_serial_type: 'imei',
+    requires_imei_serial: true,
+    bulk_import_batch: '',
+    import_notes: '',
+    imported_at: null,
+    imported_by: null
+  }
+];
 
 export default function ProductManager() {
-  const [products, setProducts] = useState<ProductWithDetails[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,9 +62,9 @@ export default function ProductManager() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<ProductWithDetails | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<ProductWithDetails | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showImeiManager, setShowImeiManager] = useState(false);
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
@@ -44,30 +75,18 @@ export default function ProductManager() {
   const { showConfirmation } = useConfirmation();
   const { optimizedQueries } = useOptimizedQueries();
 
-  const {
-    formData,
-    errors,
-    isSubmitting,
-    handleInputChange,
-    handleSubmit,
-    resetForm,
-    setFormData
-  } = useProductForm({
-    onSuccess: (product) => {
-      if (editingProduct) {
-        setProducts(prev => prev.map(p => p.id === product.id ? { ...product, category_name: categories.find(c => c.id === product.category_id)?.name, supplier_name: suppliers.find(s => s.id === product.supplier_id)?.name } : p));
-        showNotification('Producto actualizado exitosamente', 'success');
-      } else {
-        setProducts(prev => [...prev, { ...product, category_name: categories.find(c => c.id === product.category_id)?.name, supplier_name: suppliers.find(s => s.id === product.supplier_id)?.name }]);
-        showNotification('Producto creado exitosamente', 'success');
-      }
-      setShowForm(false);
-      setEditingProduct(null);
-      resetForm();
-    },
-    onError: (error) => {
-      showNotification(error, 'error');
-    }
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    sale_price: '',
+    purchase_price: '',
+    stock: '',
+    category_id: '',
+    supplier_id: '',
+    barcode: '',
+    has_imei_serial: false,
+    imei_serial_type: 'serial' as 'imei' | 'serial' | 'both',
+    requires_imei_serial: false
   });
 
   useEffect(() => {
@@ -75,11 +94,31 @@ export default function ProductManager() {
   }, []);
 
   const loadData = async () => {
+    if (!supabase) {
+      // Modo demo
+      setProducts(demoProducts);
+      setCategories([
+        { id: 'demo-cat-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
+        { id: 'demo-cat-2', name: 'Accesorios', description: 'Accesorios tecnológicos', created_at: new Date().toISOString() }
+      ]);
+      setSuppliers([
+        { id: 'demo-sup-1', name: 'Proveedor Demo', contact_person: 'Juan Pérez', email: 'juan@proveedor.com', phone: '123456789', address: 'Calle 123', created_at: new Date().toISOString() }
+      ]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
-      // Use optimized query for products with details
-      const { data: productsData, error: productsError } = await optimizedQueries.getProductsWithDetails();
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(name),
+          supplier:suppliers(name)
+        `)
+        .order('created_at', { ascending: false });
       
       if (productsError) throw productsError;
 
@@ -96,7 +135,7 @@ export default function ProductManager() {
       setSuppliers(suppliersResult.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
-      showNotification('Error al cargar los datos', 'error');
+      showError('Error al cargar datos', 'No se pudieron cargar los productos. Verifica tu conexión.');
     } finally {
       setLoading(false);
     }
@@ -138,10 +177,6 @@ export default function ProductManager() {
           aValue = a.sale_price;
           bValue = b.sale_price;
           break;
-        case 'sales':
-          aValue = a.total_sold_all_time || 0;
-          bValue = b.total_sold_all_time || 0;
-          break;
         default:
           return 0;
       }
@@ -154,7 +189,87 @@ export default function ProductManager() {
     return filtered;
   }, [products, searchTerm, selectedCategory, selectedSupplier, stockFilter, sortBy, sortOrder]);
 
-  const handleEdit = (product: ProductWithDetails) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name.trim() || !formData.sale_price) {
+      showError('Campos requeridos', 'El nombre y precio de venta son obligatorios');
+      return;
+    }
+
+    try {
+      const productData = {
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        sale_price: parseFloat(formData.sale_price) || 0,
+        purchase_price: parseFloat(formData.purchase_price) || 0,
+        stock: parseInt(formData.stock) || 0,
+        category_id: formData.category_id || null,
+        supplier_id: formData.supplier_id || null,
+        barcode: formData.barcode.trim(),
+        has_imei_serial: formData.has_imei_serial,
+        imei_serial_type: formData.imei_serial_type,
+        requires_imei_serial: formData.requires_imei_serial
+      };
+
+      if (!supabase) {
+        // Modo demo
+        const newProduct = {
+          id: `demo-product-${Date.now()}`,
+          ...productData,
+          created_at: new Date().toISOString()
+        };
+        
+        if (editingProduct) {
+          setProducts(prev => prev.map(p => p.id === editingProduct.id ? newProduct : p));
+          showSuccess('Producto actualizado', 'El producto se actualizó correctamente en modo demo');
+        } else {
+          setProducts(prev => [...prev, newProduct]);
+          showSuccess('Producto creado', 'El producto se creó correctamente en modo demo');
+        }
+      } else {
+        if (editingProduct) {
+          const { error } = await supabase
+            .from('products')
+            .update(productData)
+            .eq('id', editingProduct.id);
+
+          if (error) throw error;
+          showSuccess('Producto actualizado', 'El producto se actualizó correctamente');
+        } else {
+          const { error } = await supabase
+            .from('products')
+            .insert([productData]);
+
+          if (error) throw error;
+          showSuccess('Producto creado', 'El producto se creó correctamente');
+        }
+        
+        await loadData();
+      }
+
+      setShowForm(false);
+      setEditingProduct(null);
+      setFormData({
+        name: '',
+        description: '',
+        sale_price: '',
+        purchase_price: '',
+        stock: '',
+        category_id: '',
+        supplier_id: '',
+        barcode: '',
+        has_imei_serial: false,
+        imei_serial_type: 'serial',
+        requires_imei_serial: false
+      });
+    } catch (error) {
+      console.error('Error saving product:', error);
+      showError('Error al guardar', 'No se pudo guardar el producto: ' + (error as Error).message);
+    }
+  };
+
+  const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -172,36 +287,47 @@ export default function ProductManager() {
     setShowForm(true);
   };
 
-  const handleDelete = async (product: ProductWithDetails) => {
-    const confirmed = await showConfirmation(
+  const handleDelete = async (product: Product) => {
+    showConfirmation(
       'Confirmar eliminación',
       `¿Estás seguro de que quieres eliminar el producto "${product.name}"? Esta acción no se puede deshacer.`
+      async () => {
+        try {
+          if (!supabase) {
+            // Modo demo
+            setProducts(prev => prev.filter(p => p.id !== product.id));
+            showSuccess('Producto eliminado', 'El producto se eliminó correctamente en modo demo');
+            return;
+          }
+
+          const { error } = await supabase
+            .from('products')
+            .delete()
+            .eq('id', product.id);
+
+          if (error) throw error;
+
+          setProducts(prev => prev.filter(p => p.id !== product.id));
+          showSuccess('Producto eliminado', 'El producto se eliminó correctamente');
+        } catch (error) {
+          console.error('Error deleting product:', error);
+          showError('Error al eliminar', 'No se pudo eliminar el producto: ' + (error as Error).message);
+        }
+      },
+      {
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        type: 'danger'
+      }
     );
-
-    if (!confirmed) return;
-
-    try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', product.id);
-
-      if (error) throw error;
-
-      setProducts(prev => prev.filter(p => p.id !== product.id));
-      showNotification('Producto eliminado exitosamente', 'success');
-    } catch (error) {
-      console.error('Error deleting product:', error);
-      showNotification('Error al eliminar el producto', 'error');
-    }
   };
 
-  const handleViewDetails = (product: ProductWithDetails) => {
+  const handleViewDetails = (product: Product) => {
     setSelectedProduct(product);
     setShowDetailsModal(true);
   };
 
-  const handleManageImeiSerial = (product: ProductWithDetails) => {
+  const handleManageImeiSerial = (product: Product) => {
     setSelectedProduct(product);
     setShowImeiManager(true);
   };
@@ -378,8 +504,6 @@ export default function ProductManager() {
               <option value="stock-desc">Stock mayor</option>
               <option value="price-asc">Precio menor</option>
               <option value="price-desc">Precio mayor</option>
-              <option value="sales-desc">Más vendidos</option>
-              <option value="sales-asc">Menos vendidos</option>
             </select>
           </div>
         </div>
@@ -411,13 +535,22 @@ export default function ProductManager() {
             <div className="p-4">
               <div className="flex justify-between items-start mb-3">
                 <h3 className="font-semibold text-gray-900 line-clamp-2">{product.name}</h3>
-                <ProductQuickActions
-                  product={product}
-                  onEdit={() => handleEdit(product)}
-                  onDelete={() => handleDelete(product)}
-                  onViewDetails={() => handleViewDetails(product)}
-                  onManageImeiSerial={product.has_imei_serial ? () => handleManageImeiSerial(product) : undefined}
-                />
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => handleEdit(product)}
+                    className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                    title="Editar producto"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(product)}
+                    className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                    title="Eliminar producto"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {product.description && (
@@ -439,26 +572,22 @@ export default function ProductManager() {
                   </span>
                 </div>
 
-                {product.category_name && (
+                {categories.find(c => c.id === product.category_id)?.name && (
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Categoría:</span>
-                    <span className="text-sm text-gray-700">{product.category_name}</span>
+                    <span className="text-sm text-gray-700">{categories.find(c => c.id === product.category_id)?.name}</span>
                   </div>
                 )}
 
                 {product.has_imei_serial && (
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">IMEI/Serial:</span>
-                    <span className="text-sm text-blue-600">
-                      {product.available_imei_serial_count || 0} disponibles
-                    </span>
-                  </div>
-                )}
-
-                {product.total_sold_all_time !== undefined && product.total_sold_all_time > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500">Vendidos:</span>
-                    <span className="text-sm text-gray-700">{product.total_sold_all_time}</span>
+                    <button
+                      onClick={() => handleManageImeiSerial(product)}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      Gestionar
+                    </button>
                   </div>
                 )}
 
@@ -517,8 +646,6 @@ export default function ProductManager() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <ProductFormValidation errors={errors} />
-                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -528,7 +655,7 @@ export default function ProductManager() {
                       type="text"
                       name="name"
                       value={formData.name}
-                      onChange={handleInputChange}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     />
@@ -542,7 +669,7 @@ export default function ProductManager() {
                       type="text"
                       name="barcode"
                       value={formData.barcode}
-                      onChange={handleInputChange}
+                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -555,7 +682,7 @@ export default function ProductManager() {
                   <textarea
                     name="description"
                     value={formData.description}
-                    onChange={handleInputChange}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -567,11 +694,11 @@ export default function ProductManager() {
                       Precio de Venta *
                     </label>
                     <FormattedNumberInput
-                      name="sale_price"
                       value={formData.sale_price}
-                      onChange={handleInputChange}
+                      onChange={(value) => setFormData({ ...formData, sale_price: value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="0.00"
-                      required
+                      min="0"
                     />
                   </div>
 
@@ -580,10 +707,11 @@ export default function ProductManager() {
                       Precio de Compra
                     </label>
                     <FormattedNumberInput
-                      name="purchase_price"
                       value={formData.purchase_price}
-                      onChange={handleInputChange}
+                      onChange={(value) => setFormData({ ...formData, purchase_price: value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="0.00"
+                      min="0"
                     />
                   </div>
 
@@ -595,7 +723,7 @@ export default function ProductManager() {
                       type="number"
                       name="stock"
                       value={formData.stock}
-                      onChange={handleInputChange}
+                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                       min="0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
@@ -611,7 +739,7 @@ export default function ProductManager() {
                     <select
                       name="category_id"
                       value={formData.category_id}
-                      onChange={handleInputChange}
+                      onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Seleccionar categoría</option>
@@ -630,7 +758,7 @@ export default function ProductManager() {
                     <select
                       name="supplier_id"
                       value={formData.supplier_id}
-                      onChange={handleInputChange}
+                      onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Seleccionar proveedor</option>
@@ -651,7 +779,7 @@ export default function ProductManager() {
                       id="has_imei_serial"
                       name="has_imei_serial"
                       checked={formData.has_imei_serial}
-                      onChange={handleInputChange}
+                      onChange={(e) => setFormData({ ...formData, has_imei_serial: e.target.checked })}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <label htmlFor="has_imei_serial" className="text-sm font-medium text-gray-700">
@@ -668,7 +796,7 @@ export default function ProductManager() {
                         <select
                           name="imei_serial_type"
                           value={formData.imei_serial_type}
-                          onChange={handleInputChange}
+                          onChange={(e) => setFormData({ ...formData, imei_serial_type: e.target.value as 'imei' | 'serial' | 'both' })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                           <option value="serial">Número de Serie</option>
@@ -683,7 +811,7 @@ export default function ProductManager() {
                           id="requires_imei_serial"
                           name="requires_imei_serial"
                           checked={formData.requires_imei_serial}
-                          onChange={handleInputChange}
+                          onChange={(e) => setFormData({ ...formData, requires_imei_serial: e.target.checked })}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                         <label htmlFor="requires_imei_serial" className="text-sm text-gray-700">
@@ -700,7 +828,19 @@ export default function ProductManager() {
                     onClick={() => {
                       setShowForm(false);
                       setEditingProduct(null);
-                      resetForm();
+                      setFormData({
+                        name: '',
+                        description: '',
+                        sale_price: '',
+                        purchase_price: '',
+                        stock: '',
+                        category_id: '',
+                        supplier_id: '',
+                        barcode: '',
+                        has_imei_serial: false,
+                        imei_serial_type: 'serial',
+                        requires_imei_serial: false
+                      });
                     }}
                     className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                   >
@@ -708,10 +848,9 @@ export default function ProductManager() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
-                    {isSubmitting ? 'Guardando...' : editingProduct ? 'Actualizar' : 'Crear'}
+                    {editingProduct ? 'Actualizar' : 'Crear'}
                   </button>
                 </div>
               </form>
@@ -722,26 +861,77 @@ export default function ProductManager() {
 
       {/* Product Details Modal */}
       {showDetailsModal && selectedProduct && (
-        <ProductDetailsModal
-          product={selectedProduct}
-          onClose={() => {
-            setShowDetailsModal(false);
-            setSelectedProduct(null);
-          }}
-          onEdit={() => {
-            setShowDetailsModal(false);
-            handleEdit(selectedProduct);
-          }}
-          onDelete={() => {
-            setShowDetailsModal(false);
-            handleDelete(selectedProduct);
-          }}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-auto max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-slate-900">
+                  Detalles del Producto
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-lg">{selectedProduct.name}</h4>
+                  {selectedProduct.description && (
+                    <p className="text-slate-600 mt-1">{selectedProduct.description}</p>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-slate-600">Precio de Venta:</span>
+                    <p className="font-bold text-green-600">{formatCurrency(selectedProduct.sale_price)}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-slate-600">Stock:</span>
+                    <p className="font-bold text-slate-900">{selectedProduct.stock} unidades</p>
+                  </div>
+                  {selectedProduct.purchase_price && selectedProduct.purchase_price > 0 && (
+                    <div>
+                      <span className="text-sm text-slate-600">Precio de Compra:</span>
+                      <p className="font-bold text-slate-900">{formatCurrency(selectedProduct.purchase_price)}</p>
+                    </div>
+                  )}
+                  {selectedProduct.barcode && (
+                    <div>
+                      <span className="text-sm text-slate-600">Código de Barras:</span>
+                      <p className="font-mono text-slate-900">{selectedProduct.barcode}</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="pt-4 border-t border-slate-200">
+                  <span className="text-sm text-slate-600">Fecha de Creación:</span>
+                  <p className="text-slate-900">
+                    {new Date(selectedProduct.created_at).toLocaleDateString('es-ES', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bulk Import Modal */}
       {showBulkImport && (
         <BulkProductImport
+          isOpen={showBulkImport}
           onClose={() => setShowBulkImport(false)}
           onSuccess={() => {
             setShowBulkImport(false);
@@ -755,6 +945,7 @@ export default function ProductManager() {
       {/* IMEI/Serial Manager Modal */}
       {showImeiManager && selectedProduct && (
         <ImeiSerialManager
+          isOpen={showImeiManager}
           product={selectedProduct}
           onClose={() => {
             setShowImeiManager(false);
@@ -765,6 +956,28 @@ export default function ProductManager() {
           }}
         />
       )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={hideNotification}
+        type={notification.type}
+        title={notification.title}
+        message={notification.message}
+      />
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmation.isOpen}
+        onClose={hideConfirmation}
+        onConfirm={handleConfirm}
+        title={confirmation.title}
+        message={confirmation.message}
+        confirmText={confirmation.confirmText}
+        cancelText={confirmation.cancelText}
+        type={confirmation.type}
+        loading={confirmation.loading}
+      />
     </div>
   );
 }

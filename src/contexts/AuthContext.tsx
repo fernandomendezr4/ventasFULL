@@ -264,19 +264,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
+      // Verificar conexión antes de intentar autenticación
+      const connectionOk = await testConnection();
+      if (!connectionOk) {
+        return { error: { message: 'Error de conexión con la base de datos. Verifica tu conexión a internet.' } };
+      }
+      
       // Autenticación con Supabase Auth
-      const { data: authData, error: authError } = await supabase!.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (!authError && authData.user) {
         // Buscar el usuario en la tabla users
-        const { data: userData, error: userError } = await supabase!
+        const { data: userData, error: userError } = await supabase
           .from('users')
           .select('*')
           .eq('email', email)
-          .single();
+          .maybeSingle();
 
         if (!userError && userData) {
           setUser(userData);
@@ -288,13 +294,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await createDefaultAdmin(authData.user);
             return { error: null };
           }
+          
+          return { error: { message: 'Usuario no encontrado en el sistema' } };
         }
       }
 
       return { error: authError || { message: 'Credenciales inválidas' } };
     } catch (error) {
       console.error('Error signing in:', error);
-      return { error };
+      return { error: { message: 'Error de conexión. Verifica tu internet e intenta de nuevo.' } };
     } finally {
       setLoading(false);
     }

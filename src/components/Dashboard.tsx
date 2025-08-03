@@ -93,23 +93,23 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
       // Cargar datos básicos de forma más eficiente
       const today = new Date().toISOString().split('T')[0];
       
-      // Cargar estadísticas básicas
-      const [salesCount, productsCount, customersCount, todaySalesResult, lowStockResult, recentSalesResult] = await Promise.all([
-        supabase!.from('sales').select('id', { count: 'exact', head: true }),
-        supabase!.from('products').select('id', { count: 'exact', head: true }),
-        supabase!.from('customers').select('id', { count: 'exact', head: true }),
-        supabase!
+      // Cargar estadísticas básicas con manejo de errores
+      const [salesCount, productsCount, customersCount, todaySalesResult, lowStockResult, recentSalesResult] = await Promise.allSettled([
+        supabase.from('sales').select('id', { count: 'exact', head: true }),
+        supabase.from('products').select('id', { count: 'exact', head: true }),
+        supabase.from('customers').select('id', { count: 'exact', head: true }),
+        supabase
           .from('sales')
           .select('total_amount')
           .gte('created_at', today)
           .lt('created_at', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
-        supabase!
+        supabase
           .from('products')
           .select('id, name, stock, sale_price')
           .lte('stock', 10)
           .order('stock', { ascending: true })
           .limit(5),
-        supabase!
+        supabase
           .from('sales')
           .select(`
             id, 
@@ -121,9 +121,67 @@ export default function Dashboard({ onTabChange }: DashboardProps) {
           .limit(5)
       ]);
 
-      // Calcular totales
-      const todayTotal = todaySalesResult.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
-      const totalRevenue = await supabase!
+      // Procesar resultados con manejo de errores
+      const salesCountData = salesCount.status === 'fulfilled' ? salesCount.value : { count: 0 };
+      const productsCountData = productsCount.status === 'fulfilled' ? productsCount.value : { count: 0 };
+      const customersCountData = customersCount.status === 'fulfilled' ? customersCount.value : { count: 0 };
+      const todaySalesData = todaySalesResult.status === 'fulfilled' ? todaySalesResult.value.data : [];
+      const lowStockData = lowStockResult.status === 'fulfilled' ? lowStockResult.value.data : [];
+      const recentSalesData = recentSalesResult.status === 'fulfilled' ? recentSalesResult.value.data : [];
+
+      // Calcular totales con datos seguros
+      const todayTotal = todaySalesData?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0;
+      
+      // Cargar revenue total de manera segura
+      let totalRevenue = 0;
+      try {
+        const revenueResult = await supabase
+          .from('sales')
+          .select('total_amount');
+        
+        if (revenueResult.data) {
+          totalRevenue = revenueResult.data.reduce((sum, sale) => sum + sale.total_amount, 0);
+        }
+      } catch (error) {
+        console.error('Error loading total revenue:', error);
+      }
+
+      setStats({
+        totalSales: salesCountData.count || 0,
+        totalProducts: productsCountData.count || 0,
+        totalCustomers: customersCountData.count || 0,
+        todaySales: todayTotal,
+        totalRevenue: totalRevenue,
+        lowStockProducts: lowStockData?.length || 0,
+      });
+
+      // Formatear ventas recientes de manera segura
+      const salesFormatted = (recentSalesData || []).map(sale => ({
+        ...sale,
+        sale_items: []
+      }));
+      
+      setRecentSales(salesFormatted as SaleWithItems[]);
+      setLowStockProducts(lowStockData || []);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      
+      // En caso de error, mostrar datos por defecto
+      setStats({
+        totalSales: 0,
+        totalProducts: 0,
+        totalCustomers: 0,
+        todaySales: 0,
+        totalRevenue: 0,
+        lowStockProducts: 0,
+      });
+      setRecentSales([]);
+      setLowStockProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
         .from('sales')
         .select('total_amount')
         .then(result => result.data?.reduce((sum, sale) => sum + sale.total_amount, 0) || 0);

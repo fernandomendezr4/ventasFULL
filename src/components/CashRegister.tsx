@@ -36,6 +36,44 @@ export default function CashRegister() {
   const loadCurrentRegister = async () => {
     if (!user) return;
     
+    if (!supabase) {
+      // Modo demo
+      setCurrentRegister({
+        id: 'demo-cash-register',
+        user_id: user.id,
+        opening_amount: 100000,
+        closing_amount: 0,
+        expected_closing_amount: 0,
+        actual_closing_amount: 0,
+        discrepancy_amount: 0,
+        discrepancy_reason: '',
+        session_notes: '',
+        last_movement_at: new Date().toISOString(),
+        total_sales: 0,
+        status: 'open',
+        opened_at: new Date().toISOString(),
+        closed_at: null,
+        notes: '',
+        created_at: new Date().toISOString(),
+        user: { id: user.id, name: user.name, email: user.email }
+      });
+      setMovements([
+        {
+          id: 'demo-movement-1',
+          cash_register_id: 'demo-cash-register',
+          type: 'opening',
+          category: 'apertura',
+          amount: 100000,
+          description: 'Apertura de caja demo',
+          reference_id: null,
+          created_at: new Date().toISOString(),
+          created_by: user.id
+        }
+      ]);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -77,6 +115,11 @@ export default function CashRegister() {
   };
 
   const loadMovements = async (registerId: string) => {
+    if (!supabase) {
+      // En modo demo, ya se cargan los movimientos en loadCurrentRegister
+      return;
+    }
+    
     try {
       console.log('Cargando movimientos para caja:', registerId);
       
@@ -88,7 +131,8 @@ export default function CashRegister() {
 
       if (error) {
         console.error('Error loading movements:', error);
-        throw error;
+        setMovements([]);
+        return;
       }
       
       console.log('Movimientos cargados:', data?.length || 0);
@@ -102,6 +146,50 @@ export default function CashRegister() {
   const openRegister = async () => {
     if (!user || !openingAmount) {
       alert('Debe ingresar el monto de apertura');
+      return;
+    }
+
+    if (!supabase) {
+      // Modo demo
+      const demoRegister = {
+        id: `demo-cash-register-${Date.now()}`,
+        user_id: user.id,
+        opening_amount: parseFloat(openingAmount),
+        closing_amount: 0,
+        expected_closing_amount: 0,
+        actual_closing_amount: 0,
+        discrepancy_amount: 0,
+        discrepancy_reason: '',
+        session_notes: sessionNotes || '',
+        last_movement_at: new Date().toISOString(),
+        total_sales: 0,
+        status: 'open',
+        opened_at: new Date().toISOString(),
+        closed_at: null,
+        notes: '',
+        created_at: new Date().toISOString(),
+        user: { id: user.id, name: user.name, email: user.email }
+      };
+      
+      setCurrentRegister(demoRegister);
+      setMovements([
+        {
+          id: `demo-movement-${Date.now()}`,
+          cash_register_id: demoRegister.id,
+          type: 'opening',
+          category: 'apertura',
+          amount: parseFloat(openingAmount),
+          description: 'Apertura de caja demo',
+          reference_id: null,
+          created_at: new Date().toISOString(),
+          created_by: user.id
+        }
+      ]);
+      
+      setShowOpenForm(false);
+      setOpeningAmount('');
+      setSessionNotes('');
+      alert('Caja abierta exitosamente en modo demo');
       return;
     }
 

@@ -58,7 +58,7 @@
   }
   
   .modal-content {
-    @apply bg-white rounded-xl shadow-xl w-full mx-auto animate-scale-in;
+    @apply bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto animate-scale-in;
   }
   
   .sidebar-item {

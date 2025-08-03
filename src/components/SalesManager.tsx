@@ -551,7 +551,7 @@ export default function SalesManager() {
       {/* Edit Sale Modal */}
       {editingSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto animate-scale-in">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto animate-scale-in">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">
                 Editar Venta #{editingSale.id.slice(-8)}

@@ -742,7 +742,7 @@ export default function CashRegister() {
       {/* Open Register Modal */}
       {showOpenForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Abrir Caja Registradora</h3>
               <p className="text-sm text-slate-600 mt-1">
@@ -805,7 +805,7 @@ export default function CashRegister() {
       {/* Close Register Modal */}
       {showCloseForm && currentRegister && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Cerrar Caja Registradora</h3>
               <p className="text-sm text-slate-600 mt-1">
@@ -922,7 +922,7 @@ export default function CashRegister() {
       {/* Add Movement Modal */}
       {showMovementForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Agregar Movimiento</h3>
               <p className="text-sm text-slate-600 mt-1">

@@ -73,7 +73,6 @@ export default function ProductManager() {
 
   const { showNotification } = useNotification();
   const { showConfirmation } = useConfirmation();
-  const { optimizedQueries } = useOptimizedQueries();
 
   const [formData, setFormData] = useState({
     name: '',

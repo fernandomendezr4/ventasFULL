@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, User, Search, Filter, Eye, EyeOff, Save, X, UserCheck, UserX, Lock, Mail, Shield } from 'lucide-react';
+import { Plus, Edit2, Trash2, User, Search, Filter, Eye, EyeOff, Save, X, UserCheck, UserX, Lock, Mail, Shield, Monitor, Key } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmationModal from './ConfirmationModal';
+import PasswordStrengthIndicator from './PasswordStrengthIndicator';
+import UserSessionManager from './UserSessionManager';
+import { setEmployeePassword, generateSecurePassword } from '../lib/employeeAuth';
 
 interface UserData {
   id: string;
@@ -46,6 +49,8 @@ export default function UserManager() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserData | null>(null);
+  const [showSessionManager, setShowSessionManager] = useState(false);
+  const [selectedUserForSessions, setSelectedUserForSessions] = useState<UserData | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -202,17 +207,11 @@ export default function UserManager() {
 
         // Si se proporcionó nueva contraseña, actualizarla
         if (formData.password) {
-          const { error: passwordError } = await supabase
-            .from('employee_passwords')
-            .upsert({
-              user_id: editingUser.id,
-              password_hash: await hashPassword(formData.password),
-              updated_at: new Date().toISOString()
-            });
+          const passwordResult = await setEmployeePassword(editingUser.id, formData.password);
 
-          if (passwordError) {
-            console.error('Error updating password:', passwordError);
-            // No fallar toda la operación por esto
+          if (!passwordResult.success) {
+            console.error('Error updating password:', passwordResult.error);
+            alert('Usuario actualizado pero hubo un error al cambiar la contraseña: ' + passwordResult.error);
           }
         }
 
@@ -235,15 +234,10 @@ export default function UserManager() {
         if (userError) throw userError;
 
         // Crear contraseña para el nuevo usuario
-        const { error: passwordError } = await supabase
-          .from('employee_passwords')
-          .insert([{
-            user_id: newUser.id,
-            password_hash: await hashPassword(formData.password)
-          }]);
+        const passwordResult = await setEmployeePassword(newUser.id, formData.password);
 
-        if (passwordError) {
-          console.error('Error creating password:', passwordError);
+        if (!passwordResult.success) {
+          console.error('Error creating password:', passwordResult.error);
           // Eliminar usuario si no se pudo crear la contraseña
           await supabase.from('users').delete().eq('id', newUser.id);
           throw new Error('Error al crear la contraseña del usuario');
@@ -262,14 +256,18 @@ export default function UserManager() {
     }
   };
 
-  const hashPassword = async (password: string): Promise<string> => {
-    // En un entorno real, usarías bcrypt o similar
-    // Para demo, usamos una función simple
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password + 'salt');
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const generatePassword = () => {
+    const newPassword = generateSecurePassword(12);
+    setFormData({ 
+      ...formData, 
+      password: newPassword, 
+      confirmPassword: newPassword 
+    });
+  };
+
+  const handleViewSessions = (user: UserData) => {
+    setSelectedUserForSessions(user);
+    setShowSessionManager(true);
   };
 
   const handleEdit = (user: UserData) => {
@@ -632,9 +630,15 @@ export default function UserManager() {
                       {formErrors.password && (
                         <p className="text-red-600 text-sm mt-1">{formErrors.password}</p>
                       )}
-                      <p className="text-xs text-slate-500 mt-1">
-                        Mínimo 6 caracteres, debe incluir mayúscula, minúscula y número
-                      </p>
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={generatePassword}
+                          className="text-xs text-blue-600 hover:text-blue-800 underline transition-colors duration-200"
+                        >
+                          Generar contraseña segura
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -665,6 +669,13 @@ export default function UserManager() {
                       )}
                     </div>
                   </div>
+                  
+                  {/* Password Strength Indicator */}
+                  {formData.password && (
+                    <div className="mt-4">
+                      <PasswordStrengthIndicator password={formData.password} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Permisos y Estado */}
@@ -893,6 +904,13 @@ export default function UserManager() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
+                        <button
+                          onClick={() => handleViewSessions(user)}
+                          className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                          title="Ver sesiones activas"
+                        >
+                          <Monitor className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -917,6 +935,19 @@ export default function UserManager() {
         cancelText="Cancelar"
         type="danger"
       />
+
+      {/* User Session Manager Modal */}
+      {showSessionManager && selectedUserForSessions && (
+        <UserSessionManager
+          isOpen={showSessionManager}
+          onClose={() => {
+            setShowSessionManager(false);
+            setSelectedUserForSessions(null);
+          }}
+          userId={selectedUserForSessions.id}
+          userName={selectedUserForSessions.name}
+        />
+      )}
 
       {/* User Statistics */}
       <div className="bg-white rounded-xl shadow-sm p-6">

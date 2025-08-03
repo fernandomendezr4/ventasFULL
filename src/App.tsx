@@ -22,7 +22,7 @@ import LazyLoader from './components/LazyLoader';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const { user } = useAuth();
+  const { user, connectionStatus } = useAuth();
   const [appError, setAppError] = useState<string | null>(null);
   const [showDemoNotice, setShowDemoNotice] = useState(isDemoMode);
 
@@ -32,6 +32,34 @@ function AppContent() {
       setActiveTab('dashboard');
     }
   }, [user]);
+
+  // Manejar errores globales de la aplicación
+  React.useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error:', event.error);
+      if (event.error?.message?.includes('ChunkLoadError') || 
+          event.error?.message?.includes('Loading chunk')) {
+        setAppError('Error al cargar recursos. Por favor recarga la página.');
+      }
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      if (event.reason?.message?.includes('fetch') || 
+          event.reason?.message?.includes('network')) {
+        // No mostrar errores de red como errores críticos
+        return;
+      }
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   if (appError) {
     return (
@@ -44,12 +72,20 @@ function AppContent() {
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">Error de Aplicación</h2>
           <p className="text-slate-600 mb-4">{appError}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-          >
-            Recargar Página
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+            >
+              Recargar Página
+            </button>
+            <button
+              onClick={() => setAppError(null)}
+              className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+            >
+              Continuar (No Recomendado)
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -154,6 +190,20 @@ function AppContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Connection Status Notice */}
+      {!isDemoMode && connectionStatus === 'disconnected' && (
+        <div className="fixed top-0 left-0 right-0 bg-orange-500 text-orange-900 p-3 z-50">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertTriangle className="h-5 w-5 mr-2" />
+              <span className="font-medium">
+                Sin conexión a la base de datos - Funcionando en modo offline limitado
+              </span>
+            </div>
           </div>
         </div>
       )}

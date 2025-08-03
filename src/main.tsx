@@ -12,11 +12,16 @@ class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
+    console.error('Error boundary caught error:', error);
     return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
     console.error('Global error boundary caught an error:', error, errorInfo);
+    
+    // Log additional context
+    console.error('Component stack:', errorInfo.componentStack);
+    console.error('Error stack:', error.stack);
   }
 
   render() {
@@ -33,12 +38,32 @@ class ErrorBoundary extends React.Component {
             <p className="text-slate-600 mb-4">
               Algo salió mal. Por favor recarga la página para continuar.
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-            >
-              Recargar Página
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              >
+                Recargar Página
+              </button>
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+              >
+                Intentar Continuar
+              </button>
+            </div>
+            
+            {/* Error details for debugging */}
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <details className="mt-4 text-left">
+                <summary className="text-xs text-slate-500 cursor-pointer">
+                  Detalles del error (desarrollo)
+                </summary>
+                <pre className="text-xs text-red-600 mt-2 p-2 bg-red-50 rounded overflow-auto max-h-32">
+                  {this.state.error.toString()}
+                </pre>
+              </details>
+            )}
           </div>
         </div>
       );
@@ -47,6 +72,22 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+// Configurar manejo global de errores no capturados
+window.addEventListener('error', (event) => {
+  console.error('Global error event:', event.error);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  
+  // Prevenir que errores de red causen problemas
+  if (event.reason?.message?.includes('fetch') || 
+      event.reason?.message?.includes('network') ||
+      event.reason?.message?.includes('Failed to fetch')) {
+    event.preventDefault();
+  }
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

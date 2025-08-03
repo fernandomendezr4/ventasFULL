@@ -24,6 +24,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasPermission: (permissionName: string) => boolean;
   hasAnyPermission: (permissionNames: string[]) => boolean;
+  connectionStatus: 'checking' | 'connected' | 'disconnected';
+  retryConnection: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -110,8 +112,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
+
+  // Función para verificar y actualizar el estado de conexión
+  const checkConnectionStatus = async () => {
+    if (isDemoMode) {
+      setConnectionStatus('disconnected');
+      return false;
+    }
+
+    try {
+      const isConnected = await testConnection();
+      setConnectionStatus(isConnected ? 'connected' : 'disconnected');
+      return isConnected;
+    } catch (error) {
+      console.error('Connection check failed:', error);
+      setConnectionStatus('disconnected');
+      return false;
+    }
+  };
+
+  // Función para reintentar conexión
+  const retryConnection = async () => {
+    if (retryCount >= maxRetries) {
+      console.warn('Max retry attempts reached');
+      return;
+    }
+
+    setRetryCount(prev => prev + 1);
+    setConnectionStatus('checking');
+    
+    // Esperar un poco antes de reintentar
+    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+    
+    await checkConnectionStatus();
+  };
 
   useEffect(() => {
+    let mounted = true;
+    
+    const initializeAuth = async () => {
+      // Verificar conexión primero
+      await checkConnectionStatus();
+      
+      if (!mounted) return;
+      
     // Si está en modo demo, crear usuario demo inmediatamente
     if (isDemoMode) {
       const demoUser: User = {
@@ -122,25 +169,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         is_active: true,
         created_at: new Date().toISOString()
       };
-      setUser(demoUser);
-      loadDefaultPermissions('admin');
-      setLoading(false);
-      setInitialized(true);
+      
+      if (mounted) {
+        setUser(demoUser);
+        loadDefaultPermissions('admin');
+        setLoading(false);
+        setInitialized(true);
+      }
       return;
     }
 
     if (!supabase) {
-      setLoading(false);
-      setInitialized(true);
+      if (mounted) {
+        setLoading(false);
+        setInitialized(true);
+      }
       return;
     }
 
-    let mounted = true;
-    
     // Set up auth state listener
     const { data: { subscription } } = supabase!.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+        
+        console.log('Auth state change:', event, session?.user?.email);
         
         if (event === 'SIGNED_OUT' || event === 'USER_DELETED' || 
             (event === 'TOKEN_REFRESHED' && !session) ||
@@ -155,6 +207,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
           try {
+            console.log('Loading user data for:', session.user.email);
+            
             // Buscar el usuario en la tabla users de forma más eficiente
             const { data: userData, error: userError } = await supabase!
               .from('users')
@@ -162,12 +216,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               .eq('email', session.user.email)
               .maybeSingle();
 
+            console.log('User data loaded:', userData, userError);
+
             if (userData && mounted) {
+              // Verificar que el usuario esté activo
+              if (!userData.is_active) {
+                console.warn('User account is inactive:', userData.email);
+                await supabase!.auth.signOut();
+                setUser(null);
+                setPermissions([]);
+                setLoading(false);
+                setInitialized(true);
+                return;
+              }
+              
               setUser(userData);
               loadDefaultPermissions(userData.role);
             } else if (session.user.email === 'estivenmendezr@gmail.com' && mounted) {
+              console.log('Creating default admin for:', session.user.email);
               await createDefaultAdmin(session.user);
             } else if (mounted) {
+              console.warn('User not found in database:', session.user.email);
               setUser(null);
               setPermissions([]);
             }
@@ -190,10 +259,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Timeout de seguridad reducido
     const timeoutId = setTimeout(() => {
       if (mounted && !initialized) {
+        console.warn('Auth initialization timeout reached');
         setLoading(false);
         setInitialized(true);
       }
-    }, 2000); // Reducido a 2 segundos
+    }, 3000); // Aumentado a 3 segundos para mejor estabilidad
 
     // Cleanup subscription on unmount
     return () => {
@@ -201,10 +271,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
-  }, [initialized]);
+    };
+    
+    initializeAuth();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [initialized, retryCount]);
 
   const createDefaultAdmin = async (authUser: any) => {
     try {
+      console.log('Creating default admin user:', authUser.email);
+      
       const adminData = {
         id: authUser.id,
         name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Administrador',
@@ -220,8 +299,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (!error && data) {
+        console.log('Default admin created successfully:', data);
         setUser(data);
         loadDefaultPermissions('admin');
+      } else {
+        console.error('Error creating default admin:', error);
       }
     } catch (error) {
       console.error('Error creating default admin:', error);
@@ -242,8 +324,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    console.log('Sign in attempt for:', email);
+    
     // Modo demo - permitir cualquier login
     if (isDemoMode) {
+      console.log('Demo mode login');
       const demoUser: User = {
         id: 'demo-user-id',
         email: email,
@@ -258,6 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!supabase) {
+      console.error('Supabase client not available');
       return { error: { message: 'Supabase no configurado' } };
     }
 
@@ -267,8 +353,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Verificar conexión antes de intentar autenticación
       const connectionOk = await testConnection();
       if (!connectionOk) {
+        console.error('Database connection failed');
         return { error: { message: 'Error de conexión con la base de datos. Verifica tu conexión a internet.' } };
       }
+      
+      console.log('Attempting Supabase auth sign in');
       
       // Autenticación con Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -276,7 +365,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
 
+      console.log('Auth result:', { user: authData?.user?.email, error: authError });
+
       if (!authError && authData.user) {
+        console.log('Auth successful, loading user profile');
+        
         // Buscar el usuario en la tabla users
         const { data: userData, error: userError } = await supabase
           .from('users')
@@ -284,21 +377,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('email', email)
           .maybeSingle();
 
+        console.log('User profile result:', { userData, userError });
+
         if (!userError && userData) {
+          // Verificar que el usuario esté activo
+          if (!userData.is_active) {
+            console.warn('User account is inactive');
+            await supabase.auth.signOut();
+            return { error: { message: 'Tu cuenta está desactivada. Contacta al administrador para reactivarla.' } };
+          }
+          
           setUser(userData);
           loadDefaultPermissions(userData.role);
           return { error: null };
         } else {
           // Si no existe, crear usuario admin para emails específicos
           if (email === 'estivenmendezr@gmail.com') {
+            console.log('Creating default admin for authorized email');
             await createDefaultAdmin(authData.user);
             return { error: null };
           }
           
+          console.error('User not found in users table');
+          await supabase.auth.signOut();
           return { error: { message: 'Usuario no encontrado en el sistema' } };
         }
       }
 
+      console.error('Authentication failed:', authError);
       return { error: authError || { message: 'Credenciales inválidas' } };
     } catch (error) {
       console.error('Error signing in:', error);
@@ -309,6 +415,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    console.log('Signing out user');
+    
     if (isDemoMode) {
       setUser(null);
       setPermissions([]);
@@ -323,6 +431,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       // Cerrar sesión de Supabase Auth
       await supabase!.auth.signOut();
+      console.log('Sign out successful');
     } catch (error) {
       console.error('Error signing out:', error);
     } finally {
@@ -359,6 +468,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     hasPermission,
     hasAnyPermission,
+    connectionStatus,
+    retryConnection,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

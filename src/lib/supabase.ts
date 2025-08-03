@@ -204,9 +204,12 @@ export const testConnection = async () => {
   if (isDemoMode || !supabase) return false;
   
   try {
+    console.log('Testing database connection...');
+    
+    // Hacer una consulta simple para verificar conectividad
     const { data, error } = await supabase
-      .from('users')
-      .select('count')
+      .from('categories')
+      .select('id')
       .limit(1);
     
     if (error) {
@@ -222,6 +225,47 @@ export const testConnection = async () => {
   }
 };
 
+// Función mejorada para verificar el estado completo de Supabase
+export const checkSupabaseHealth = async () => {
+  if (isDemoMode || !supabase) {
+    return {
+      isHealthy: false,
+      mode: 'demo',
+      message: 'Ejecutando en modo demo'
+    };
+  }
+  
+  try {
+    // Verificar autenticación
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    // Verificar base de datos
+    const { data, error: dbError } = await supabase
+      .from('categories')
+      .select('count')
+      .limit(1);
+    
+    const isHealthy = !sessionError && !dbError;
+    
+    return {
+      isHealthy,
+      mode: 'production',
+      session: !!session,
+      database: !dbError,
+      message: isHealthy ? 'Sistema funcionando correctamente' : 'Problemas de conectividad detectados'
+    };
+  } catch (error) {
+    console.error('Health check failed:', error);
+    return {
+      isHealthy: false,
+      mode: 'production',
+      session: false,
+      database: false,
+      message: 'Error de conexión con Supabase'
+    };
+  }
+};
+
 // Función para reintentar operaciones fallidas
 export const retryOperation = async <T>(
   operation: () => Promise<T>,
@@ -232,15 +276,20 @@ export const retryOperation = async <T>(
   
   for (let i = 0; i < maxRetries; i++) {
     try {
+      console.log(`Attempting operation (try ${i + 1}/${maxRetries})`);
       return await operation();
     } catch (error) {
       lastError = error;
+      console.error(`Operation failed (try ${i + 1}/${maxRetries}):`, error);
       
       if (i < maxRetries - 1) {
+        const waitTime = delay * (i + 1);
+        console.log(`Waiting ${waitTime}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
       }
     }
   }
   
+  console.error('All retry attempts failed');
   throw lastError;
 };

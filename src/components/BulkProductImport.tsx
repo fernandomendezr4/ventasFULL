@@ -4,6 +4,13 @@ import { supabase } from '../lib/supabase';
 import { BulkProductData, BulkImportResult, Category, Supplier } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
+import { 
+  processBulkImeiSerials, 
+  validateImeiFormat, 
+  validateSerialNumber,
+  normalizeImei,
+  normalizeSerial 
+} from '../lib/imeiValidation';
 
 interface BulkProductImportProps {
   isOpen: boolean;
@@ -193,14 +200,46 @@ export default function BulkProductImport({
       setLoading(true);
       const batchId = `BULK_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // Procesar lista de IMEI/Serial
-      const imeiSerials = imeiSerialList
+      // Procesar y validar lista de IMEI/Serial
+      const rawImeiSerials = imeiSerialList
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
-      if (imeiSerials.length === 0) {
+      if (rawImeiSerials.length === 0) {
         alert('No se encontraron IMEI/Serial válidos');
+        return;
+      }
+
+      // Validar IMEI/Serial usando la nueva lógica
+      const itemsToValidate = rawImeiSerials.map(item => {
+        const isIMEI = /^\d{15}$/.test(item);
+        return {
+          imei_number: isIMEI ? item : undefined,
+          serial_number: isIMEI ? undefined : item,
+          product_name: singleProductData.name
+        };
+      });
+
+      const { validItems, rejectedItems } = await processBulkImeiSerials(itemsToValidate);
+
+      // Mostrar resumen de validación si hay elementos rechazados
+      if (rejectedItems.length > 0) {
+        const rejectedSummary = rejectedItems.map(item => 
+          `${item.item.imei_number || item.item.serial_number} - ${item.reason}`
+        ).join('\n');
+        
+        const proceed = window.confirm(
+          `Se encontraron ${rejectedItems.length} IMEI/Serial inválidos o duplicados que serán omitidos:\n\n${rejectedSummary}\n\n¿Desea continuar creando el producto con los ${validItems.length} elementos válidos?`
+        );
+        
+        if (!proceed) {
+          return;
+        }
+      }
+
+      if (validItems.length === 0) {
+        alert('No hay IMEI/Serial válidos para crear el producto');
         return;
       }
 
@@ -209,7 +248,7 @@ export default function BulkProductImport({
         .from('products')
         .insert([{
           ...singleProductData,
-          stock: imeiSerials.length, // Stock igual al número de IMEI/Serial
+          stock: validItems.length, // Stock igual al número de IMEI/Serial válidos
           bulk_import_batch: batchId,
           imported_by: user?.id,
           imported_at: new Date().toISOString()
@@ -219,15 +258,14 @@ export default function BulkProductImport({
 
       if (productError) throw productError;
 
-      // Agregar los IMEI/Serial
-      const imeiSerialRecords = imeiSerials.map(item => {
-        const isIMEI = /^\d{15}$/.test(item);
+      // Agregar los IMEI/Serial válidos
+      const imeiSerialRecords = validItems.map(item => {
         return {
           product_id: productData.id,
-          imei_number: isIMEI ? item : '',
-          serial_number: isIMEI ? '' : item,
+          imei_number: item.imei_number ? normalizeImei(item.imei_number) : '',
+          serial_number: item.serial_number ? normalizeSerial(item.serial_number) : '',
           status: 'available' as const,
-          notes: `Importado masivamente - Lote: ${batchId}`,
+          notes: `Importado masivamente - Lote: ${batchId}${rejectedItems.length > 0 ? ` (${rejectedItems.length} elementos rechazados)` : ''}`,
           created_by: user?.id,
           updated_by: user?.id
         };
@@ -243,8 +281,11 @@ export default function BulkProductImport({
       setImportResult({
         success: true,
         inserted_count: 1,
-        error_count: 0,
-        errors: [],
+        error_count: rejectedItems.length,
+        errors: rejectedItems.map(item => ({
+          product_name: item.item.product_name,
+          error: `${item.item.imei_number || item.item.serial_number}: ${item.reason}`
+        })),
         batch_id: batchId
       });
 
@@ -677,9 +718,16 @@ Celular Samsung,Smartphone con IMEI,800000,600000,5,9876543210987,,,true,imei,tr
                   Lote: {importResult.batch_id}
                 </p>
                 {singleProductMode && (
-                  <p className="text-green-600 mt-2">
-                    Se creó el producto "{singleProductData.name}" con {imeiSerialList.split('\n').filter(line => line.trim().length > 0).length} unidades
-                  </p>
+                  <div>
+                    <p className="text-green-600 mt-2">
+                      Se creó el producto "{singleProductData.name}" con {imeiSerialList.split('\n').filter(line => line.trim().length > 0).length} unidades
+                    </p>
+                    {importResult.error_count > 0 && (
+                      <p className="text-sm text-orange-600 mt-1">
+                        {importResult.error_count} IMEI/Serial fueron rechazados por duplicados o errores de formato
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -713,6 +761,9 @@ Celular Samsung,Smartphone con IMEI,800000,600000,5,9876543210987,,,true,imei,tr
                         <span className="text-red-700 ml-2">{error.error}</span>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+                    <strong>Nota:</strong> Los IMEI/Serial duplicados o con formato inválido fueron automáticamente rechazados para mantener la integridad de los datos.
                   </div>
                 </div>
               )}

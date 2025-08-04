@@ -1,5 +1,7 @@
 // Utilidades de validación para productos
 
+import { validateImeiFormat, validateSerialNumber } from './imeiValidation';
+
 export interface ProductValidationResult {
   isValid: boolean;
   errors: Record<string, string>;
@@ -129,6 +131,11 @@ export const validateBusinessLogic = (formData: ProductFormData): Record<string,
   // Validar configuración IMEI/Serial
   if (formData.has_imei_serial && !formData.imei_serial_type) {
     warnings.imei_serial = 'Debe seleccionar el tipo de identificador IMEI/Serial';
+  }
+  
+  // Advertencia sobre productos con IMEI/Serial requerido
+  if (formData.has_imei_serial && formData.requires_imei_serial && stock > 0) {
+    warnings.imei_serial_stock = `Este producto requiere IMEI/Serial obligatorio. Deberá agregar ${stock} registros IMEI/Serial únicos después de crear el producto.`;
   }
   
   return warnings;

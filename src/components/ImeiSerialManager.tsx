@@ -3,6 +3,14 @@ import { Hash, Plus, Trash2, Edit2, Save, X, Smartphone, AlertTriangle, CheckCir
 import { supabase } from '../lib/supabase';
 import { ProductWithCategory, ProductImeiSerial, ImeiSerialData } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
+import { 
+  validateImeiFormat, 
+  validateSerialNumber, 
+  checkImeiDuplicate, 
+  checkSerialDuplicate,
+  normalizeImei,
+  normalizeSerial 
+} from '../lib/imeiValidation';
 
 interface ImeiSerialManagerProps {
   isOpen: boolean;
@@ -31,6 +39,8 @@ export default function ImeiSerialManager({
   });
   const [bulkAddMode, setBulkAddMode] = useState(false);
   const [bulkData, setBulkData] = useState('');
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -61,23 +71,54 @@ export default function ImeiSerialManager({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validar que al menos uno de los campos esté lleno
-    if (!formData.imei_number?.trim() && !formData.serial_number?.trim()) {
-      alert('Debe ingresar al menos un IMEI o número de serie');
-      return;
-    }
-
-    // Validar formato IMEI si se proporciona
-    if (formData.imei_number && formData.imei_number.length !== 15) {
-      alert('El IMEI debe tener exactamente 15 dígitos');
-      return;
-    }
+    // Limpiar errores previos
+    setValidationErrors({});
+    setIsValidating(true);
 
     try {
+      // Validar que al menos uno de los campos esté lleno
+      if (!formData.imei_number?.trim() && !formData.serial_number?.trim()) {
+        alert('Debe ingresar al menos un IMEI o número de serie');
+        return;
+      }
+
+      const errors: Record<string, string> = {};
+
+      // Validar IMEI si se proporciona
+      if (formData.imei_number?.trim()) {
+        const imeiValidation = await checkImeiDuplicate(
+          formData.imei_number.trim(), 
+          editingItem ? product.id : undefined
+        );
+        
+        if (!imeiValidation.isValid) {
+          errors.imei_number = imeiValidation.error || 'IMEI inválido';
+        }
+      }
+
+      // Validar Serial si se proporciona
+      if (formData.serial_number?.trim()) {
+        const serialValidation = await checkSerialDuplicate(
+          formData.serial_number.trim(),
+          editingItem ? product.id : undefined
+        );
+        
+        if (!serialValidation.isValid) {
+          errors.serial_number = serialValidation.error || 'Número de serie inválido';
+        }
+      }
+
+      // Si hay errores de validación, mostrarlos
+      if (Object.keys(errors).length > 0) {
+        setValidationErrors(errors);
+        return;
+      }
+
+      // Proceder con el guardado
       const dataToSave = {
         product_id: product.id,
-        imei_number: formData.imei_number?.trim() || '',
-        serial_number: formData.serial_number?.trim() || '',
+        imei_number: formData.imei_number?.trim() ? normalizeImei(formData.imei_number.trim()) : '',
+        serial_number: formData.serial_number?.trim() ? normalizeSerial(formData.serial_number.trim()) : '',
         notes: formData.notes?.trim() || '',
         created_by: user?.id,
         updated_by: user?.id
@@ -104,11 +145,15 @@ export default function ImeiSerialManager({
       setShowAddForm(false);
       setEditingItem(null);
       setFormData({ imei_number: '', serial_number: '', notes: '' });
+      setValidationErrors({});
       loadImeiSerials();
       onUpdate();
+      
     } catch (error) {
       console.error('Error saving IMEI/Serial:', error);
       alert('Error al guardar: ' + (error as Error).message);
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -146,10 +191,14 @@ export default function ImeiSerialManager({
       return;
     }
 
+    setIsValidating(true);
+
     try {
       const lines = bulkData.trim().split('\n');
-      const itemsToInsert = [];
+      const itemsToProcess = [];
+      const rejectedItems = [];
 
+      // Procesar cada línea
       for (const line of lines) {
         const trimmedLine = line.trim();
         if (!trimmedLine) continue;
@@ -157,20 +206,72 @@ export default function ImeiSerialManager({
         // Detectar si es IMEI (15 dígitos) o serial
         const isIMEI = /^\d{15}$/.test(trimmedLine);
         
-        itemsToInsert.push({
-          product_id: product.id,
-          imei_number: isIMEI ? trimmedLine : '',
-          serial_number: isIMEI ? '' : trimmedLine,
-          notes: 'Agregado masivamente',
-          created_by: user?.id,
-          updated_by: user?.id
-        });
+        if (isIMEI) {
+          // Validar IMEI
+          const validation = await checkImeiDuplicate(trimmedLine, product.id);
+          if (validation.isValid) {
+            itemsToProcess.push({
+              imei_number: normalizeImei(trimmedLine),
+              serial_number: '',
+              notes: 'Agregado masivamente',
+              product_name: product.name
+            });
+          } else {
+            rejectedItems.push({
+              value: trimmedLine,
+              type: 'IMEI',
+              reason: validation.error || 'IMEI inválido'
+            });
+          }
+        } else {
+          // Validar Serial
+          const validation = await checkSerialDuplicate(trimmedLine, product.id);
+          if (validation.isValid) {
+            itemsToProcess.push({
+              imei_number: '',
+              serial_number: normalizeSerial(trimmedLine),
+              notes: 'Agregado masivamente',
+              product_name: product.name
+            });
+          } else {
+            rejectedItems.push({
+              value: trimmedLine,
+              type: 'Serial',
+              reason: validation.error || 'Número de serie inválido'
+            });
+          }
+        }
       }
 
-      if (itemsToInsert.length === 0) {
-        alert('No se encontraron datos válidos para agregar');
+      // Mostrar resumen de validación si hay elementos rechazados
+      if (rejectedItems.length > 0) {
+        const rejectedSummary = rejectedItems.map(item => 
+          `${item.type}: ${item.value} - ${item.reason}`
+        ).join('\n');
+        
+        const proceed = window.confirm(
+          `Se encontraron ${rejectedItems.length} elementos inválidos que serán omitidos:\n\n${rejectedSummary}\n\n¿Desea continuar agregando los ${itemsToProcess.length} elementos válidos?`
+        );
+        
+        if (!proceed) {
+          return;
+        }
+      }
+
+      if (itemsToProcess.length === 0) {
+        alert('No hay elementos válidos para agregar');
         return;
       }
+
+      // Insertar elementos válidos
+      const itemsToInsert = itemsToProcess.map(item => ({
+        product_id: product.id,
+        imei_number: item.imei_number,
+        serial_number: item.serial_number,
+        notes: item.notes,
+        created_by: user?.id,
+        updated_by: user?.id
+      }));
 
       const { error } = await supabase
         .from('product_imei_serials')
@@ -182,10 +283,19 @@ export default function ImeiSerialManager({
       setBulkData('');
       loadImeiSerials();
       onUpdate();
-      alert(`Se agregaron ${itemsToInsert.length} registros exitosamente`);
+
+      // Mostrar resumen de resultados
+      let message = `Se agregaron ${itemsToProcess.length} registros exitosamente`;
+      if (rejectedItems.length > 0) {
+        message += `\n${rejectedItems.length} elementos fueron rechazados por duplicados o errores de formato`;
+      }
+      alert(message);
+
     } catch (error) {
       console.error('Error in bulk add:', error);
       alert('Error en agregado masivo: ' + (error as Error).message);
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -348,12 +458,24 @@ export default function ImeiSerialManager({
                         <input
                           type="text"
                           value={formData.imei_number || ''}
-                          onChange={(e) => setFormData({ ...formData, imei_number: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, imei_number: e.target.value });
+                            // Limpiar error cuando el usuario empiece a escribir
+                            if (validationErrors.imei_number) {
+                              setValidationErrors(prev => ({ ...prev, imei_number: '' }));
+                            }
+                          }}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="15 dígitos"
                           maxLength={15}
                           pattern="[0-9]{15}"
                         />
+                        {validationErrors.imei_number && (
+                          <p className="text-red-600 text-xs mt-1 flex items-center">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {validationErrors.imei_number}
+                          </p>
+                        )}
                       </div>
                     )}
                     
@@ -365,10 +487,22 @@ export default function ImeiSerialManager({
                         <input
                           type="text"
                           value={formData.serial_number || ''}
-                          onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, serial_number: e.target.value });
+                            // Limpiar error cuando el usuario empiece a escribir
+                            if (validationErrors.serial_number) {
+                              setValidationErrors(prev => ({ ...prev, serial_number: '' }));
+                            }
+                          }}
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Número de serie"
                         />
+                        {validationErrors.serial_number && (
+                          <p className="text-red-600 text-xs mt-1 flex items-center">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {validationErrors.serial_number}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -389,10 +523,20 @@ export default function ImeiSerialManager({
                   <div className="flex gap-2">
                     <button
                       type="submit"
+                      disabled={isValidating}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
                     >
-                      <Save className="h-4 w-4 mr-2" />
-                      {editingItem ? 'Actualizar' : 'Agregar'}
+                      {isValidating ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Validando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          {editingItem ? 'Actualizar' : 'Agregar'}
+                        </>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -402,6 +546,7 @@ export default function ImeiSerialManager({
                         setFormData({ imei_number: '', serial_number: '', notes: '' });
                       }}
                       className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+                      disabled={isValidating}
                     >
                       Cancelar
                     </button>
@@ -433,16 +578,35 @@ XYZ789GHI012`}
                     <p className="text-xs text-slate-500 mt-1">
                       Los números de 15 dígitos se detectarán automáticamente como IMEI
                     </p>
+                    
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h5 className="text-sm font-medium text-blue-900 mb-2">Validaciones Aplicadas:</h5>
+                      <ul className="text-xs text-blue-800 space-y-1">
+                        <li>• IMEI: Exactamente 15 dígitos, formato válido, sin duplicados</li>
+                        <li>• Serial: 3-50 caracteres, alfanumérico, sin duplicados</li>
+                        <li>• Se verifican duplicados tanto en base de datos como en el lote</li>
+                        <li>• Los elementos duplicados o inválidos serán rechazados automáticamente</li>
+                      </ul>
+                    </div>
                   </div>
                   
                   <div className="flex gap-2">
                     <button
                       onClick={handleBulkAdd}
-                      disabled={!bulkData.trim()}
+                      disabled={!bulkData.trim() || isValidating}
                       className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center"
                     >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Agregar Todo
+                      {isValidating ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Validando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Agregar Todo
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() => {
@@ -450,6 +614,7 @@ XYZ789GHI012`}
                         setBulkData('');
                       }}
                       className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
+                      disabled={isValidating}
                     >
                       Cancelar
                     </button>

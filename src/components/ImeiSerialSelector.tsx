@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Hash, Check, X, AlertTriangle, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ProductImeiSerial } from '../lib/types';
+import { validateImeiFormat, validateSerialNumber } from '../lib/imeiValidation';
 
 interface ImeiSerialSelectorProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export default function ImeiSerialSelector({
           imei_number: imeiSerialType === 'imei' || imeiSerialType === 'both' 
             ? `12345678901234${i}` : '',
           serial_number: imeiSerialType === 'serial' || imeiSerialType === 'both' 
-            ? `SN${Date.now()}${i}` : '',
+            ? `SN123456${i}` : '',
           status: 'available' as const,
           sale_id: null,
           sale_item_id: null,
@@ -65,15 +66,39 @@ export default function ImeiSerialSelector({
         return;
       }
 
-      const { data, error } = await supabase
+      // Cargar solo IMEI/Serial disponibles y válidos
+      let query = supabase
         .from('product_imei_serials')
         .select('*')
         .eq('product_id', productId)
-        .eq('status', 'available')
-        .order('created_at', { ascending: true });
+        .eq('status', 'available');
+
+      // Filtrar por tipo si es necesario
+      if (imeiSerialType === 'imei') {
+        query = query.neq('imei_number', '').not('imei_number', 'is', null);
+      } else if (imeiSerialType === 'serial') {
+        query = query.neq('serial_number', '').not('serial_number', 'is', null);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: true });
 
       if (error) throw error;
-      setAvailableImeiSerials(data || []);
+      
+      // Filtrar elementos con formato válido
+      const validImeiSerials = (data || []).filter(item => {
+        if (imeiSerialType === 'imei' && item.imei_number) {
+          return validateImeiFormat(item.imei_number).isValid;
+        } else if (imeiSerialType === 'serial' && item.serial_number) {
+          return validateSerialNumber(item.serial_number).isValid;
+        } else if (imeiSerialType === 'both') {
+          const imeiValid = !item.imei_number || validateImeiFormat(item.imei_number).isValid;
+          const serialValid = !item.serial_number || validateSerialNumber(item.serial_number).isValid;
+          return imeiValid && serialValid && (item.imei_number || item.serial_number);
+        }
+        return false;
+      });
+      
+      setAvailableImeiSerials(validImeiSerials);
     } catch (error) {
       console.error('Error loading available IMEI/Serial:', error);
       setAvailableImeiSerials([]);
@@ -97,6 +122,21 @@ export default function ImeiSerialSelector({
   const handleConfirm = () => {
     if (selectedImeiSerials.length !== requiredQuantity) {
       alert(`Debe seleccionar exactamente ${requiredQuantity} unidad${requiredQuantity > 1 ? 'es' : ''} para completar la venta`);
+      return;
+    }
+    
+    // Validación adicional antes de confirmar
+    const invalidSelections = selectedImeiSerials.filter(item => {
+      if (imeiSerialType === 'imei' && item.imei_number) {
+        return !validateImeiFormat(item.imei_number).isValid;
+      } else if (imeiSerialType === 'serial' && item.serial_number) {
+        return !validateSerialNumber(item.serial_number).isValid;
+      }
+      return false;
+    });
+    
+    if (invalidSelections.length > 0) {
+      alert('Algunas selecciones tienen formato inválido. Por favor, actualice la página y vuelva a intentar.');
       return;
     }
     
@@ -212,12 +252,12 @@ export default function ImeiSerialSelector({
               <Hash className="h-12 w-12 text-slate-400 mx-auto mb-4" />
               <p className="text-slate-500">
                 {availableImeiSerials.length === 0 
-                  ? `No hay unidades disponibles para este producto. Verifique el stock de ${imeiSerialType === 'imei' ? 'IMEI' : imeiSerialType === 'serial' ? 'números de serie' : 'IMEI/Serial'}.`
+                  ? `No hay unidades disponibles para este producto. Verifique el stock de ${imeiSerialType === 'imei' ? 'IMEI' : imeiSerialType === 'serial' ? 'números de serie' : 'IMEI/Serial'} válidos.`
                   : 'No se encontraron unidades que coincidan con la búsqueda'}
               </p>
               {availableImeiSerials.length === 0 && (
                 <p className="text-sm text-slate-400 mt-2">
-                  Debe agregar {imeiSerialType === 'imei' ? 'códigos IMEI' : imeiSerialType === 'serial' ? 'números de serie' : 'códigos IMEI/Serial'} en la gestión de productos antes de poder vender este artículo.
+                  Debe agregar {imeiSerialType === 'imei' ? 'códigos IMEI válidos' : imeiSerialType === 'serial' ? 'números de serie válidos' : 'códigos IMEI/Serial válidos'} en la gestión de productos antes de poder vender este artículo.
                 </p>
               )}
             </div>
@@ -261,6 +301,9 @@ export default function ImeiSerialSelector({
                         <div>
                           <label className="text-xs text-slate-500">IMEI:</label>
                           <p className="font-mono text-sm text-slate-900">{item.imei_number}</p>
+                          {!validateImeiFormat(item.imei_number).isValid && (
+                            <p className="text-xs text-red-600">⚠️ Formato inválido</p>
+                          )}
                         </div>
                       )}
                       
@@ -268,6 +311,9 @@ export default function ImeiSerialSelector({
                         <div>
                           <label className="text-xs text-slate-500">Serial:</label>
                           <p className="font-mono text-sm text-slate-900">{item.serial_number}</p>
+                          {!validateSerialNumber(item.serial_number).isValid && (
+                            <p className="text-xs text-red-600">⚠️ Formato inválido</p>
+                          )}
                         </div>
                       )}
                       
@@ -303,6 +349,17 @@ export default function ImeiSerialSelector({
                 </div>
               </div>
             )}
+            
+            {/* Advertencia sobre validación */}
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center">
+                <AlertTriangle className="h-4 w-4 text-blue-600 mr-2" />
+                <div className="text-xs text-blue-800">
+                  <p className="font-medium">Validación Automática Activa</p>
+                  <p>Solo se muestran IMEI/Serial con formato válido y sin duplicados. Los elementos inválidos se filtran automáticamente.</p>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div className="flex gap-3">

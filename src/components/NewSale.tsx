@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import PrintService from './PrintService';
 import ImeiSerialSelector from './ImeiSerialSelector';
+import { validateImeiFormat, checkImeiDuplicate } from '../lib/imeiValidation';
 
 // Extender CartItem para incluir IMEI/Serial seleccionados
 interface ExtendedCartItem extends CartItem {
@@ -599,6 +600,34 @@ export default function NewSale() {
       // Solo procesar si el producto requiere IMEI/Serial y tiene selecciones
       if (cartItem.product.requires_imei_serial && cartItem.selectedImeiSerials && cartItem.selectedImeiSerials.length > 0) {
         try {
+          // Validar que los IMEI/Serial seleccionados aún estén disponibles
+          const imeiSerialIds = cartItem.selectedImeiSerials.map(imei => imei.id);
+          
+          // Verificar disponibilidad antes de marcar como vendidos
+          const { data: availableCheck, error: checkError } = await supabase!
+            .from('product_imei_serials')
+            .select('id, status, imei_number, serial_number')
+            .in('id', imeiSerialIds)
+            .eq('status', 'available');
+          
+          if (checkError) {
+            console.error('Error checking IMEI/Serial availability:', checkError);
+            throw new Error('Error al verificar disponibilidad de IMEI/Serial');
+          }
+          
+          // Verificar que todos los IMEI/Serial estén disponibles
+          if (!availableCheck || availableCheck.length !== cartItem.selectedImeiSerials.length) {
+            const unavailableItems = cartItem.selectedImeiSerials.filter(selected => 
+              !availableCheck?.some(available => available.id === selected.id)
+            );
+            
+            const unavailableList = unavailableItems.map(item => 
+              item.imei_number || item.serial_number
+            ).join(', ');
+            
+            throw new Error(`Los siguientes IMEI/Serial ya no están disponibles: ${unavailableList}`);
+          }
+          
           // Marcar IMEI/Serial como vendidos
           const { error: imeiError } = await supabase!
             .from('product_imei_serials')
@@ -612,10 +641,12 @@ export default function NewSale() {
           
           if (imeiError) {
             console.error('Error marking IMEI/Serial as sold:', imeiError);
-            // No fallar toda la venta por esto, solo loggearlo
+            throw new Error('Error al marcar IMEI/Serial como vendidos');
           }
         } catch (error) {
           console.error('Error in IMEI/Serial processing:', error);
+          // Re-lanzar el error para que la venta falle si hay problemas con IMEI/Serial
+          throw error;
         }
       }
     }

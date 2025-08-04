@@ -21,7 +21,6 @@ import InstallmentManager from './components/InstallmentManager';
 import Settings from './components/Settings';
 import PerformanceMonitor from './components/PerformanceMonitor';
 import LazyLoader from './components/LazyLoader';
-<<<<<<< HEAD
 import OfflineIndicator from './components/OfflineIndicator';
 import ConnectionNotifications from './components/ConnectionNotifications';
 import AuditSystemManager from './components/AuditSystemManager';

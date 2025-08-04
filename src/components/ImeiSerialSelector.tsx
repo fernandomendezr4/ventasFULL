@@ -43,18 +43,18 @@ export default function ImeiSerialSelector({
       
       if (!supabase) {
         // Modo demo - generar datos de ejemplo
-        const demoImeiSerials: ProductImeiSerial[] = Array.from({ length: 5 }, (_, i) => ({
+        const demoImeiSerials: ProductImeiSerial[] = Array.from({ length: Math.max(5, requiredQuantity + 2) }, (_, i) => ({
           id: `demo-imei-${i}`,
           product_id: productId,
           imei_number: imeiSerialType === 'imei' || imeiSerialType === 'both' 
-            ? `12345678901234${i}` : '',
+            ? `12345678901234${i.toString().padStart(1, '0')}` : '',
           serial_number: imeiSerialType === 'serial' || imeiSerialType === 'both' 
-            ? `SN123456${i}` : '',
+            ? `SN${productName.substring(0, 3).toUpperCase()}${i.toString().padStart(3, '0')}` : '',
           status: 'available' as const,
           sale_id: null,
           sale_item_id: null,
           sold_at: null,
-          notes: `Unidad ${i + 1}`,
+          notes: `Unidad demo ${i + 1} - ${productName}`,
           created_at: new Date().toISOString(),
           created_by: null,
           updated_at: new Date().toISOString(),
@@ -110,7 +110,7 @@ export default function ImeiSerialSelector({
       }
 
       // Filtrar elementos con formato válido
-      const validImeiSerials = availableImeiSerials.filter(item => {
+      const validImeiSerials = filteredData.filter(item => {
         if (imeiSerialType === 'imei' && item.imei_number) {
           return validateImeiFormat(item.imei_number).isValid;
         } else if (imeiSerialType === 'serial' && item.serial_number) {

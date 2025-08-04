@@ -25,11 +25,6 @@ export default function ImeiSerialManager({
   onUpdate, 
   product 
 }: ImeiSerialManagerProps) {
-  // Early return if product is null
-  if (!product) {
-    return null;
-  }
-
   const { user } = useAuth();
   const [imeiSerials, setImeiSerials] = useState<ProductImeiSerial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,10 +43,15 @@ export default function ImeiSerialManager({
   const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && product?.id) {
       loadImeiSerials();
     }
-  }, [isOpen, product.id]);
+  }, [isOpen, product?.id]);
+
+  // Return null after hooks are called
+  if (!product) {
+    return null;
+  }
 
   if (!isOpen) return null;
 

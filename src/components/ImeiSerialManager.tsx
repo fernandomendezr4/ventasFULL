@@ -25,6 +25,11 @@ export default function ImeiSerialManager({
   onUpdate, 
   product 
 }: ImeiSerialManagerProps) {
+  // Early return if product is null
+  if (!product) {
+    return null;
+  }
+
   const { user } = useAuth();
   const [imeiSerials, setImeiSerials] = useState<ProductImeiSerial[]>([]);
   const [loading, setLoading] = useState(true);

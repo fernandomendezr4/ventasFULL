@@ -1,9 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-<<<<<<< HEAD
-import { supabase, isDemoMode, testConnection, addConnectionListener, type ConnectionStatus } from '../lib/supabase';
-=======
 import { supabase, isDemoMode, testConnection } from '../lib/supabase';
->>>>>>> 56f80df (Primer commit)
 
 interface User {
   id: string;
@@ -28,11 +24,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   hasPermission: (permissionName: string) => boolean;
   hasAnyPermission: (permissionNames: string[]) => boolean;
-<<<<<<< HEAD
-  connectionStatus: ConnectionStatus;
-=======
   connectionStatus: 'checking' | 'connected' | 'disconnected';
->>>>>>> 56f80df (Primer commit)
   retryConnection: () => Promise<void>;
 }
 
@@ -126,11 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-<<<<<<< HEAD
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
-=======
   const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
->>>>>>> 56f80df (Primer commit)
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 3;
 
@@ -142,20 +130,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-<<<<<<< HEAD
-      setConnectionStatus('connecting');
-=======
->>>>>>> 56f80df (Primer commit)
       const isConnected = await testConnection();
       setConnectionStatus(isConnected ? 'connected' : 'disconnected');
       return isConnected;
     } catch (error) {
       console.error('Connection check failed:', error);
-<<<<<<< HEAD
-      setConnectionStatus('error');
-=======
       setConnectionStatus('disconnected');
->>>>>>> 56f80df (Primer commit)
       return false;
     }
   };
@@ -164,19 +144,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const retryConnection = async () => {
     if (retryCount >= maxRetries) {
       console.warn('Max retry attempts reached');
-<<<<<<< HEAD
-      setConnectionStatus('error');
-=======
->>>>>>> 56f80df (Primer commit)
       return;
     }
 
     setRetryCount(prev => prev + 1);
-<<<<<<< HEAD
-    setConnectionStatus('connecting');
-=======
     setConnectionStatus('checking');
->>>>>>> 56f80df (Primer commit)
     
     // Esperar un poco antes de reintentar
     await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
@@ -186,26 +158,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-<<<<<<< HEAD
-    let connectionUnsubscribe: (() => void) | null = null;
-    
-    const initializeAuth = async () => {
-      // Configurar listener de conexión
-      if (!isDemoMode) {
-        connectionUnsubscribe = addConnectionListener((status) => {
-          if (mounted) {
-            setConnectionStatus(status);
-          }
-        });
-      } else {
-        setConnectionStatus('disconnected');
-      }
-=======
     
     const initializeAuth = async () => {
       // Verificar conexión primero
       await checkConnectionStatus();
->>>>>>> 56f80df (Primer commit)
       
       if (!mounted) return;
       
@@ -318,12 +274,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Cleanup subscription on unmount
     return () => {
       mounted = false;
-<<<<<<< HEAD
-      if (connectionUnsubscribe) {
-        connectionUnsubscribe();
-      }
-=======
->>>>>>> 56f80df (Primer commit)
       clearTimeout(timeoutId);
       subscription.unsubscribe();
     };

@@ -1,4 +1,4 @@
-=======
+
 >>>>>>> 56f80df (Primer commit)
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';

@@ -25,8 +25,6 @@ import LazyLoader from './components/LazyLoader';
 <<<<<<< HEAD
 import OfflineIndicator from './components/OfflineIndicator';
 import ConnectionNotifications from './components/ConnectionNotifications';
-=======
->>>>>>> 56f80df (Primer commit)
 import AuditSystemManager from './components/AuditSystemManager';
 
 function AppContent() {

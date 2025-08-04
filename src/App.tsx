@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+<<<<<<< HEAD
 import { AlertTriangle } from 'lucide-react';
+=======
+>>>>>>> 56f80df (Primer commit)
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { useAuth } from './contexts/AuthContext';
@@ -20,8 +23,11 @@ import InstallmentManager from './components/InstallmentManager';
 import Settings from './components/Settings';
 import PerformanceMonitor from './components/PerformanceMonitor';
 import LazyLoader from './components/LazyLoader';
+<<<<<<< HEAD
 import OfflineIndicator from './components/OfflineIndicator';
 import ConnectionNotifications from './components/ConnectionNotifications';
+=======
+>>>>>>> 56f80df (Primer commit)
 import AuditSystemManager from './components/AuditSystemManager';
 
 function AppContent() {
@@ -30,12 +36,14 @@ function AppContent() {
   const [appError, setAppError] = useState<string | null>(null);
   const [showDemoNotice, setShowDemoNotice] = useState(isDemoMode);
 
+  // Reset to dashboard when user changes (login/logout)
   React.useEffect(() => {
     if (user) {
       setActiveTab('dashboard');
     }
   }, [user]);
 
+  // Manejar errores globales de la aplicación
   React.useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error('Global error:', event.error);
@@ -49,6 +57,7 @@ function AppContent() {
       console.error('Unhandled promise rejection:', event.reason);
       if (event.reason?.message?.includes('fetch') || 
           event.reason?.message?.includes('network')) {
+        // No mostrar errores de red como errores críticos
         return;
       }
     };
@@ -91,27 +100,93 @@ function AppContent() {
       </div>
     );
   }
-
+  
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <ViewTransition transitionKey="dashboard" type="dashboard"><Dashboard onTabChange={setActiveTab} /></ViewTransition>;
-      case 'products': return <ViewTransition transitionKey="products" type="slide-left"><ProductManager /></ViewTransition>;
-      case 'categories': return <ViewTransition transitionKey="categories" type="slide-left"><CategoryManager /></ViewTransition>;
-      case 'sales': return <ViewTransition transitionKey="sales" type="slide-left"><SalesManager /></ViewTransition>;
-      case 'new-sale': return <ViewTransition transitionKey="new-sale" type="form"><NewSale /></ViewTransition>;
-      case 'installments': return <ViewTransition transitionKey="installments" type="slide-left"><InstallmentManager /></ViewTransition>;
-      case 'suppliers': return <ViewTransition transitionKey="suppliers" type="slide-left"><SupplierManager /></ViewTransition>;
-      case 'customers': return <ViewTransition transitionKey="customers" type="slide-left"><CustomerManager /></ViewTransition>;
-      case 'users': return <ViewTransition transitionKey="users" type="slide-left"><UserManager /></ViewTransition>;
-      case 'cash-register': return <ViewTransition transitionKey="cash-register" type="slide-up"><CashRegister /></ViewTransition>;
-      case 'settings': return <ViewTransition transitionKey="settings" type="fade"><Settings /></ViewTransition>;
-      case 'audit': return <ViewTransition transitionKey="audit" type="fade"><AuditSystemManager /></ViewTransition>;
-      default: return <ViewTransition transitionKey="dashboard" type="dashboard"><Dashboard onTabChange={setActiveTab} /></ViewTransition>;
+      case 'dashboard':
+        return (
+          <ViewTransition transitionKey="dashboard" type="dashboard">
+            <Dashboard onTabChange={setActiveTab} />
+          </ViewTransition>
+        );
+      case 'products':
+        return (
+          <ViewTransition transitionKey="products" type="slide-left">
+            <ProductManager />
+          </ViewTransition>
+        );
+      case 'categories':
+        return (
+          <ViewTransition transitionKey="categories" type="slide-left">
+            <CategoryManager />
+          </ViewTransition>
+        );
+      case 'sales':
+        return (
+          <ViewTransition transitionKey="sales" type="slide-left">
+            <SalesManager />
+          </ViewTransition>
+        );
+      case 'new-sale':
+        return (
+          <ViewTransition transitionKey="new-sale" type="form">
+            <NewSale />
+          </ViewTransition>
+        );
+      case 'installments':
+        return (
+          <ViewTransition transitionKey="installments" type="slide-left">
+            <InstallmentManager />
+          </ViewTransition>
+        );
+      case 'suppliers':
+        return (
+          <ViewTransition transitionKey="suppliers" type="slide-left">
+            <SupplierManager />
+          </ViewTransition>
+        );
+      case 'customers':
+        return (
+          <ViewTransition transitionKey="customers" type="slide-left">
+            <CustomerManager />
+          </ViewTransition>
+        );
+      case 'users':
+        return (
+          <ViewTransition transitionKey="users" type="slide-left">
+            <UserManager />
+          </ViewTransition>
+        );
+      case 'cash-register':
+        return (
+          <ViewTransition transitionKey="cash-register" type="slide-up">
+            <CashRegister />
+          </ViewTransition>
+        );
+      case 'settings':
+        return (
+          <ViewTransition transitionKey="settings" type="fade">
+            <Settings />
+          </ViewTransition>
+        );
+      case 'audit':
+        return (
+          <ViewTransition transitionKey="audit" type="fade">
+            <AuditSystemManager />
+          </ViewTransition>
+        );
+      default:
+        return (
+          <ViewTransition transitionKey="dashboard" type="dashboard">
+            <Dashboard onTabChange={setActiveTab} />
+          </ViewTransition>
+        );
     }
   };
 
   return (
     <ProtectedRoute>
+      {/* Demo Notice */}
       {showDemoNotice && isDemoMode && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-yellow-900 p-3 z-50">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -134,7 +209,8 @@ function AppContent() {
           </div>
         </div>
       )}
-
+      
+      {/* Connection Status Notice */}
       {!isDemoMode && connectionStatus === 'disconnected' && (
         <div className="fixed top-0 left-0 right-0 bg-orange-500 text-orange-900 p-3 z-50">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -147,14 +223,16 @@ function AppContent() {
           </div>
         </div>
       )}
-
+      
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
         {renderContent()}
       </Layout>
-
       <PerformanceMonitor />
+<<<<<<< HEAD
       <OfflineIndicator />
       <ConnectionNotifications />
+=======
+>>>>>>> 56f80df (Primer commit)
     </ProtectedRoute>
   );
 }

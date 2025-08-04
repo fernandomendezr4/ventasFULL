@@ -951,7 +951,7 @@ export default function ProductManager() {
       />
 
       <ImeiSerialManager
-        isOpen={showImeiManager}
+        isOpen={showImeiManager && selectedProduct !== null}
         onClose={() => {
           setShowImeiManager(false);
           setSelectedProduct(null);

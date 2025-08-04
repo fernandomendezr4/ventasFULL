@@ -236,12 +236,17 @@ export default function ProductManager() {
 
       // Verificar nombre duplicado
       if (formData.name.trim()) {
-        const { data: nameCheck } = await supabase
+        let nameQuery = supabase
           .from('products')
           .select('id')
           .ilike('name', formData.name.trim())
-          .neq('id', editingProduct?.id || '')
           .limit(1);
+
+        if (editingProduct) {
+          nameQuery = nameQuery.neq('id', editingProduct.id);
+        }
+
+        const { data: nameCheck } = await nameQuery;
 
         if (nameCheck && nameCheck.length > 0) {
           errors.name = 'Ya existe un producto con este nombre';
@@ -250,12 +255,17 @@ export default function ProductManager() {
 
       // Verificar código de barras duplicado
       if (formData.barcode.trim()) {
-        const { data: barcodeCheck } = await supabase
+        let barcodeQuery = supabase
           .from('products')
           .select('id')
           .eq('barcode', formData.barcode.trim())
-          .neq('id', editingProduct?.id || '')
           .limit(1);
+
+        if (editingProduct) {
+          barcodeQuery = barcodeQuery.neq('id', editingProduct.id);
+        }
+
+        const { data: barcodeCheck } = await barcodeQuery;
 
         if (barcodeCheck && barcodeCheck.length > 0) {
           errors.barcode = 'Ya existe un producto con este código de barras';

@@ -957,7 +957,7 @@ export default function ProductManager() {
           setSelectedProduct(null);
         }}
         onUpdate={loadProducts}
-        product={selectedProduct!}
+        product={selectedProduct}
       />
 
       <BulkProductImport

@@ -47,6 +47,32 @@ if (!isDemoMode) {
 
 export const supabase = supabaseClient;
 
+// Función para verificar la conexión
+export const testConnection = async () => {
+  if (isDemoMode || !supabase) return false;
+  
+  try {
+    console.log('Testing database connection...');
+    
+    // Hacer una consulta simple para verificar conectividad
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id')
+      .limit(1);
+    
+    if (error) {
+      console.error('Database connection error:', error);
+      return false;
+    }
+    
+    console.log('Database connection successful');
+    return true;
+  } catch (error) {
+    console.error('Connection test failed:', error);
+    return false;
+  }
+};
+
 // Función para verificar si Supabase está disponible
 export const isSupabaseAvailable = (): boolean => {
   return !isDemoMode && supabase !== null;
@@ -321,32 +347,6 @@ if (!isDemoMode && supabaseClient) {
   // En modo demo, marcar como desconectado
   notifyConnectionListeners('disconnected');
 }
-
-// Función para verificar la conexión
-export const testConnection = async () => {
-  if (isDemoMode || !supabase) return false;
-  
-  try {
-    console.log('Testing database connection...');
-    
-    // Hacer una consulta simple para verificar conectividad
-    const { data, error } = await supabase
-      .from('categories')
-      .select('id')
-      .limit(1);
-    
-    if (error) {
-      console.error('Database connection error:', error);
-      return false;
-    }
-    
-    console.log('Database connection successful');
-    return true;
-  } catch (error) {
-    console.error('Connection test failed:', error);
-    return false;
-  }
-};
 
 // Función mejorada para verificar el estado completo de Supabase
 export const checkSupabaseHealth = async () => {

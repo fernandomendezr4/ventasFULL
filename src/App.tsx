@@ -223,7 +223,6 @@ function AppContent() {
         {renderContent()}
       </Layout>
       <PerformanceMonitor />
-<<<<<<< HEAD
       <OfflineIndicator />
       <ConnectionNotifications />
 

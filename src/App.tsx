@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-<<<<<<< HEAD
 import { AlertTriangle } from 'lucide-react';
 =======
 >>>>>>> 56f80df (Primer commit)

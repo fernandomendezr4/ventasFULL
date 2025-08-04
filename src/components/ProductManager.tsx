@@ -115,8 +115,16 @@ export default function ProductManager() {
     barcode: '',
     has_imei_serial: false,
     imei_serial_type: 'serial' as 'imei' | 'serial' | 'both',
-    requires_imei_serial: false
+    requires_imei_serial: false,
+    imei_serial_list: ''
   });
+
+  const [showImeiSerialInput, setShowImeiSerialInput] = useState(false);
+  const [imeiSerialEntries, setImeiSerialEntries] = useState<Array<{
+    imei_number: string;
+    serial_number: string;
+    notes: string;
+  }>>([]);
 
   useEffect(() => {
     loadData();
@@ -230,8 +238,11 @@ export default function ProductManager() {
       barcode: '',
       has_imei_serial: false,
       imei_serial_type: 'serial',
-      requires_imei_serial: false
+      requires_imei_serial: false,
+      imei_serial_list: ''
     });
+    setImeiSerialEntries([]);
+    setShowImeiSerialInput(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -239,6 +250,13 @@ export default function ProductManager() {
     
     if (!formData.name.trim() || !formData.sale_price) {
       alert('El nombre y precio de venta son obligatorios');
+      return;
+    }
+
+    // Validar IMEI/Serial si es requerido
+    if (formData.has_imei_serial && formData.requires_imei_serial && 
+        imeiSerialEntries.length === 0 && !formData.imei_serial_list.trim()) {
+      alert('Debe agregar al menos un IMEI/Serial para este producto');
       return;
     }
 
@@ -279,6 +297,8 @@ export default function ProductManager() {
           alert('Producto creado correctamente en modo demo');
         }
       } else {
+        let createdProductId: string;
+        
         if (editingProduct) {
           const { error } = await supabase
             .from('products')
@@ -286,14 +306,23 @@ export default function ProductManager() {
             .eq('id', editingProduct.id);
 
           if (error) throw error;
+          createdProductId = editingProduct.id;
           alert('Producto actualizado correctamente');
         } else {
-          const { error } = await supabase
+          const { data: newProduct, error } = await supabase
             .from('products')
-            .insert([productData]);
+            .insert([productData])
+            .select()
+            .single();
 
           if (error) throw error;
+          createdProductId = newProduct.id;
           alert('Producto creado correctamente');
+        }
+        
+        // Agregar IMEI/Serial si se proporcionaron
+        if (formData.has_imei_serial && (imeiSerialEntries.length > 0 || formData.imei_serial_list.trim())) {
+          await saveImeiSerialData(createdProductId);
         }
         
         await loadData();
@@ -321,8 +350,11 @@ export default function ProductManager() {
       barcode: product.barcode || '',
       has_imei_serial: product.has_imei_serial || false,
       imei_serial_type: product.imei_serial_type || 'serial',
-      requires_imei_serial: product.requires_imei_serial || false
+      requires_imei_serial: product.requires_imei_serial || false,
+      imei_serial_list: ''
     });
+    setImeiSerialEntries([]);
+    setShowImeiSerialInput(false);
     setShowForm(true);
   };
 
@@ -374,6 +406,77 @@ export default function ProductManager() {
     if (stock === 0) return 'Sin stock';
     if (stock <= 5) return 'Stock bajo';
     return 'En stock';
+  };
+
+  const saveImeiSerialData = async (productId: string) => {
+    try {
+      const imeiSerialData = [];
+      
+      // Procesar entradas individuales
+      for (const entry of imeiSerialEntries) {
+        if (entry.imei_number.trim() || entry.serial_number.trim()) {
+          imeiSerialData.push({
+            product_id: productId,
+            imei_number: entry.imei_number.trim(),
+            serial_number: entry.serial_number.trim(),
+            notes: entry.notes.trim() || 'Agregado al crear producto',
+            created_by: user?.id,
+            updated_by: user?.id
+          });
+        }
+      }
+      
+      // Procesar lista masiva
+      if (formData.imei_serial_list.trim()) {
+        const lines = formData.imei_serial_list.trim().split('\n');
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (trimmedLine) {
+            // Detectar si es IMEI (15 dígitos) o serial
+            const isIMEI = /^\d{15}$/.test(trimmedLine);
+            
+            imeiSerialData.push({
+              product_id: productId,
+              imei_number: isIMEI ? trimmedLine : '',
+              serial_number: isIMEI ? '' : trimmedLine,
+              notes: 'Agregado masivamente al crear producto',
+              created_by: user?.id,
+              updated_by: user?.id
+            });
+          }
+        }
+      }
+      
+      if (imeiSerialData.length > 0) {
+        const { error } = await supabase
+          .from('product_imei_serials')
+          .insert(imeiSerialData);
+        
+        if (error) throw error;
+        
+        console.log(`Se agregaron ${imeiSerialData.length} registros IMEI/Serial`);
+      }
+    } catch (error) {
+      console.error('Error saving IMEI/Serial data:', error);
+      alert('Producto creado pero hubo un error al guardar los IMEI/Serial: ' + (error as Error).message);
+    }
+  };
+
+  const addImeiSerialEntry = () => {
+    setImeiSerialEntries([
+      ...imeiSerialEntries,
+      { imei_number: '', serial_number: '', notes: '' }
+    ]);
+  };
+
+  const removeImeiSerialEntry = (index: number) => {
+    setImeiSerialEntries(imeiSerialEntries.filter((_, i) => i !== index));
+  };
+
+  const updateImeiSerialEntry = (index: number, field: string, value: string) => {
+    const updated = [...imeiSerialEntries];
+    updated[index] = { ...updated[index], [field]: value };
+    setImeiSerialEntries(updated);
   };
 
   const exportProducts = async () => {
@@ -887,7 +990,14 @@ export default function ProductManager() {
                       type="checkbox"
                       id="has_imei_serial"
                       checked={formData.has_imei_serial}
-                      onChange={(e) => setFormData({ ...formData, has_imei_serial: e.target.checked })}
+                      onChange={(e) => {
+                        setFormData({ ...formData, has_imei_serial: e.target.checked });
+                        if (!e.target.checked) {
+                          setShowImeiSerialInput(false);
+                          setImeiSerialEntries([]);
+                          setFormData(prev => ({ ...prev, imei_serial_list: '' }));
+                        }
+                      }}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                     />
                     <label htmlFor="has_imei_serial" className="text-sm font-medium text-slate-700">
@@ -924,6 +1034,150 @@ export default function ProductManager() {
                           Requerir IMEI/Serial para vender
                         </label>
                       </div>
+
+                      {/* Botón para mostrar/ocultar entrada de IMEI/Serial */}
+                      <div className="border-t border-purple-200 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowImeiSerialInput(!showImeiSerialInput)}
+                          className="flex items-center gap-2 text-sm text-purple-700 hover:text-purple-900 font-medium transition-colors duration-200"
+                        >
+                          <Hash className="h-4 w-4" />
+                          {showImeiSerialInput ? 'Ocultar' : 'Agregar'} IMEI/Serial ahora
+                        </button>
+                        <p className="text-xs text-purple-600 mt-1">
+                          Puedes agregar los códigos IMEI/Serial directamente al crear el producto
+                        </p>
+                      </div>
+
+                      {/* Formulario de IMEI/Serial */}
+                      {showImeiSerialInput && (
+                        <div className="border-t border-purple-200 pt-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h5 className="font-medium text-purple-900">
+                              Agregar {formData.imei_serial_type === 'imei' ? 'IMEI' : 
+                                      formData.imei_serial_type === 'serial' ? 'Números de Serie' : 'IMEI/Serial'}
+                            </h5>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={addImeiSerialEntry}
+                                className="text-xs bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 transition-colors duration-200"
+                              >
+                                + Individual
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Entradas individuales */}
+                          {imeiSerialEntries.length > 0 && (
+                            <div className="space-y-3">
+                              <h6 className="text-sm font-medium text-purple-800">Entradas Individuales:</h6>
+                              {imeiSerialEntries.map((entry, index) => (
+                                <div key={index} className="bg-white border border-purple-200 rounded p-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-purple-700">
+                                      Entrada #{index + 1}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeImeiSerialEntry(index)}
+                                      className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {(formData.imei_serial_type === 'imei' || formData.imei_serial_type === 'both') && (
+                                      <div>
+                                        <label className="block text-xs text-slate-600 mb-1">
+                                          IMEI (15 dígitos)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={entry.imei_number}
+                                          onChange={(e) => updateImeiSerialEntry(index, 'imei_number', e.target.value)}
+                                          className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-transparent"
+                                          placeholder="123456789012345"
+                                          maxLength={15}
+                                          pattern="[0-9]{15}"
+                                        />
+                                      </div>
+                                    )}
+                                    {(formData.imei_serial_type === 'serial' || formData.imei_serial_type === 'both') && (
+                                      <div>
+                                        <label className="block text-xs text-slate-600 mb-1">
+                                          Número de Serie
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={entry.serial_number}
+                                          onChange={(e) => updateImeiSerialEntry(index, 'serial_number', e.target.value)}
+                                          className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-transparent"
+                                          placeholder="ABC123DEF456"
+                                        />
+                                      </div>
+                                    )}
+                                    <div>
+                                      <label className="block text-xs text-slate-600 mb-1">
+                                        Notas (opcional)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={entry.notes}
+                                        onChange={(e) => updateImeiSerialEntry(index, 'notes', e.target.value)}
+                                        className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-transparent"
+                                        placeholder="Notas adicionales..."
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Entrada masiva */}
+                          <div className="space-y-2">
+                            <h6 className="text-sm font-medium text-purple-800">Entrada Masiva:</h6>
+                            <textarea
+                              value={formData.imei_serial_list}
+                              onChange={(e) => setFormData({ ...formData, imei_serial_list: e.target.value })}
+                              rows={6}
+                              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
+                              placeholder={`Ingresa un ${formData.imei_serial_type === 'imei' ? 'IMEI' : 
+                                          formData.imei_serial_type === 'serial' ? 'número de serie' : 'IMEI o serial'} por línea:
+
+Ejemplo:
+${formData.imei_serial_type === 'imei' ? '123456789012345\n987654321098765' : 
+  formData.imei_serial_type === 'serial' ? 'ABC123DEF456\nXYZ789GHI012' : 
+  '123456789012345\nABC123DEF456\n987654321098765'}`}
+                            />
+                            <p className="text-xs text-purple-600">
+                              {formData.imei_serial_list.trim() ? 
+                                `${formData.imei_serial_list.trim().split('\n').filter(line => line.trim()).length} códigos detectados` :
+                                'Los números de 15 dígitos se detectarán automáticamente como IMEI'
+                              }
+                            </p>
+                          </div>
+
+                          {/* Resumen total */}
+                          {(imeiSerialEntries.length > 0 || formData.imei_serial_list.trim()) && (
+                            <div className="bg-purple-100 border border-purple-300 rounded p-3">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="font-medium text-purple-900">Total a agregar:</span>
+                                <span className="font-bold text-purple-900">
+                                  {imeiSerialEntries.filter(e => e.imei_number.trim() || e.serial_number.trim()).length + 
+                                   (formData.imei_serial_list.trim() ? formData.imei_serial_list.trim().split('\n').filter(line => line.trim()).length : 0)} 
+                                  códigos
+                                </span>
+                              </div>
+                              <p className="text-xs text-purple-700 mt-1">
+                                Se crearán automáticamente al guardar el producto
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

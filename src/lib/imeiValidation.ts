@@ -59,7 +59,7 @@ const validateImeiLuhn = (imei: string): boolean => {
     let digit = digits[i];
     
     // Duplicar cada segundo dígito desde la derecha
-    if ((digits.length - i) % 2 === 0) {
+    if ((digits.length - i) % 2 !== 0) {
       digit *= 2;
       if (digit > 9) {
         digit = Math.floor(digit / 10) + (digit % 10);

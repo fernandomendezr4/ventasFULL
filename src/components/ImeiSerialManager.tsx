@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Hash, Plus, Trash2, Edit2, Save, X, Smartphone, AlertTriangle, CheckCircle, Search } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, isDemoMode } from '../lib/supabase';
 import { ProductWithCategory, ProductImeiSerial, ImeiSerialData } from '../lib/types';
 import { useAuth } from '../contexts/AuthContext';
 import { 

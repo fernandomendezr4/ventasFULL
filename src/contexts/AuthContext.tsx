@@ -39,9 +39,28 @@ export function useAuth() {
 }
 
 const DEFAULT_PERMISSIONS = {
-  admin: [...], // Mismos permisos que antes
-  manager: [...],
-  employee: [...]
+  admin: [
+    'view_dashboard', 'create_sales', 'manage_cash_register', 'view_sales', 'manage_installments',
+    'view_products', 'manage_products', 'create_products', 'edit_products', 'delete_products',
+    'view_categories', 'create_categories', 'edit_categories', 'delete_categories',
+    'view_customers', 'create_customers', 'edit_customers', 'delete_customers',
+    'view_suppliers', 'create_suppliers', 'edit_suppliers', 'delete_suppliers',
+    'manage_users', 'view_users', 'create_users', 'edit_users', 'delete_users',
+    'view_audit', 'manage_audit', 'view_compliance', 'manage_compliance', 'manage_settings'
+  ],
+  manager: [
+    'view_dashboard', 'create_sales', 'manage_cash_register', 'view_sales', 'manage_installments',
+    'view_products', 'manage_products', 'create_products', 'edit_products',
+    'view_categories', 'create_categories', 'edit_categories',
+    'view_customers', 'create_customers', 'edit_customers',
+    'view_suppliers', 'create_suppliers', 'edit_suppliers',
+    'manage_users', 'view_users', 'create_users', 'edit_users',
+    'view_audit', 'view_compliance', 'manage_settings'
+  ],
+  employee: [
+    'view_dashboard', 'create_sales', 'manage_cash_register', 'view_sales', 'manage_installments',
+    'view_customers', 'create_customers', 'edit_customers'
+  ]
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

@@ -321,6 +321,13 @@ export default function NewSale() {
       
       // Si el producto requiere IMEI/Serial, verificar disponibilidad
       if (product.requires_imei_serial) {
+        console.log('Producto requiere IMEI/Serial:', {
+          productId: product.id,
+          productName: product.name,
+          requiredQuantity: newQuantity,
+          imeiSerialType: product.imei_serial_type
+        });
+        
         checkProductAvailability(product.id).then(availability => {
           if (!availability.isAvailable || newQuantity > availability.availableImeiSerials) {
             alert(`No hay suficientes unidades con ${product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'} disponibles. Disponibles: ${availability.availableImeiSerials}`);
@@ -352,6 +359,13 @@ export default function NewSale() {
       }
     } else {
       if (product.requires_imei_serial) {
+        console.log('Producto requiere IMEI/Serial:', {
+          productId: product.id,
+          productName: product.name,
+          requiredQuantity: 1,
+          imeiSerialType: product.imei_serial_type
+        });
+        
         // Verificar disponibilidad para productos nuevos con IMEI/Serial
         checkProductAvailability(product.id).then(availability => {
           if (!availability.isAvailable || availability.availableImeiSerials === 0) {
@@ -391,6 +405,8 @@ export default function NewSale() {
 
   const handleImeiSelectionComplete = (selectedImeiSerials: ProductImeiSerial[]) => {
     if (!currentImeiProduct) return;
+    
+    console.log('IMEI/Serial seleccionados:', selectedImeiSerials);
     
     const { cartIndex } = currentImeiProduct;
     setCart(prev => prev.map((item, index) => 

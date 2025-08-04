@@ -396,9 +396,9 @@ export const checkProductAvailability = async (productId: string): Promise<{
     if (isDemoMode) {
       return {
         isAvailable: true,
-        stock: 10,
-        requiresImeiSerial: false,
-        availableImeiSerials: 5,
+        stock: 15,
+        requiresImeiSerial: true,
+        availableImeiSerials: 10,
         message: 'Producto disponible en modo demo'
       };
     }

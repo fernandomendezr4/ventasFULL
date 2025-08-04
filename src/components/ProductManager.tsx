@@ -127,6 +127,27 @@ export default function ProductManager() {
             imported_by: null,
             category: { id: 'demo-category-2', name: 'Accesorios', description: 'Accesorios electrónicos', created_at: new Date().toISOString() },
             supplier: { id: 'demo-supplier-3', name: 'Accesorios Plus', contact_person: 'Contacto Accesorios', email: 'accesorios@plus.com', phone: '3005555555', address: 'Dirección Accesorios', created_at: new Date().toISOString() }
+          },
+          {
+            id: 'demo-product-4',
+            name: 'Xiaomi Redmi Note 13',
+            description: 'Smartphone Xiaomi Redmi Note 13 128GB',
+            sale_price: 800000,
+            purchase_price: 650000,
+            stock: 12,
+            barcode: '789123456789',
+            category_id: 'demo-category-1',
+            supplier_id: 'demo-supplier-4',
+            created_at: new Date(Date.now() - 259200000).toISOString(),
+            has_imei_serial: true,
+            imei_serial_type: 'imei' as const,
+            requires_imei_serial: true,
+            bulk_import_batch: '',
+            import_notes: '',
+            imported_at: null,
+            imported_by: null,
+            category: { id: 'demo-category-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
+            supplier: { id: 'demo-supplier-4', name: 'Xiaomi Store', contact_person: 'Contacto Xiaomi', email: 'xiaomi@store.com', phone: '3007777777', address: 'Dirección Xiaomi', created_at: new Date().toISOString() }
           }
         ];
         

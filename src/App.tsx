@@ -228,8 +228,7 @@ function AppContent() {
 <<<<<<< HEAD
       <OfflineIndicator />
       <ConnectionNotifications />
-=======
->>>>>>> 56f80df (Primer commit)
+
     </ProtectedRoute>
   );
 }

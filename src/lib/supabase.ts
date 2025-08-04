@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './types';
 
@@ -198,6 +199,128 @@ export const safeDelete = async (
 };
 
 export { isDemoMode };
+
+// Connection status management
+export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'error';
+
+interface ConnectionStats {
+  isDemoMode: boolean;
+  hasClient: boolean;
+  retryCount: number;
+  maxRetries: number;
+  timeSinceLastAttempt: number | null;
+  lastError: string | null;
+}
+
+let connectionStatus: ConnectionStatus = isDemoMode ? 'disconnected' : 'connecting';
+let connectionListeners: ((status: ConnectionStatus) => void)[] = [];
+let connectionStats: ConnectionStats = {
+  isDemoMode,
+  hasClient: !!supabaseClient,
+  retryCount: 0,
+  maxRetries: 5,
+  timeSinceLastAttempt: null,
+  lastError: null
+};
+
+// Función para notificar cambios de estado a los listeners
+const notifyConnectionListeners = (status: ConnectionStatus) => {
+  connectionStatus = status;
+  connectionListeners.forEach(listener => {
+    try {
+      listener(status);
+    } catch (error) {
+      console.error('Error in connection listener:', error);
+    }
+  });
+};
+
+// Función para agregar listeners de estado de conexión
+export const addConnectionListener = (listener: (status: ConnectionStatus) => void) => {
+  connectionListeners.push(listener);
+  
+  // Notificar el estado actual inmediatamente
+  listener(connectionStatus);
+  
+  // Retornar función para remover el listener
+  return () => {
+    connectionListeners = connectionListeners.filter(l => l !== listener);
+  };
+};
+
+// Función para obtener estadísticas de conexión
+export const getConnectionStats = (): ConnectionStats => {
+  return { ...connectionStats };
+};
+
+// Función para forzar reconexión
+export const forceReconnection = async (): Promise<void> => {
+  if (isDemoMode || !supabaseClient) {
+    console.warn('Cannot reconnect in demo mode or without client');
+    return;
+  }
+
+  connectionStats.retryCount++;
+  connectionStats.timeSinceLastAttempt = Date.now();
+  
+  notifyConnectionListeners('connecting');
+  
+  try {
+    // Intentar una consulta simple para verificar la conexión
+    const { error } = await supabaseClient
+      .from('categories')
+      .select('id')
+      .limit(1);
+    
+    if (error) {
+      connectionStats.lastError = error.message;
+      notifyConnectionListeners('error');
+      throw error;
+    }
+    
+    connectionStats.lastError = null;
+    connectionStats.retryCount = 0;
+    notifyConnectionListeners('connected');
+  } catch (error) {
+    connectionStats.lastError = (error as Error).message;
+    notifyConnectionListeners('error');
+    throw error;
+  }
+};
+
+// Hook para monitorear el estado de conexión
+export const useConnectionStatus = () => {
+  const [status, setStatus] = useState<ConnectionStatus>(connectionStatus);
+  const [stats, setStats] = useState(getConnectionStats());
+
+  useEffect(() => {
+    const unsubscribe = addConnectionListener((newStatus) => {
+      setStatus(newStatus);
+      setStats(getConnectionStats());
+    });
+
+    return unsubscribe;
+  }, []);
+
+  return {
+    status,
+    isConnected: status === 'connected',
+    isConnecting: status === 'connecting',
+    stats,
+    forceReconnect: forceReconnection
+  };
+};
+
+// Inicializar el estado de conexión
+if (!isDemoMode && supabaseClient) {
+  // Verificar conexión inicial
+  testConnection().then(isConnected => {
+    notifyConnectionListeners(isConnected ? 'connected' : 'error');
+  });
+} else {
+  // En modo demo, marcar como desconectado
+  notifyConnectionListeners('disconnected');
+}
 
 // Función para verificar la conexión
 export const testConnection = async () => {

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { WifiOff, Wifi, AlertTriangle, RefreshCw } from 'lucide-react';
-import { useConnectionStatus } from '../lib/supabase';
+import { useConnectionMonitor } from '../hooks/useConnectionMonitor';
 
 export default function OfflineIndicator() {
-  const { status, isConnected, forceReconnect } = useConnectionStatus();
+  const { status, isConnected, reconnect } = useConnectionMonitor();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showReconnectButton, setShowReconnectButton] = useState(false);
 
@@ -13,7 +13,7 @@ export default function OfflineIndicator() {
       if (!isConnected) {
         // Intentar reconectar cuando vuelva la conexión a internet
         setTimeout(() => {
-          forceReconnect();
+          reconnect();
         }, 1000);
       }
     };
@@ -29,7 +29,7 @@ export default function OfflineIndicator() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [isConnected, forceReconnect]);
+  }, [isConnected, reconnect]);
 
   // Mostrar botón de reconexión después de 10 segundos sin conexión
   useEffect(() => {
@@ -84,7 +84,7 @@ export default function OfflineIndicator() {
 
           {showReconnectButton && isOnline && (
             <button
-              onClick={forceReconnect}
+              onClick={reconnect}
               className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center text-sm"
             >
               <RefreshCw className="h-4 w-4 mr-2" />

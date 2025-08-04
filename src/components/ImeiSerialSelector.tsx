@@ -66,26 +66,51 @@ export default function ImeiSerialSelector({
         return;
       }
 
-      // Cargar solo IMEI/Serial disponibles y válidos
+      // Cargar solo IMEI/Serial disponibles (no vendidos, no reservados por mucho tiempo)
       let query = supabase
         .from('product_imei_serials')
         .select('*')
         .eq('product_id', productId)
-        .eq('status', 'available');
+        .in('status', ['available']);
 
+      // También incluir reservados que sean muy recientes (menos de 5 minutos)
+      // para evitar problemas de concurrencia
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      const { data: availableData, error: availableError } = await query.order('created_at', { ascending: true });
+      
+      if (availableError) throw availableError;
+      
+      // Filtrar reservados antiguos
+      const filteredData = (availableData || []).filter(item => {
+        if (item.status === 'available') return true;
+        if (item.status === 'reserved') {
+          return new Date(item.updated_at || item.created_at) > new Date(fiveMinutesAgo);
+        }
+        return false;
+      });
       // Filtrar por tipo si es necesario
       if (imeiSerialType === 'imei') {
-        query = query.neq('imei_number', '').not('imei_number', 'is', null);
+        const imeiFiltered = filteredData.filter(item => 
+          item.imei_number && item.imei_number.trim() !== ''
+        );
+        setAvailableImeiSerials(imeiFiltered);
       } else if (imeiSerialType === 'serial') {
-        query = query.neq('serial_number', '').not('serial_number', 'is', null);
+        const serialFiltered = filteredData.filter(item => 
+          item.serial_number && item.serial_number.trim() !== ''
+        );
+        setAvailableImeiSerials(serialFiltered);
+      } else {
+        // both - debe tener al menos uno de los dos
+        const bothFiltered = filteredData.filter(item => 
+          (item.imei_number && item.imei_number.trim() !== '') ||
+          (item.serial_number && item.serial_number.trim() !== '')
+        );
+        setAvailableImeiSerials(bothFiltered);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: true });
-
-      if (error) throw error;
-      
       // Filtrar elementos con formato válido
-      const validImeiSerials = (data || []).filter(item => {
+      const validImeiSerials = availableImeiSerials.filter(item => {
         if (imeiSerialType === 'imei' && item.imei_number) {
           return validateImeiFormat(item.imei_number).isValid;
         } else if (imeiSerialType === 'serial' && item.serial_number) {
@@ -137,6 +162,18 @@ export default function ImeiSerialSelector({
     
     if (invalidSelections.length > 0) {
       alert('Algunas selecciones tienen formato inválido. Por favor, actualice la página y vuelva a intentar.');
+      return;
+    }
+
+    // Verificar que no haya duplicados en la selección
+    const imeiNumbers = selectedImeiSerials.map(item => item.imei_number).filter(Boolean);
+    const serialNumbers = selectedImeiSerials.map(item => item.serial_number).filter(Boolean);
+    
+    const uniqueImeis = new Set(imeiNumbers);
+    const uniqueSerials = new Set(serialNumbers);
+    
+    if (imeiNumbers.length !== uniqueImeis.size || serialNumbers.length !== uniqueSerials.size) {
+      alert('Error: Se detectaron duplicados en la selección. Por favor, verifique su selección.');
       return;
     }
     

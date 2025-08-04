@@ -1,6 +1,7 @@
 // Utilidades de validación para productos
 
 import { validateImeiFormat, validateSerialNumber } from './imeiValidation';
+import { supabase, isDemoMode } from './supabase';
 
 export interface ProductValidationResult {
   isValid: boolean;
@@ -8,6 +9,25 @@ export interface ProductValidationResult {
   warnings: Record<string, string>;
 }
 
+export interface StockValidationResult {
+  isValid: boolean;
+  availableStock: number;
+  reservedStock: number;
+  availableImeiSerials: number;
+  error?: string;
+}
+
+export interface SaleValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  validatedItems: Array<{
+    productId: string;
+    quantity: number;
+    availableStock: number;
+    selectedImeiSerials?: string[];
+  }>;
+}
 export interface ProductFormData {
   name: string;
   description: string;
@@ -98,6 +118,454 @@ export const validateBarcode = (barcode: string): string => {
   return '';
 };
 
+// Validación avanzada de duplicados con contexto completo
+export const validateProductDuplicates = async (
+  formData: ProductFormData,
+  excludeId?: string
+): Promise<{ isValid: boolean; errors: Record<string, string> }> => {
+  const errors: Record<string, string> = {};
+
+  if (isDemoMode) {
+    // En modo demo, simular algunas validaciones
+    const demoExistingNames = ['iPhone 15 Pro', 'Samsung Galaxy S24'];
+    const demoExistingBarcodes = ['123456789012', '987654321098'];
+    
+    if (demoExistingNames.includes(formData.name.trim())) {
+      errors.name = 'Ya existe un producto con este nombre en el sistema demo';
+    }
+    
+    if (formData.barcode && demoExistingBarcodes.includes(formData.barcode.trim())) {
+      errors.barcode = 'Ya existe un producto con este código de barras en el sistema demo';
+    }
+    
+    return { isValid: Object.keys(errors).length === 0, errors };
+  }
+
+  if (!supabase) {
+    return { isValid: true, errors: {} };
+  }
+
+  try {
+    // Verificar nombre duplicado
+    if (formData.name.trim()) {
+      let nameQuery = supabase
+        .from('products')
+        .select('id, name')
+        .ilike('name', formData.name.trim())
+        .limit(1);
+
+      if (excludeId) {
+        nameQuery = nameQuery.neq('id', excludeId);
+      }
+
+      const { data: nameCheck, error: nameError } = await nameQuery;
+
+      if (nameError) {
+        console.error('Error checking name duplicate:', nameError);
+        errors.name = 'Error al verificar duplicados de nombre';
+      } else if (nameCheck && nameCheck.length > 0) {
+        errors.name = `Ya existe un producto con el nombre "${formData.name.trim()}"`;
+      }
+    }
+
+    // Verificar código de barras duplicado
+    if (formData.barcode.trim()) {
+      let barcodeQuery = supabase
+        .from('products')
+        .select('id, name, barcode')
+        .eq('barcode', formData.barcode.trim())
+        .limit(1);
+
+      if (excludeId) {
+        barcodeQuery = barcodeQuery.neq('id', excludeId);
+      }
+
+      const { data: barcodeCheck, error: barcodeError } = await barcodeQuery;
+
+      if (barcodeError) {
+        console.error('Error checking barcode duplicate:', barcodeError);
+        errors.barcode = 'Error al verificar duplicados de código de barras';
+      } else if (barcodeCheck && barcodeCheck.length > 0) {
+        errors.barcode = `El código de barras "${formData.barcode.trim()}" ya está asignado al producto "${barcodeCheck[0].name}"`;
+      }
+    }
+
+    return { isValid: Object.keys(errors).length === 0, errors };
+  } catch (error) {
+    console.error('Error in duplicate validation:', error);
+    return {
+      isValid: false,
+      errors: { general: 'Error al validar duplicados en la base de datos' }
+    };
+  }
+};
+
+// Validar stock disponible para venta
+export const validateStockAvailability = async (
+  productId: string,
+  requestedQuantity: number
+): Promise<StockValidationResult> => {
+  try {
+    if (isDemoMode) {
+      // Demo mode: simular stock disponible
+      return {
+        isValid: requestedQuantity <= 10,
+        availableStock: 10,
+        reservedStock: 0,
+        availableImeiSerials: 5,
+        error: requestedQuantity > 10 ? 'Stock insuficiente en modo demo' : undefined
+      };
+    }
+
+    if (!supabase) {
+      return {
+        isValid: false,
+        availableStock: 0,
+        reservedStock: 0,
+        availableImeiSerials: 0,
+        error: 'Sistema de base de datos no disponible'
+      };
+    }
+
+    // Obtener información del producto
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('id, name, stock, has_imei_serial, requires_imei_serial, imei_serial_type')
+      .eq('id', productId)
+      .single();
+
+    if (productError || !product) {
+      return {
+        isValid: false,
+        availableStock: 0,
+        reservedStock: 0,
+        availableImeiSerials: 0,
+        error: 'Producto no encontrado'
+      };
+    }
+
+    // Para productos con IMEI/Serial requerido, verificar disponibilidad
+    if (product.requires_imei_serial) {
+      const { data: availableImeiSerials, error: imeiError } = await supabase
+        .from('product_imei_serials')
+        .select('id')
+        .eq('product_id', productId)
+        .eq('status', 'available');
+
+      if (imeiError) {
+        return {
+          isValid: false,
+          availableStock: product.stock,
+          reservedStock: 0,
+          availableImeiSerials: 0,
+          error: 'Error al verificar IMEI/Serial disponibles'
+        };
+      }
+
+      const availableImeiCount = availableImeiSerials?.length || 0;
+      
+      if (requestedQuantity > availableImeiCount) {
+        return {
+          isValid: false,
+          availableStock: product.stock,
+          reservedStock: 0,
+          availableImeiSerials: availableImeiCount,
+          error: `Solo hay ${availableImeiCount} unidades con ${product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'} disponibles`
+        };
+      }
+
+      return {
+        isValid: true,
+        availableStock: product.stock,
+        reservedStock: 0,
+        availableImeiSerials: availableImeiCount
+      };
+    } else {
+      // Para productos sin IMEI/Serial, verificar stock normal
+      if (requestedQuantity > product.stock) {
+        return {
+          isValid: false,
+          availableStock: product.stock,
+          reservedStock: 0,
+          availableImeiSerials: 0,
+          error: `Stock insuficiente. Disponible: ${product.stock}, Solicitado: ${requestedQuantity}`
+        };
+      }
+
+      return {
+        isValid: true,
+        availableStock: product.stock,
+        reservedStock: 0,
+        availableImeiSerials: 0
+      };
+    }
+  } catch (error) {
+    console.error('Error validating stock availability:', error);
+    return {
+      isValid: false,
+      availableStock: 0,
+      reservedStock: 0,
+      availableImeiSerials: 0,
+      error: 'Error interno al validar stock'
+    };
+  }
+};
+
+// Validar venta completa antes de procesar
+export const validateSaleTransaction = async (
+  cartItems: Array<{
+    productId: string;
+    quantity: number;
+    selectedImeiSerials?: string[];
+  }>
+): Promise<SaleValidationResult> => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const validatedItems: Array<{
+    productId: string;
+    quantity: number;
+    availableStock: number;
+    selectedImeiSerials?: string[];
+  }> = [];
+
+  if (cartItems.length === 0) {
+    errors.push('El carrito está vacío');
+    return { isValid: false, errors, warnings, validatedItems };
+  }
+
+  try {
+    for (const item of cartItems) {
+      // Validar stock disponible
+      const stockValidation = await validateStockAvailability(item.productId, item.quantity);
+      
+      if (!stockValidation.isValid) {
+        errors.push(`Producto ${item.productId.slice(-8)}: ${stockValidation.error}`);
+        continue;
+      }
+
+      // Obtener información del producto para validaciones adicionales
+      if (!isDemoMode && supabase) {
+        const { data: product, error: productError } = await supabase
+          .from('products')
+          .select('id, name, requires_imei_serial, imei_serial_type')
+          .eq('id', item.productId)
+          .single();
+
+        if (productError || !product) {
+          errors.push(`Producto ${item.productId.slice(-8)}: No encontrado`);
+          continue;
+        }
+
+        // Validar IMEI/Serial si es requerido
+        if (product.requires_imei_serial) {
+          if (!item.selectedImeiSerials || item.selectedImeiSerials.length !== item.quantity) {
+            errors.push(`${product.name}: Debe seleccionar ${item.quantity} ${product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'} para completar la venta`);
+            continue;
+          }
+
+          // Verificar que los IMEI/Serial seleccionados aún estén disponibles
+          const { data: imeiCheck, error: imeiError } = await supabase
+            .from('product_imei_serials')
+            .select('id, status, imei_number, serial_number')
+            .in('id', item.selectedImeiSerials)
+            .eq('status', 'available');
+
+          if (imeiError) {
+            errors.push(`${product.name}: Error al verificar ${product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'}`);
+            continue;
+          }
+
+          if (!imeiCheck || imeiCheck.length !== item.selectedImeiSerials.length) {
+            const unavailableCount = item.selectedImeiSerials.length - (imeiCheck?.length || 0);
+            errors.push(`${product.name}: ${unavailableCount} ${product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'} ya no están disponibles`);
+            continue;
+          }
+        }
+      }
+
+      validatedItems.push({
+        productId: item.productId,
+        quantity: item.quantity,
+        availableStock: stockValidation.availableStock,
+        selectedImeiSerials: item.selectedImeiSerials
+      });
+    }
+
+    // Verificar duplicados en el carrito
+    const productCounts = new Map<string, number>();
+    cartItems.forEach(item => {
+      productCounts.set(item.productId, (productCounts.get(item.productId) || 0) + item.quantity);
+    });
+
+    for (const [productId, totalQuantity] of productCounts) {
+      if (totalQuantity !== cartItems.filter(item => item.productId === productId).reduce((sum, item) => sum + item.quantity, 0)) {
+        warnings.push(`Producto ${productId.slice(-8)}: Cantidad duplicada en el carrito`);
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings,
+      validatedItems
+    };
+  } catch (error) {
+    console.error('Error validating sale transaction:', error);
+    return {
+      isValid: false,
+      errors: ['Error interno al validar la transacción'],
+      warnings,
+      validatedItems
+    };
+  }
+};
+
+// Verificar integridad de IMEI/Serial antes de venta
+export const validateImeiSerialIntegrity = async (
+  productId: string,
+  selectedImeiSerialIds: string[]
+): Promise<{ isValid: boolean; errors: string[]; validIds: string[] }> => {
+  const errors: string[] = [];
+  const validIds: string[] = [];
+
+  if (isDemoMode) {
+    // En modo demo, simular validación exitosa
+    return {
+      isValid: true,
+      errors: [],
+      validIds: selectedImeiSerialIds
+    };
+  }
+
+  if (!supabase) {
+    return {
+      isValid: false,
+      errors: ['Sistema de base de datos no disponible'],
+      validIds: []
+    };
+  }
+
+  try {
+    // Verificar que todos los IMEI/Serial existan y estén disponibles
+    const { data: imeiSerials, error } = await supabase
+      .from('product_imei_serials')
+      .select('id, imei_number, serial_number, status, product_id')
+      .in('id', selectedImeiSerialIds);
+
+    if (error) {
+      return {
+        isValid: false,
+        errors: ['Error al verificar IMEI/Serial en la base de datos'],
+        validIds: []
+      };
+    }
+
+    if (!imeiSerials || imeiSerials.length !== selectedImeiSerialIds.length) {
+      const missingCount = selectedImeiSerialIds.length - (imeiSerials?.length || 0);
+      errors.push(`${missingCount} IMEI/Serial no encontrados en la base de datos`);
+    }
+
+    for (const imeiSerial of imeiSerials || []) {
+      // Verificar que pertenezca al producto correcto
+      if (imeiSerial.product_id !== productId) {
+        errors.push(`IMEI/Serial ${imeiSerial.imei_number || imeiSerial.serial_number} no pertenece a este producto`);
+        continue;
+      }
+
+      // Verificar que esté disponible
+      if (imeiSerial.status !== 'available') {
+        errors.push(`IMEI/Serial ${imeiSerial.imei_number || imeiSerial.serial_number} ya no está disponible (estado: ${imeiSerial.status})`);
+        continue;
+      }
+
+      validIds.push(imeiSerial.id);
+    }
+
+    return {
+      isValid: errors.length === 0 && validIds.length === selectedImeiSerialIds.length,
+      errors,
+      validIds
+    };
+  } catch (error) {
+    console.error('Error validating IMEI/Serial integrity:', error);
+    return {
+      isValid: false,
+      errors: ['Error interno al validar integridad de IMEI/Serial'],
+      validIds: []
+    };
+  }
+};
+
+// Reservar temporalmente IMEI/Serial durante el proceso de venta
+export const reserveImeiSerials = async (
+  imeiSerialIds: string[],
+  reservationToken: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (isDemoMode) {
+    return { success: true };
+  }
+
+  if (!supabase) {
+    return { success: false, error: 'Sistema de base de datos no disponible' };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('product_imei_serials')
+      .update({
+        status: 'reserved',
+        notes: `Reservado temporalmente: ${reservationToken}`,
+        updated_at: new Date().toISOString()
+      })
+      .in('id', imeiSerialIds)
+      .eq('status', 'available');
+
+    if (error) {
+      console.error('Error reserving IMEI/Serial:', error);
+      return { success: false, error: 'Error al reservar IMEI/Serial' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in reserveImeiSerials:', error);
+    return { success: false, error: 'Error interno al reservar IMEI/Serial' };
+  }
+};
+
+// Liberar reservas de IMEI/Serial en caso de error
+export const releaseImeiSerialReservations = async (
+  reservationToken: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (isDemoMode) {
+    return { success: true };
+  }
+
+  if (!supabase) {
+    return { success: false, error: 'Sistema de base de datos no disponible' };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('product_imei_serials')
+      .update({
+        status: 'available',
+        notes: '',
+        updated_at: new Date().toISOString()
+      })
+      .eq('status', 'reserved')
+      .like('notes', `%${reservationToken}%`);
+
+    if (error) {
+      console.error('Error releasing IMEI/Serial reservations:', error);
+      return { success: false, error: 'Error al liberar reservas de IMEI/Serial' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in releaseImeiSerialReservations:', error);
+    return { success: false, error: 'Error interno al liberar reservas' };
+  }
+};
 // Validación de lógica de negocio
 export const validateBusinessLogic = (formData: ProductFormData): Record<string, string> => {
   const warnings: Record<string, string> = {};

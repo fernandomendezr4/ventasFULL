@@ -16,6 +16,7 @@ import {
   normalizeImei,
   normalizeSerial 
 } from '../lib/imeiValidation';
+import { validateProductDuplicates, validateBusinessLogic } from '../lib/productValidation';
 
 export default function ProductManager() {
   const { user } = useAuth();
@@ -231,58 +232,68 @@ export default function ProductManager() {
         return;
       }
 
-      // Validar duplicados de nombre y código de barras
-      const errors: Record<string, string> = {};
+      // Validar duplicados usando la nueva función
+      const duplicateValidation = await validateProductDuplicates(formData, editingProduct?.id);
+      
+      if (!duplicateValidation.isValid) {
+        setValidationErrors(duplicateValidation.errors);
+        return;
+      }
 
-      // Verificar nombre duplicado
-      if (formData.name.trim()) {
-        let nameQuery = supabase
-          .from('products')
-          .select('id')
-          .ilike('name', formData.name.trim())
-          .limit(1);
-
-        if (editingProduct) {
-          nameQuery = nameQuery.neq('id', editingProduct.id);
-        }
-
-        const { data: nameCheck } = await nameQuery;
-
-        if (nameCheck && nameCheck.length > 0) {
-          errors.name = 'Ya existe un producto con este nombre';
+      // Validar lógica de negocio
+      const businessWarnings = validateBusinessLogic(formData);
+      
+      // Mostrar advertencias si las hay (pero no bloquear el guardado)
+      if (Object.keys(businessWarnings).length > 0) {
+        const warningMessages = Object.values(businessWarnings).join('\n');
+        const proceed = window.confirm(
+          `Se detectaron las siguientes advertencias:\n\n${warningMessages}\n\n¿Desea continuar guardando el producto?`
+        );
+        
+        if (!proceed) {
+          return;
         }
       }
 
-      // Verificar código de barras duplicado
-      if (formData.barcode.trim()) {
-        let barcodeQuery = supabase
-          .from('products')
-          .select('id')
-          .eq('barcode', formData.barcode.trim())
-          .limit(1);
-
-        if (editingProduct) {
-          barcodeQuery = barcodeQuery.neq('id', editingProduct.id);
-        }
-
-        const { data: barcodeCheck } = await barcodeQuery;
-
-        if (barcodeCheck && barcodeCheck.length > 0) {
-          errors.barcode = 'Ya existe un producto con este código de barras';
+      // Validación especial para productos con IMEI/Serial
+      if (formData.has_imei_serial && formData.requires_imei_serial && parseInt(formData.stock) > 0) {
+        const proceed = window.confirm(
+          `Este producto requiere IMEI/Serial obligatorio.\n\n` +
+          `Después de crear el producto, deberá agregar ${formData.stock} registros únicos de ${formData.imei_serial_type === 'imei' ? 'IMEI' : formData.imei_serial_type === 'serial' ? 'números de serie' : 'IMEI y números de serie'}.\n\n` +
+          `¿Desea continuar?`
+        );
+        
+        if (!proceed) {
+          return;
         }
       }
 
-      if (Object.keys(errors).length > 0) {
-        setValidationErrors(errors);
+      // Validar límites de base de datos
+      const salePrice = parseFloat(formData.sale_price);
+      const purchasePrice = parseFloat(formData.purchase_price) || 0;
+      const stock = parseInt(formData.stock);
+
+      if (salePrice > 999999999.99) {
+        setValidationErrors({ sale_price: 'El precio de venta excede el límite máximo permitido' });
+        return;
+      }
+
+      if (purchasePrice > 999999999.99) {
+        setValidationErrors({ purchase_price: 'El precio de compra excede el límite máximo permitido' });
+        return;
+      }
+
+      if (stock > 999999) {
+        setValidationErrors({ stock: 'El stock excede el límite máximo permitido' });
         return;
       }
 
       const productData = {
         name: formData.name.trim(),
         description: formData.description.trim(),
-        sale_price: parseFloat(formData.sale_price),
-        purchase_price: parseFloat(formData.purchase_price) || 0,
-        stock: parseInt(formData.stock),
+        sale_price: salePrice,
+        purchase_price: purchasePrice,
+        stock: stock,
         barcode: formData.barcode.trim(),
         category_id: formData.category_id || null,
         supplier_id: formData.supplier_id || null,
@@ -298,12 +309,25 @@ export default function ProductManager() {
           .eq('id', editingProduct.id);
 
         if (error) throw error;
+        
+        alert('Producto actualizado exitosamente');
       } else {
         const { error } = await supabase
           .from('products')
           .insert([productData]);
 
         if (error) throw error;
+        
+        // Mostrar mensaje específico para productos con IMEI/Serial
+        if (formData.has_imei_serial && formData.requires_imei_serial && parseInt(formData.stock) > 0) {
+          alert(
+            `Producto creado exitosamente.\n\n` +
+            `IMPORTANTE: Este producto requiere ${formData.imei_serial_type === 'imei' ? 'IMEI' : formData.imei_serial_type === 'serial' ? 'números de serie' : 'IMEI y números de serie'} obligatorios.\n\n` +
+            `Debe agregar ${formData.stock} registros únicos en la gestión de IMEI/Serial antes de que esté disponible para venta.`
+          );
+        } else {
+          alert('Producto creado exitosamente');
+        }
       }
 
       setShowForm(false);
@@ -311,14 +335,27 @@ export default function ProductManager() {
       resetForm();
       loadProducts();
       
-      // Mostrar advertencia sobre IMEI/Serial si es necesario
-      if (formData.has_imei_serial && formData.requires_imei_serial && parseInt(formData.stock) > 0) {
-        alert(`Producto ${editingProduct ? 'actualizado' : 'creado'} exitosamente.\n\nRecuerda: Este producto requiere IMEI/Serial obligatorio. Debes agregar ${formData.stock} registros únicos en la gestión de IMEI/Serial.`);
-      }
-      
     } catch (error) {
       console.error('Error saving product:', error);
-      alert('Error al guardar producto: ' + (error as Error).message);
+      
+      // Manejar errores específicos de la base de datos
+      const errorMessage = (error as Error).message;
+      
+      if (errorMessage.includes('duplicate key') || errorMessage.includes('unique constraint')) {
+        if (errorMessage.includes('products_name_key') || errorMessage.includes('name')) {
+          setValidationErrors({ name: 'Ya existe un producto con este nombre' });
+        } else if (errorMessage.includes('products_barcode') || errorMessage.includes('barcode')) {
+          setValidationErrors({ barcode: 'Ya existe un producto con este código de barras' });
+        } else {
+          alert('Error: Ya existe un producto con datos similares');
+        }
+      } else if (errorMessage.includes('check constraint')) {
+        alert('Error: Los datos no cumplen con las validaciones requeridas');
+      } else if (errorMessage.includes('foreign key')) {
+        alert('Error: Categoría o proveedor seleccionado no válido');
+      } else {
+        alert('Error al guardar producto: ' + errorMessage);
+      }
     } finally {
       setIsValidating(false);
     }
@@ -344,11 +381,66 @@ export default function ProductManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este producto? Esto también eliminará todos sus registros IMEI/Serial asociados.')) {
+    // Verificar si el producto tiene ventas asociadas
+    if (!isDemoMode && supabase) {
+      try {
+        const { data: salesCheck, error } = await supabase
+          .from('sale_items')
+          .select('id')
+          .eq('product_id', id)
+          .limit(1);
+
+        if (error) {
+          console.error('Error checking product sales:', error);
+          alert('Error al verificar ventas del producto');
+          return;
+        }
+
+        if (salesCheck && salesCheck.length > 0) {
+          alert('No se puede eliminar este producto porque tiene ventas asociadas. Para mantener la integridad de los datos, considere desactivarlo en lugar de eliminarlo.');
+          return;
+        }
+
+        // Verificar IMEI/Serial asociados
+        const { data: imeiCheck, error: imeiError } = await supabase
+          .from('product_imei_serials')
+          .select('id, status')
+          .eq('product_id', id);
+
+        if (imeiError) {
+          console.error('Error checking IMEI/Serial:', imeiError);
+        }
+
+        const soldImeiCount = imeiCheck?.filter(item => item.status === 'sold').length || 0;
+        
+        if (soldImeiCount > 0) {
+          alert(`No se puede eliminar este producto porque tiene ${soldImeiCount} unidades vendidas con IMEI/Serial registrados.`);
+          return;
+        }
+
+        const totalImeiCount = imeiCheck?.length || 0;
+        const confirmMessage = totalImeiCount > 0 
+          ? `¿Estás seguro de que quieres eliminar este producto?\n\nEsto también eliminará ${totalImeiCount} registros IMEI/Serial asociados.`
+          : '¿Estás seguro de que quieres eliminar este producto?';
+
+        if (!window.confirm(confirmMessage)) {
+          return;
+        }
+      } catch (error) {
+        console.error('Error in pre-delete validation:', error);
+        alert('Error al validar eliminación del producto');
+        return;
+      }
+    } else if (isDemoMode) {
       if (isDemoMode) {
         alert('Función no disponible en modo demo');
         return;
       }
+    } else {
+      if (!window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+        return;
+      }
+    }
       
       try {
         const { error } = await supabase
@@ -357,12 +449,19 @@ export default function ProductManager() {
           .eq('id', id);
 
         if (error) throw error;
+        
+        alert('Producto eliminado exitosamente');
         loadProducts();
       } catch (error) {
         console.error('Error deleting product:', error);
-        alert('Error al eliminar producto: ' + (error as Error).message);
+        
+        const errorMessage = (error as Error).message;
+        if (errorMessage.includes('foreign key') || errorMessage.includes('violates')) {
+          alert('No se puede eliminar el producto porque está siendo usado en otras partes del sistema');
+        } else {
+          alert('Error al eliminar producto: ' + errorMessage);
+        }
       }
-    }
   };
 
   const resetForm = () => {

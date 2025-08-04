@@ -77,7 +77,8 @@ const validateImeiLuhn = (imei: string): boolean => {
 // Verificar si un IMEI ya existe en la base de datos
 export const checkImeiDuplicate = async (
   imei: string, 
-  excludeProductId?: string
+  excludeProductId?: string,
+  excludeImeiSerialId?: string
 ): Promise<ImeiValidationResult> => {
   try {
     // Validar formato primero
@@ -130,6 +131,7 @@ export const checkImeiDuplicate = async (
         id,
         product_id,
         imei_number,
+        status,
         product:products(id, name)
       `)
       .eq('imei_number', imei.trim());
@@ -137,6 +139,11 @@ export const checkImeiDuplicate = async (
     // Excluir producto específico si se proporciona (para ediciones)
     if (excludeProductId) {
       query = query.neq('product_id', excludeProductId);
+    }
+
+    // Excluir registro específico si se proporciona (para ediciones de IMEI/Serial)
+    if (excludeImeiSerialId) {
+      query = query.neq('id', excludeImeiSerialId);
     }
 
     const { data, error } = await query.limit(1);
@@ -152,10 +159,11 @@ export const checkImeiDuplicate = async (
 
     if (data && data.length > 0) {
       const existingRecord = data[0];
+      const statusInfo = existingRecord.status === 'sold' ? ' (vendido)' : '';
       return {
         isValid: false,
         isDuplicate: true,
-        error: `IMEI ya existe en el producto: ${existingRecord.product?.name || 'Producto desconocido'}`,
+        error: `IMEI ya existe en el producto: ${existingRecord.product?.name || 'Producto desconocido'}${statusInfo}`,
         existingProductId: existingRecord.product_id,
         existingProductName: existingRecord.product?.name || 'Producto desconocido'
       };
@@ -271,7 +279,8 @@ export const validateSerialNumber = (serial: string): { isValid: boolean; error?
 // Verificar duplicados de números de serie
 export const checkSerialDuplicate = async (
   serial: string,
-  excludeProductId?: string
+  excludeProductId?: string,
+  excludeImeiSerialId?: string
 ): Promise<ImeiValidationResult> => {
   try {
     // Validar formato primero
@@ -324,6 +333,7 @@ export const checkSerialDuplicate = async (
         id,
         product_id,
         serial_number,
+        status,
         product:products(id, name)
       `)
       .eq('serial_number', serial.trim());
@@ -331,6 +341,11 @@ export const checkSerialDuplicate = async (
     // Excluir producto específico si se proporciona
     if (excludeProductId) {
       query = query.neq('product_id', excludeProductId);
+    }
+
+    // Excluir registro específico si se proporciona
+    if (excludeImeiSerialId) {
+      query = query.neq('id', excludeImeiSerialId);
     }
 
     const { data, error } = await query.limit(1);
@@ -346,10 +361,11 @@ export const checkSerialDuplicate = async (
 
     if (data && data.length > 0) {
       const existingRecord = data[0];
+      const statusInfo = existingRecord.status === 'sold' ? ' (vendido)' : '';
       return {
         isValid: false,
         isDuplicate: true,
-        error: `Número de serie ya existe en el producto: ${existingRecord.product?.name || 'Producto desconocido'}`,
+        error: `Número de serie ya existe en el producto: ${existingRecord.product?.name || 'Producto desconocido'}${statusInfo}`,
         existingProductId: existingRecord.product_id,
         existingProductName: existingRecord.product?.name || 'Producto desconocido'
       };

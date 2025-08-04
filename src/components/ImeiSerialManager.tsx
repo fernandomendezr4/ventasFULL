@@ -93,7 +93,7 @@ export default function ImeiSerialManager({
       if (formData.imei_number?.trim()) {
         const imeiValidation = await checkImeiDuplicate(
           formData.imei_number.trim(), 
-          editingItem ? product.id : undefined
+          editingItem?.id ? product.id : undefined
         );
         
         if (!imeiValidation.isValid) {
@@ -105,7 +105,7 @@ export default function ImeiSerialManager({
       if (formData.serial_number?.trim()) {
         const serialValidation = await checkSerialDuplicate(
           formData.serial_number.trim(),
-          editingItem ? product.id : undefined
+          editingItem?.id ? product.id : undefined
         );
         
         if (!serialValidation.isValid) {
@@ -119,17 +119,42 @@ export default function ImeiSerialManager({
         return;
       }
 
+      // Validación adicional: verificar que el producto aún existe y es editable
+      if (!isDemoMode && supabase) {
+        const { data: productCheck, error: productError } = await supabase
+          .from('products')
+          .select('id, name, has_imei_serial')
+          .eq('id', product.id)
+          .single();
+
+        if (productError || !productCheck) {
+          alert('Error: El producto ya no existe o no se puede acceder');
+          return;
+        }
+
+        if (!productCheck.has_imei_serial) {
+          alert('Error: Este producto ya no está configurado para manejar IMEI/Serial');
+          return;
+        }
+      }
       // Proceder con el guardado
       const dataToSave = {
         product_id: product.id,
         imei_number: formData.imei_number?.trim() ? normalizeImei(formData.imei_number.trim()) : '',
         serial_number: formData.serial_number?.trim() ? normalizeSerial(formData.serial_number.trim()) : '',
         notes: formData.notes?.trim() || '',
+        status: 'available' as const,
         created_by: user?.id,
         updated_by: user?.id
       };
 
       if (editingItem) {
+        // Verificar que el item no esté vendido antes de editar
+        if (editingItem.status === 'sold') {
+          alert('No se puede editar un IMEI/Serial que ya fue vendido');
+          return;
+        }
+
         const { error } = await supabase
           .from('product_imei_serials')
           .update({
@@ -139,12 +164,16 @@ export default function ImeiSerialManager({
           .eq('id', editingItem.id);
 
         if (error) throw error;
+        
+        alert('Registro actualizado exitosamente');
       } else {
         const { error } = await supabase
           .from('product_imei_serials')
           .insert([dataToSave]);
 
         if (error) throw error;
+        
+        alert('Registro agregado exitosamente');
       }
 
       setShowAddForm(false);
@@ -156,7 +185,21 @@ export default function ImeiSerialManager({
       
     } catch (error) {
       console.error('Error saving IMEI/Serial:', error);
-      alert('Error al guardar: ' + (error as Error).message);
+      
+      const errorMessage = (error as Error).message;
+      if (errorMessage.includes('duplicate key') || errorMessage.includes('unique')) {
+        if (errorMessage.includes('imei')) {
+          setValidationErrors({ imei_number: 'Este IMEI ya está registrado en el sistema' });
+        } else if (errorMessage.includes('serial')) {
+          setValidationErrors({ serial_number: 'Este número de serie ya está registrado en el sistema' });
+        } else {
+          alert('Error: Ya existe un registro con estos datos');
+        }
+      } else if (errorMessage.includes('check constraint')) {
+        alert('Error: Los datos no cumplen con el formato requerido');
+      } else {
+        alert('Error al guardar: ' + errorMessage);
+      }
     } finally {
       setIsValidating(false);
     }
@@ -173,7 +216,41 @@ export default function ImeiSerialManager({
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
+    if (!isDemoMode && supabase) {
+      // Verificar si el IMEI/Serial está vendido
+      try {
+        const { data: imeiSerial, error } = await supabase
+          .from('product_imei_serials')
+          .select('id, status, sale_id, imei_number, serial_number')
+          .eq('id', id)
+          .single();
+
+        if (error) {
+          console.error('Error checking IMEI/Serial status:', error);
+          alert('Error al verificar el estado del registro');
+          return;
+        }
+
+        if (imeiSerial.status === 'sold') {
+          alert(`No se puede eliminar este ${imeiSerial.imei_number ? 'IMEI' : 'número de serie'} porque ya fue vendido (Venta: ${imeiSerial.sale_id?.slice(-8)})`);
+          return;
+        }
+
+        const displayValue = imeiSerial.imei_number || imeiSerial.serial_number;
+        if (!window.confirm(`¿Estás seguro de que quieres eliminar el registro ${displayValue}?`)) {
+          return;
+        }
+      } catch (error) {
+        console.error('Error in pre-delete validation:', error);
+        alert('Error al validar eliminación');
+        return;
+      }
+    } else {
+      if (!window.confirm('¿Estás seguro de que quieres eliminar este registro?')) {
+        return;
+      }
+    }
+
       try {
         const { error } = await supabase
           .from('product_imei_serials')
@@ -181,13 +258,20 @@ export default function ImeiSerialManager({
           .eq('id', id);
 
         if (error) throw error;
+        
+        alert('Registro eliminado exitosamente');
         loadImeiSerials();
         onUpdate();
       } catch (error) {
         console.error('Error deleting IMEI/Serial:', error);
-        alert('Error al eliminar: ' + (error as Error).message);
+        
+        const errorMessage = (error as Error).message;
+        if (errorMessage.includes('foreign key') || errorMessage.includes('violates')) {
+          alert('No se puede eliminar este registro porque está siendo usado en ventas');
+        } else {
+          alert('Error al eliminar: ' + errorMessage);
+        }
       }
-    }
   };
 
   const handleBulkAdd = async () => {

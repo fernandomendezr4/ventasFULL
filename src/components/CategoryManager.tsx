@@ -237,7 +237,7 @@ export default function CategoryManager() {
           filteredCategories.map((category) => (
             <div key={category.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between mb-4">
-             {categories.length === 0 ? 'No hay categorías registradas' : 'No se encontraron categorías que coincidan con tu búsqueda'}
+                <div>
                   <h3 className="font-semibold text-slate-900">{category.name}</h3>
                   <p className="text-sm text-slate-600 mt-1">{category.description}</p>
                 </div>

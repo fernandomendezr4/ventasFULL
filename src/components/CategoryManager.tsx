@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Tag, Search, Filter, Brain, Zap, TrendingUp, Lightbulb, BarChart3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Tag, Search, Filter, Brain, Zap, TrendingUp, Lightbulb, BarChart3, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Category } from '../lib/types';
 import IntelligentCategoryManager from './IntelligentCategoryManager';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, Barcode, DollarSign, Eye, Filter, Upload, Hash, AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, Barcode, DollarSign, Eye, Filter, Upload, Hash, AlertTriangle, CheckCircle, X, Brain, Lightbulb, Zap } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { ProductWithCategory, Category, Supplier } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -10,6 +10,7 @@ import ProductQuickActions from './ProductQuickActions';
 import ProductFormValidation from './ProductFormValidation';
 import BulkProductImport from './BulkProductImport';
 import ImeiSerialManager from './ImeiSerialManager';
+import { suggestCategory, autoClassifyProduct, type CategorySuggestion } from '../lib/intelligentCategories';
 
 export default function ProductManager() {
   const { user } = useAuth();
@@ -30,6 +31,9 @@ export default function ProductManager() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(12);
+  const [aiSuggestions, setAiSuggestions] = useState<CategorySuggestion[]>([]);
+  const [showAiSuggestions, setShowAiSuggestions] = useState(false);
+  const [generatingAiSuggestions, setGeneratingAiSuggestions] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -52,7 +56,82 @@ export default function ProductManager() {
   }>({
     name: false,
     barcode: false
+  // Generar sugerencias de IA cuando cambie el nombre del producto
+  useEffect(() => {
+    if (formData.name.length > 3 && !editingProduct) {
+      generateAiSuggestions();
+    }
+  }, [formData.name, formData.description]);
+
+  const generateAiSuggestions = async () => {
+    try {
+      setGeneratingAiSuggestions(true);
+      const suggestions = await suggestCategory(
+        formData.name,
+        formData.description,
+        categories
+      );
+      setAiSuggestions(suggestions);
+      setShowAiSuggestions(suggestions.length > 0);
+    } catch (error) {
+      console.error('Error generating AI suggestions:', error);
+    } finally {
+      setGeneratingAiSuggestions(false);
+    }
+  };
+
+  const applyAiSuggestion = (suggestion: CategorySuggestion) => {
+    const matchingCategory = categories.find(cat => 
+      cat.name.toLowerCase() === suggestion.suggested_name.toLowerCase()
+    );
+    
+    if (matchingCategory) {
+      setFormData({ ...formData, category_id: matchingCategory.id });
+      setShowAiSuggestions(false);
+    } else {
+      // Sugerir crear nueva categoría
+      if (window.confirm(`¿Quieres crear la categoría "${suggestion.suggested_name}"?`)) {
+        createCategoryFromAiSuggestion(suggestion);
+      }
+    }
+  };
+
+  const createCategoryFromAiSuggestion = async (suggestion: CategorySuggestion) => {
+    try {
+      if (isDemoMode) {
+        const newCategory = {
+          id: `demo-category-${Date.now()}`,
+          name: suggestion.suggested_name,
+          description: suggestion.reasoning,
+          created_at: new Date().toISOString()
+        };
+        setCategories([...categories, newCategory]);
+        setFormData({ ...formData, category_id: newCategory.id });
+        setShowAiSuggestions(false);
+        alert('Categoría creada exitosamente por IA en modo demo');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('categories')
+        .insert([{
+          name: suggestion.suggested_name,
+          description: `${suggestion.reasoning}. Creada automáticamente por IA.`
+        }])
+        .select()
+        .single();
   });
+      if (error) throw error;
+      
+      setCategories([...categories, data]);
+      setFormData({ ...formData, category_id: data.id });
+      setShowAiSuggestions(false);
+      alert('Categoría creada exitosamente por IA');
+    } catch (error) {
+      console.error('Error creating AI category:', error);
+      alert('Error al crear categoría: ' + (error as Error).message);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -690,6 +769,64 @@ export default function ProductManager() {
               </div>
             </div>
 
+            {/* Sugerencias de IA para Categoría */}
+            {showAiSuggestions && aiSuggestions.length > 0 && (
+              <div className="border-t border-slate-200 pt-4">
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-purple-900 flex items-center">
+                      <Brain className="h-4 w-4 mr-2" />
+                      Sugerencias de Categoría IA
+                      {generatingAiSuggestions && (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600 ml-2"></div>
+                      )}
+                    </h4>
+                    <button
+                      onClick={() => setShowAiSuggestions(false)}
+                      className="text-purple-600 hover:text-purple-800 transition-colors duration-200"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {aiSuggestions.slice(0, 3).map((suggestion, index) => (
+                      <div key={index} className="bg-white border border-purple-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-slate-900">{suggestion.suggested_name}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                suggestion.confidence >= 80 ? 'bg-green-100 text-green-800' :
+                                suggestion.confidence >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {suggestion.confidence.toFixed(0)}%
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600">{suggestion.reasoning}</p>
+                            {suggestion.keywords_matched.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {suggestion.keywords_matched.slice(0, 3).map((keyword, keyIndex) => (
+                                  <span key={keyIndex} className="text-xs bg-purple-100 text-purple-700 px-1 py-0.5 rounded">
+                                    {keyword}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => applyAiSuggestion(suggestion)}
+                            className="bg-purple-600 text-white px-3 py-1 rounded text-xs hover:bg-purple-700 transition-colors duration-200"
+                          >
+                            Aplicar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Validación del Formulario */}
             <ProductFormValidation
               formData={formData}
@@ -718,12 +855,34 @@ export default function ProductManager() {
               >
                 {editingProduct ? 'Actualizar' : 'Crear'} Producto
               </button>
+              {!editingProduct && formData.name.length > 3 && (
+                <button
+                  type="button"
+                  onClick={generateAiSuggestions}
+                  disabled={generatingAiSuggestions}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors duration-200 flex items-center"
+                >
+                  {generatingAiSuggestions ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Analizando...
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="h-4 w-4 mr-2" />
+                      IA Categoría
+                    </>
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   setShowForm(false);
                   setEditingProduct(null);
                   setErrors({});
+                  setShowAiSuggestions(false);
+                  setAiSuggestions([]);
                 }}
                 className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
               >

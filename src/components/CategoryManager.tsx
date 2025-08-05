@@ -137,7 +137,7 @@ export default function CategoryManager() {
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar categorías por nombre o descripción..."
+             placeholder="Buscar categorías por nombre o descripción..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -163,7 +163,7 @@ export default function CategoryManager() {
         </div>
         {searchTerm && (
           <div className="mt-3 text-sm text-slate-600">
-            Mostrando {filteredCategories.length} de {categories.length} categorías
+           Mostrando {filteredCategories.length} de {categories.length} categorías
           </div>
         )}
       </div>
@@ -172,7 +172,7 @@ export default function CategoryManager() {
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            {editingCategory ? 'Editar Categoría' : 'Agregar Categoría'}
+           {editingCategory ? 'Editar Categoría' : 'Agregar Categoría'}
           </h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -237,7 +237,7 @@ export default function CategoryManager() {
           filteredCategories.map((category) => (
             <div key={category.id} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
+             {categories.length === 0 ? 'No hay categorías registradas' : 'No se encontraron categorías que coincidan con tu búsqueda'}
                   <h3 className="font-semibold text-slate-900">{category.name}</h3>
                   <p className="text-sm text-slate-600 mt-1">{category.description}</p>
                 </div>
@@ -258,7 +258,7 @@ export default function CategoryManager() {
               </div>
               <div className="flex items-center text-sm text-slate-500">
                 <Tag className="h-4 w-4 mr-1" />
-                Creado: {new Date(category.created_at).toLocaleDateString('es-ES')}
+               Creado: {new Date(category.created_at).toLocaleDateString('es-ES')}
               </div>
             </div>
           ))

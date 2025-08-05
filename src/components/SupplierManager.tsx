@@ -146,7 +146,7 @@ export default function SupplierManager() {
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar por nombre, contacto, email, teléfono o dirección..."
+              placeholder="Buscar por nombre, contacto, correo, teléfono o dirección..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -210,7 +210,7 @@ export default function SupplierManager() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email
+                  Correo Electrónico
                 </label>
                 <input
                   type="email"

@@ -102,7 +102,7 @@ export const generatePostgreSQLExport = async (
   sqlScript += generateSQLHeader();
 
   // Configuración inicial de PostgreSQL
-  sqlScript += generatePostgreSQLConfig();
+  sqlScript += generateSQLPostgreSQLConfigSection();
 
   // Extensiones necesarias
   sqlScript += generateExtensions();
@@ -156,7 +156,7 @@ const generateSQLHeader = (): string => {
 `;
 };
 
-const generatePostgreSQLConfig = (): string => {
+const generateSQLPostgreSQLConfigSection = (): string => {
   return `-- Configuración de PostgreSQL
 SET statement_timeout = 0;
 SET lock_timeout = 0;

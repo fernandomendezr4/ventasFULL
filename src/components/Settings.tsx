@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, Database, Printer, Building, User, Palette, Bell } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, Database, Printer, Building, User, Palette, Bell, Download } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import DatabaseHealthMonitor from './DatabaseHealthMonitor';
+import DatabaseExportManager from './DatabaseExportManager';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -111,7 +112,8 @@ export default function Settings() {
     { id: 'general', label: 'General', icon: Building },
     { id: 'print', label: 'Impresión', icon: Printer },
     { id: 'appearance', label: 'Apariencia', icon: Palette },
-    { id: 'database', label: 'Base de Datos', icon: Database }
+    { id: 'database', label: 'Base de Datos', icon: Database },
+    { id: 'export', label: 'Exportación', icon: Download }
   ];
 
   return (
@@ -356,6 +358,12 @@ export default function Settings() {
           {activeTab === 'database' && user?.role === 'admin' && (
             <div className="space-y-6">
               <DatabaseHealthMonitor />
+            </div>
+          )}
+
+          {activeTab === 'export' && user?.role === 'admin' && (
+            <div className="space-y-6">
+              <DatabaseExportManager />
             </div>
           )}
         </div>

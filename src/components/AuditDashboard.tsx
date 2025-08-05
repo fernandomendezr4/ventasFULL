@@ -1,76 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, FileText, Activity, Users, Database, Calendar, Search, Filter, Download, Eye, Bell, Settings, TrendingUp, BarChart3, CheckCircle, Clock, RefreshCw } from 'lucide-react';
+import { BarChart3, Activity, AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Users, Package, DollarSign, Clock, Shield, FileText, Bell, Zap, Database, Eye, Download, RefreshCw } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
+import AuditReportGenerator from './AuditReportGenerator';
+import AuditAlertManager from './AuditAlertManager';
 
-interface AuditLog {
-  id: string;
-  cash_register_id: string;
-  action_type: string;
-  entity_type: string;
-  entity_id: string | null;
-  amount: number;
-  previous_balance: number | null;
-  new_balance: number | null;
-  description: string;
-  metadata: any;
-  performed_by: string | null;
-  performed_at: string;
-  ip_address: string | null;
-  user_agent: string | null;
-  performed_by_name?: string;
-  register_opened_at?: string;
-  register_status?: string;
-}
-
-interface AuditStatistics {
-  total_events: number;
-  events_by_type: Record<string, number>;
-  events_by_table: Record<string, number>;
-  events_by_severity: Record<string, number>;
-  unique_users: number;
-  unique_tables: number;
+interface AuditStats {
   today_events: number;
   critical_events: number;
+  active_alerts: number;
+  pending_compliance: number;
+  system_health: 'healthy' | 'warning' | 'critical';
+  last_maintenance: string | null;
 }
 
-interface SuspiciousPattern {
-  pattern_type: string;
+interface RecentAuditEvent {
+  id: string;
+  action_type: string;
+  entity_type: string;
   description: string;
   severity: string;
-  affected_table: string;
-  user_involved: string;
-  event_count: number;
-  first_occurrence: string;
-  last_occurrence: string;
-  recommendation: string;
+  performed_by: string | null;
+  performed_at: string;
+  amount: number | null;
+  user_name: string | null;
 }
 
 export default function AuditDashboard() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [auditStats, setAuditStats] = useState<AuditStats | null>(null);
+  const [recentEvents, setRecentEvents] = useState<RecentAuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [statistics, setStatistics] = useState<AuditStatistics | null>(null);
-  const [suspiciousPatterns, setSuspiciousPatterns] = useState<SuspiciousPattern[]>([]);
-  
-  // Filtros
-  const [dateFilter, setDateFilter] = useState('');
-  const [tableFilter, setTableFilter] = useState('');
-  const [actionFilter, setActionFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [severityFilter, setSeverityFilter] = useState('');
-  
-  // Estados de modales
-  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
-  const [showIntegrityCheck, setShowIntegrityCheck] = useState(false);
-  const [integrityResults, setIntegrityResults] = useState<any[]>([]);
+  const [showReportGenerator, setShowReportGenerator] = useState(false);
+  const [showAlertManager, setShowAlertManager] = useState(false);
+  const [selectedTimeRange, setSelectedTimeRange] = useState<'today' | 'week' | 'month'>('today');
 
   useEffect(() => {
     loadAuditData();
-  }, []);
+    
+    // Actualizar cada 30 segundos
+    const interval = setInterval(loadAuditData, 30000);
+    return () => clearInterval(interval);
+  }, [selectedTimeRange]);
 
   const loadAuditData = async () => {
     try {
@@ -78,354 +50,191 @@ export default function AuditDashboard() {
       
       if (isDemoMode) {
         // Datos demo para auditoría
-        const demoLogs: AuditLog[] = [
+        const demoStats: AuditStats = {
+          today_events: 45,
+          critical_events: 2,
+          active_alerts: 4,
+          pending_compliance: 1,
+          system_health: 'healthy',
+          last_maintenance: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+        };
+
+        const demoEvents: RecentAuditEvent[] = [
           {
-            id: 'demo-audit-1',
-            cash_register_id: 'demo-register-1',
-            action_type: 'open',
-            entity_type: 'cash_register',
-            entity_id: 'demo-register-1',
-            amount: 100000,
-            previous_balance: 0,
-            new_balance: 100000,
-            description: 'Apertura de caja registradora',
-            metadata: { opening_amount: 100000 },
-            performed_by: user?.id || 'demo-user',
-            performed_at: new Date().toISOString(),
-            ip_address: '192.168.1.100',
-            user_agent: 'Mozilla/5.0 (Demo Browser)',
-            performed_by_name: user?.name || 'Usuario Demo',
-            register_opened_at: new Date().toISOString(),
-            register_status: 'open'
-          },
-          {
-            id: 'demo-audit-2',
-            cash_register_id: 'demo-register-1',
+            id: 'demo-event-1',
             action_type: 'sale',
             entity_type: 'sale',
-            entity_id: 'demo-sale-1',
-            amount: 150000,
-            previous_balance: 100000,
-            new_balance: 250000,
-            description: 'Venta registrada - iPhone 15 Pro',
-            metadata: { 
-              sale_id: 'demo-sale-1',
-              customer_name: 'Juan Pérez',
-              products: [{ name: 'iPhone 15 Pro', quantity: 1, price: 150000 }]
-            },
+            description: 'Venta procesada por $1,500,000',
+            severity: 'normal',
             performed_by: user?.id || 'demo-user',
-            performed_at: new Date(Date.now() - 3600000).toISOString(),
-            ip_address: '192.168.1.100',
-            user_agent: 'Mozilla/5.0 (Demo Browser)',
-            performed_by_name: user?.name || 'Usuario Demo',
-            register_opened_at: new Date().toISOString(),
-            register_status: 'open'
+            performed_at: new Date().toISOString(),
+            amount: 1500000,
+            user_name: user?.name || 'Usuario Demo'
           },
           {
-            id: 'demo-audit-3',
-            cash_register_id: 'demo-register-1',
-            action_type: 'expense',
-            entity_type: 'movement',
-            entity_id: 'demo-movement-1',
-            amount: 25000,
-            previous_balance: 250000,
-            new_balance: 225000,
-            description: 'Gasto registrado - Compra de suministros',
-            metadata: { 
-              movement_type: 'expense',
-              category: 'suministros',
-              description: 'Compra de suministros de oficina'
-            },
+            id: 'demo-event-2',
+            action_type: 'open',
+            entity_type: 'cash_register',
+            description: 'Apertura de caja registradora',
+            severity: 'normal',
+            performed_by: user?.id || 'demo-user',
+            performed_at: new Date(Date.now() - 3600000).toISOString(),
+            amount: 100000,
+            user_name: user?.name || 'Usuario Demo'
+          },
+          {
+            id: 'demo-event-3',
+            action_type: 'delete',
+            entity_type: 'product',
+            description: 'Eliminación de producto: Producto Demo',
+            severity: 'high',
             performed_by: user?.id || 'demo-user',
             performed_at: new Date(Date.now() - 7200000).toISOString(),
-            ip_address: '192.168.1.100',
-            user_agent: 'Mozilla/5.0 (Demo Browser)',
-            performed_by_name: user?.name || 'Usuario Demo',
-            register_opened_at: new Date().toISOString(),
-            register_status: 'open'
+            amount: null,
+            user_name: user?.name || 'Usuario Demo'
+          },
+          {
+            id: 'demo-event-4',
+            action_type: 'edit',
+            entity_type: 'customer',
+            description: 'Modificación de datos de cliente',
+            severity: 'normal',
+            performed_by: user?.id || 'demo-user',
+            performed_at: new Date(Date.now() - 10800000).toISOString(),
+            amount: null,
+            user_name: user?.name || 'Usuario Demo'
+          },
+          {
+            id: 'demo-event-5',
+            action_type: 'close',
+            entity_type: 'cash_register',
+            description: 'Cierre de caja registradora con discrepancia',
+            severity: 'high',
+            performed_by: user?.id || 'demo-user',
+            performed_at: new Date(Date.now() - 14400000).toISOString(),
+            amount: 250000,
+            user_name: user?.name || 'Usuario Demo'
           }
         ];
 
-        const demoStats: AuditStatistics = {
-          total_events: 3,
-          events_by_type: {
-            'open': 1,
-            'sale': 1,
-            'expense': 1
-          },
-          events_by_table: {
-            'cash_register': 1,
-            'sale': 1,
-            'movement': 1
-          },
-          events_by_severity: {
-            'normal': 3,
-            'high': 0,
-            'critical': 0
-          },
-          unique_users: 1,
-          unique_tables: 3,
-          today_events: 3,
-          critical_events: 0
-        };
-
-        setAuditLogs(demoLogs);
-        setStatistics(demoStats);
-        setSuspiciousPatterns([]);
+        setAuditStats(demoStats);
+        setRecentEvents(demoEvents);
         setLoading(false);
         return;
       }
 
-      // Cargar logs de auditoría desde la vista optimizada
-      const { data: logs, error: logsError } = await supabase
-        .from('cash_register_audit_view')
-        .select('*')
-        .order('performed_at', { ascending: false })
-        .limit(100);
-
-      if (logsError) {
-        console.error('Error loading audit logs:', logsError);
-        // Fallback: cargar desde tabla básica
-        const { data: basicLogs, error: basicError } = await supabase
-          .from('cash_register_audit_logs')
-          .select(`
-            *,
-            performed_by_user:users(name)
-          `)
-          .order('performed_at', { ascending: false })
-          .limit(100);
-
-        if (basicError) throw basicError;
+      // Intentar cargar estadísticas reales
+      try {
+        const { data: stats, error: statsError } = await supabase.rpc('get_audit_dashboard_stats');
         
-        const formattedLogs = (basicLogs || []).map(log => ({
-          ...log,
-          performed_by_name: log.performed_by_user?.name || 'Sistema'
-        }));
-        
-        setAuditLogs(formattedLogs);
-      } else {
-        setAuditLogs(logs || []);
+        if (statsError) {
+          console.warn('RPC function not available, using fallback queries');
+          await loadAuditDataFallback();
+        } else {
+          setAuditStats(stats);
+        }
+      } catch (error) {
+        console.warn('Error loading audit stats, using fallback');
+        await loadAuditDataFallback();
       }
 
-      // Calcular estadísticas básicas
-      const totalEvents = logs?.length || 0;
-      const todayStart = new Date().toISOString().split('T')[0];
-      const todayEvents = logs?.filter(log => log.performed_at.startsWith(todayStart)).length || 0;
-      
-      const eventsByType: Record<string, number> = {};
-      const eventsByTable: Record<string, number> = {};
-      const uniqueUsers = new Set<string>();
-      const uniqueTables = new Set<string>();
-
-      logs?.forEach(log => {
-        eventsByType[log.action_type] = (eventsByType[log.action_type] || 0) + 1;
-        eventsByTable[log.entity_type] = (eventsByTable[log.entity_type] || 0) + 1;
-        if (log.performed_by) uniqueUsers.add(log.performed_by);
-        uniqueTables.add(log.entity_type);
-      });
-
-      const calculatedStats: AuditStatistics = {
-        total_events: totalEvents,
-        events_by_type: eventsByType,
-        events_by_table: eventsByTable,
-        events_by_severity: {
-          'normal': totalEvents,
-          'high': 0,
-          'critical': 0
-        },
-        unique_users: uniqueUsers.size,
-        unique_tables: uniqueTables.size,
-        today_events: todayEvents,
-        critical_events: 0
-      };
-
-      setStatistics(calculatedStats);
-
-      // Detectar patrones sospechosos básicos
-      const patterns = detectBasicSuspiciousPatterns(logs || []);
-      setSuspiciousPatterns(patterns);
-      
-      // Ejecutar verificación de integridad automática
-      await runIntegrityCheck();
+      // Cargar eventos recientes
+      await loadRecentEvents();
 
     } catch (error) {
       console.error('Error loading audit data:', error);
-      setAuditLogs([]);
-      setStatistics(null);
-      setSuspiciousPatterns([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const runIntegrityCheck = async () => {
+  const loadAuditDataFallback = async () => {
     try {
-      if (isDemoMode) {
-        // Datos demo para verificación de integridad
-        const demoResults = [
-          {
-            table_name: 'sales',
-            issue_type: 'healthy',
-            issue_description: 'Todas las ventas tienen estructura correcta',
-            suggested_action: 'Ninguna acción requerida'
-          },
-          {
-            table_name: 'products',
-            issue_type: 'healthy',
-            issue_description: 'Inventario en buen estado',
-            suggested_action: 'Ninguna acción requerida'
-          },
-          {
-            table_name: 'cash_registers',
-            issue_type: 'healthy',
-            issue_description: 'Todas las cajas tienen movimientos de apertura',
-            suggested_action: 'Ninguna acción requerida'
-          }
-        ];
-        
-        setIntegrityResults(demoResults);
-        return;
-      }
-
-      // Ejecutar verificación real
-      const { data, error } = await supabase.rpc('validate_data_integrity');
+      const today = new Date().toISOString().split('T')[0];
       
-      if (error) {
-        console.error('Error running integrity check:', error);
-        setIntegrityResults([]);
-        return;
-      }
+      // Consultas básicas como fallback
+      const [todayEvents, criticalEvents, alerts] = await Promise.all([
+        supabase
+          .from('cash_register_enhanced_audit')
+          .select('id', { count: 'exact', head: true })
+          .gte('performed_at', today),
+        supabase
+          .from('cash_register_enhanced_audit')
+          .select('id', { count: 'exact', head: true })
+          .eq('severity', 'critical')
+          .gte('performed_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+        supabase
+          .from('audit_alerts')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_active', true)
+      ]);
 
-      setIntegrityResults(data || []);
-    } catch (error) {
-      console.error('Error in integrity check:', error);
-      setIntegrityResults([]);
-    }
-  };
-
-  const detectBasicSuspiciousPatterns = (logs: AuditLog[]): SuspiciousPattern[] => {
-    const patterns: SuspiciousPattern[] = [];
-    const now = Date.now();
-    const oneHourAgo = now - 60 * 60 * 1000;
-
-    // Detectar múltiples eliminaciones en poco tiempo
-    const recentDeletes = logs.filter(log => 
-      log.action_type === 'delete' && 
-      new Date(log.performed_at).getTime() > oneHourAgo
-    );
-
-    if (recentDeletes.length > 5) {
-      patterns.push({
-        pattern_type: 'bulk_deletion',
-        description: `${recentDeletes.length} eliminaciones en la última hora`,
-        severity: 'high',
-        affected_table: 'multiple',
-        user_involved: recentDeletes[0]?.performed_by_name || 'Desconocido',
-        event_count: recentDeletes.length,
-        first_occurrence: recentDeletes[recentDeletes.length - 1]?.performed_at || '',
-        last_occurrence: recentDeletes[0]?.performed_at || '',
-        recommendation: 'Verificar si estas eliminaciones son autorizadas y documentar la razón'
-      });
-    }
-
-    // Detectar actividad fuera de horario laboral
-    const afterHoursLogs = logs.filter(log => {
-      const hour = new Date(log.performed_at).getHours();
-      return hour < 8 || hour > 18; // Fuera de 8 AM - 6 PM
-    });
-
-    if (afterHoursLogs.length > 0) {
-      patterns.push({
-        pattern_type: 'after_hours_activity',
-        description: `${afterHoursLogs.length} actividades fuera del horario laboral`,
-        severity: 'medium',
-        affected_table: 'multiple',
-        user_involved: afterHoursLogs[0]?.performed_by_name || 'Desconocido',
-        event_count: afterHoursLogs.length,
-        first_occurrence: afterHoursLogs[afterHoursLogs.length - 1]?.performed_at || '',
-        last_occurrence: afterHoursLogs[0]?.performed_at || '',
-        recommendation: 'Revisar si el acceso fuera de horario está autorizado'
-      });
-    }
-
-    return patterns;
-  };
-
-  const generateReport = async (reportType: string, dateFrom: string, dateTo: string) => {
-    try {
-      if (isDemoMode) {
-        const reportData = {
-          report_type: reportType,
-          date_from: dateFrom,
-          date_to: dateTo,
-          total_events: auditLogs.length,
-          events_by_type: statistics?.events_by_type || {},
-          generated_at: new Date().toISOString(),
-          generated_by: user?.name || 'Usuario Demo'
-        };
-
-        const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `audit_report_${reportType}_${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-
-        alert('Reporte generado y descargado exitosamente (modo demo)');
-        return;
-      }
-
-      // Intentar usar función RPC si existe
-      // Since generate_audit_report function doesn't exist, use manual generation
-      console.log('generate_audit_report function not found, using manual generation');
-      await generateManualReport(reportType, dateFrom, dateTo);
-    } catch (error) {
-      console.error('Error generating report:', error);
-      alert('Error al generar reporte: ' + (error as Error).message);
-    }
-  };
-
-  const generateManualReport = async (reportType: string, dateFrom: string, dateTo: string) => {
-    try {
-      // Filtrar logs por fecha
-      const filteredLogs = auditLogs.filter(log => {
-        const logDate = log.performed_at.split('T')[0];
-        return logDate >= dateFrom && logDate <= dateTo;
-      });
-
-      const reportData = {
-        report_type: reportType,
-        date_from: dateFrom,
-        date_to: dateTo,
-        total_events: filteredLogs.length,
-        events_by_type: filteredLogs.reduce((acc, log) => {
-          acc[log.action_type] = (acc[log.action_type] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-        events_by_entity: filteredLogs.reduce((acc, log) => {
-          acc[log.entity_type] = (acc[log.entity_type] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-        suspicious_patterns: suspiciousPatterns,
-        logs: filteredLogs,
-        generated_at: new Date().toISOString(),
-        generated_by: user?.name || 'Sistema'
+      const fallbackStats: AuditStats = {
+        today_events: todayEvents.count || 0,
+        critical_events: criticalEvents.count || 0,
+        active_alerts: alerts.count || 0,
+        pending_compliance: 0,
+        system_health: 'healthy',
+        last_maintenance: new Date().toISOString()
       };
 
-      // Descargar como JSON
-      const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `audit_report_${reportType}_${dateFrom}_${dateTo}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      alert('Reporte generado y descargado exitosamente');
+      setAuditStats(fallbackStats);
     } catch (error) {
-      console.error('Error generating manual report:', error);
-      alert('Error al generar reporte manual: ' + (error as Error).message);
+      console.error('Error in fallback audit data loading:', error);
+      // Usar datos por defecto
+      setAuditStats({
+        today_events: 0,
+        critical_events: 0,
+        active_alerts: 0,
+        pending_compliance: 0,
+        system_health: 'warning',
+        last_maintenance: null
+      });
+    }
+  };
+
+  const loadRecentEvents = async () => {
+    try {
+      let dateFilter = new Date().toISOString().split('T')[0]; // Hoy
+      
+      if (selectedTimeRange === 'week') {
+        dateFilter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (selectedTimeRange === 'month') {
+        dateFilter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      const { data, error } = await supabase
+        .from('cash_register_enhanced_audit')
+        .select(`
+          id,
+          action_type,
+          entity_type,
+          description,
+          severity,
+          performed_by,
+          performed_at,
+          amount,
+          performed_by_user:users(name)
+        `)
+        .gte('performed_at', dateFilter)
+        .order('performed_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error loading recent events:', error);
+        setRecentEvents([]);
+        return;
+      }
+
+      const formattedEvents = (data || []).map(event => ({
+        ...event,
+        user_name: event.performed_by_user?.name || 'Sistema'
+      }));
+
+      setRecentEvents(formattedEvents);
+    } catch (error) {
+      console.error('Error loading recent events:', error);
+      setRecentEvents([]);
     }
   };
 
@@ -436,19 +245,19 @@ export default function AuditDashboard() {
       case 'close':
         return <CheckCircle className="h-4 w-4 text-blue-600" />;
       case 'sale':
-        return <TrendingUp className="h-4 w-4 text-green-600" />;
+        return <DollarSign className="h-4 w-4 text-green-600" />;
       case 'installment':
         return <TrendingUp className="h-4 w-4 text-blue-600" />;
       case 'income':
         return <TrendingUp className="h-4 w-4 text-green-600" />;
       case 'expense':
-        return <TrendingUp className="h-4 w-4 text-red-600" />;
+        return <TrendingDown className="h-4 w-4 text-red-600" />;
       case 'edit':
-        return <Settings className="h-4 w-4 text-yellow-600" />;
+        return <FileText className="h-4 w-4 text-yellow-600" />;
       case 'delete':
         return <AlertTriangle className="h-4 w-4 text-red-600" />;
       default:
-        return <Database className="h-4 w-4 text-gray-600" />;
+        return <Activity className="h-4 w-4 text-slate-600" />;
     }
   };
 
@@ -478,13 +287,13 @@ export default function AuditDashboard() {
   const getEntityTypeLabel = (entityType: string) => {
     switch (entityType) {
       case 'cash_register':
-        return 'Caja Registradora';
+        return 'Caja';
       case 'sale':
         return 'Venta';
-      case 'installment':
-        return 'Abono';
       case 'movement':
         return 'Movimiento';
+      case 'installment':
+        return 'Abono';
       case 'product':
         return 'Producto';
       case 'customer':
@@ -494,35 +303,44 @@ export default function AuditDashboard() {
     }
   };
 
-  const filteredLogs = auditLogs.filter(log => {
-    const matchesDate = !dateFilter || log.performed_at.startsWith(dateFilter);
-    const matchesTable = !tableFilter || log.entity_type === tableFilter;
-    const matchesAction = !actionFilter || log.action_type === actionFilter;
-    const matchesUser = !userFilter || log.performed_by_name?.toLowerCase().includes(userFilter.toLowerCase());
-    const matchesSeverity = !severityFilter || (log as any).severity === severityFilter;
-    const matchesSearch = !searchTerm || 
-      log.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.entity_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.performed_by_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    return matchesDate && matchesTable && matchesAction && matchesUser && matchesSeverity && matchesSearch;
-  });
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'high':
+        return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'normal':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'low':
+        return 'bg-green-100 text-green-800 border-green-200';
+      default:
+        return 'bg-slate-100 text-slate-800 border-slate-200';
+    }
+  };
 
-  const tabs = [
-    { id: 'overview', label: 'Resumen', icon: BarChart3 },
-    { id: 'integrity', label: 'Integridad', icon: CheckCircle },
-    { id: 'logs', label: 'Logs de Auditoría', icon: FileText },
-    { id: 'patterns', label: 'Patrones Sospechosos', icon: AlertTriangle },
-    { id: 'reports', label: 'Reportes', icon: Download }
-  ];
+  const getHealthStatusColor = (health: string) => {
+    switch (health) {
+      case 'healthy':
+        return 'text-green-600 bg-green-50 border-green-200';
+      case 'warning':
+        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'critical':
+        return 'text-red-600 bg-red-50 border-red-200';
+      default:
+        return 'text-slate-600 bg-slate-50 border-slate-200';
+    }
+  };
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
-          <div className="h-8 bg-slate-200 rounded w-1/3 mb-4"></div>
-          <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm p-6 animate-pulse border">
+              <div className="h-4 bg-slate-200 rounded w-3/4 mb-4"></div>
+              <div className="h-8 bg-slate-200 rounded w-1/2"></div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -533,667 +351,275 @@ export default function AuditDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 flex items-center">
-            <Shield className="h-8 w-8 mr-3 text-blue-600" />
-            Sistema de Auditoría
-          </h2>
+          <h3 className="text-2xl font-bold text-slate-900 flex items-center">
+            <BarChart3 className="h-7 w-7 mr-3 text-blue-600" />
+            Dashboard de Auditoría
+            {isDemoMode && (
+              <span className="ml-3 text-sm bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                DEMO
+              </span>
+            )}
+          </h3>
           <p className="text-slate-600 mt-1">
-            Monitoreo completo y análisis de actividad del sistema
+            Monitoreo en tiempo real de la actividad del sistema
           </p>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => generateReport('daily', 
-              new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              new Date().toISOString().split('T')[0]
-            )}
+            onClick={() => setShowReportGenerator(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
           >
-            <Download className="h-4 w-4 mr-2" />
-            Reporte Diario
+            <FileText className="h-4 w-4 mr-2" />
+            Generar Reporte
+          </button>
+          <button
+            onClick={() => setShowAlertManager(true)}
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors duration-200 flex items-center"
+          >
+            <Bell className="h-4 w-4 mr-2" />
+            Gestionar Alertas
           </button>
           <button
             onClick={loadAuditData}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200 flex items-center"
           >
-            <Activity className="h-4 w-4 mr-2" />
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200">
-          <nav className="flex">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center px-6 py-4 text-sm font-medium transition-colors duration-200 ${
-                    activeTab === tab.id
-                      ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className="h-4 w-4 mr-2" />
-                  {tab.label}
-                  {tab.id === 'patterns' && suspiciousPatterns.length > 0 && (
-                    <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-1">
-                      {suspiciousPatterns.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+      {/* Estado General del Sistema */}
+      {auditStats && (
+        <div className={`rounded-xl border-2 p-6 ${getHealthStatusColor(auditStats.system_health)}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xl font-bold mb-2">
+                Sistema de Auditoría: {auditStats.system_health === 'healthy' ? 'Saludable' : 
+                                      auditStats.system_health === 'warning' ? 'Advertencia' : 'Crítico'}
+              </h4>
+              <p className="text-sm opacity-80">
+                Última actualización: {new Date().toLocaleTimeString('es-ES')}
+              </p>
+              {auditStats.last_maintenance && (
+                <p className="text-sm opacity-80">
+                  Último mantenimiento: {new Date(auditStats.last_maintenance).toLocaleString('es-ES')}
+                </p>
+              )}
+            </div>
+            <div className="text-right">
+              {auditStats.system_health === 'healthy' ? (
+                <CheckCircle className="h-12 w-12" />
+              ) : (
+                <AlertTriangle className="h-12 w-12" />
+              )}
+            </div>
+          </div>
         </div>
+      )}
 
+      {/* Métricas Principales */}
+      {auditStats && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600">Eventos Hoy</p>
+                <p className="text-2xl font-bold text-blue-900">{auditStats.today_events}</p>
+                <p className="text-xs text-slate-500 mt-1">Actividad del sistema</p>
+              </div>
+              <Activity className="h-8 w-8 text-blue-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600">Eventos Críticos</p>
+                <p className={`text-2xl font-bold ${auditStats.critical_events > 0 ? 'text-red-900' : 'text-green-900'}`}>
+                  {auditStats.critical_events}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Últimas 24 horas</p>
+              </div>
+              <AlertTriangle className={`h-8 w-8 ${auditStats.critical_events > 0 ? 'text-red-600' : 'text-green-600'}`} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600">Alertas Activas</p>
+                <p className={`text-2xl font-bold ${auditStats.active_alerts > 0 ? 'text-orange-900' : 'text-green-900'}`}>
+                  {auditStats.active_alerts}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Configuradas y activas</p>
+              </div>
+              <Bell className={`h-8 w-8 ${auditStats.active_alerts > 0 ? 'text-orange-600' : 'text-green-600'}`} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-600">Cumplimiento</p>
+                <p className={`text-2xl font-bold ${auditStats.pending_compliance > 0 ? 'text-yellow-900' : 'text-green-900'}`}>
+                  {auditStats.pending_compliance === 0 ? 'OK' : auditStats.pending_compliance}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Verificaciones pendientes</p>
+              </div>
+              <Shield className={`h-8 w-8 ${auditStats.pending_compliance > 0 ? 'text-yellow-600' : 'text-green-600'}`} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtro de Tiempo */}
+      <div className="bg-white rounded-xl shadow-sm border p-4">
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium text-slate-900">Actividad Reciente</h4>
+          <div className="flex gap-2">
+            {[
+              { key: 'today', label: 'Hoy' },
+              { key: 'week', label: 'Semana' },
+              { key: 'month', label: 'Mes' }
+            ].map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setSelectedTimeRange(option.key as any)}
+                className={`px-3 py-1 rounded-lg text-sm transition-colors duration-200 ${
+                  selectedTimeRange === option.key
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Eventos Recientes */}
+      <div className="bg-white rounded-xl shadow-sm border">
+        <div className="p-6 border-b border-slate-200">
+          <h4 className="text-lg font-semibold text-slate-900">Eventos de Auditoría Recientes</h4>
+        </div>
         <div className="p-6">
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
-              {/* Estadísticas Principales */}
-              {statistics && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-blue-600">Total de Eventos</p>
-                        <p className="text-2xl font-bold text-blue-900">{statistics.total_events}</p>
-                      </div>
-                      <Activity className="h-8 w-8 text-blue-600" />
-                    </div>
-                  </div>
-
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-green-600">Eventos Hoy</p>
-                        <p className="text-2xl font-bold text-green-900">{statistics.today_events}</p>
-                      </div>
-                      <Calendar className="h-8 w-8 text-green-600" />
-                    </div>
-                  </div>
-
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-purple-600">Usuarios Activos</p>
-                        <p className="text-2xl font-bold text-purple-900">{statistics.unique_users}</p>
-                      </div>
-                      <Users className="h-8 w-8 text-purple-600" />
-                    </div>
-                  </div>
-
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-red-600">Eventos Críticos</p>
-                        <p className="text-2xl font-bold text-red-900">{statistics.critical_events}</p>
-                      </div>
-                      <AlertTriangle className="h-8 w-8 text-red-600" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Gráfico de Actividad por Tipo */}
-              {statistics && (
-                <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4">Actividad por Tipo de Evento</h3>
-                  <div className="space-y-3">
-                    {Object.entries(statistics.events_by_type).map(([type, count]) => (
-                      <div key={type} className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          {getActionTypeIcon(type)}
-                          <span className="ml-2 font-medium text-slate-900">{getActionTypeLabel(type)}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-32 bg-slate-200 rounded-full h-2 mr-3">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${(count / statistics.total_events) * 100}%` }}
-                            ></div>
-                          </div>
-                          <span className="font-bold text-slate-900">{count}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Actividad Reciente */}
-              <div className="bg-white border border-slate-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Actividad Reciente</h3>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-slate-600">Últimos 5 eventos</span>
-                  <button
-                    onClick={() => setShowIntegrityCheck(true)}
-                    className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded hover:bg-blue-200 transition-colors duration-200"
-                  >
-                    Ver Verificación de Integridad
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {auditLogs.slice(0, 5).map((log) => (
-                    <div key={log.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <div className="flex items-center">
-                        {getActionTypeIcon(log.action_type)}
-                        <div className="ml-3">
-                          <p className="font-medium text-slate-900">
-                            {getActionTypeLabel(log.action_type)} - {getEntityTypeLabel(log.entity_type)}
-                          </p>
-                          <p className="text-sm text-slate-600">{log.description}</p>
-                          <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {new Date(log.performed_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            <span className="flex items-center">
-                              <Users className="h-3 w-3 mr-1" />
-                              {log.performed_by_name || 'Sistema'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      {log.amount > 0 && (
-                        <div className="text-right">
-                          <p className="font-bold text-slate-900">
-                            {formatCurrency(log.amount)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
+          {recentEvents.length === 0 ? (
+            <div className="text-center py-8">
+              <Activity className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-500">No hay eventos de auditoría en el período seleccionado</p>
             </div>
-          )}
-
-          {activeTab === 'integrity' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Verificación de Integridad de Datos</h3>
-                <button
-                  onClick={runIntegrityCheck}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Ejecutar Verificación
-                </button>
-              </div>
-              
-              {integrityResults.length === 0 ? (
-                <div className="text-center py-12">
-                  <Database className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                  <p className="text-slate-500">No hay resultados de verificación disponibles</p>
-                  <button
-                    onClick={runIntegrityCheck}
-                    className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                  >
-                    Ejecutar Primera Verificación
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {integrityResults.map((result, index) => (
-                    <div key={index} className={`border rounded-lg p-6 ${
-                      result.issue_type === 'healthy' 
-                        ? 'border-green-200 bg-green-50' 
-                        : 'border-yellow-200 bg-yellow-50'
-                    }`}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-slate-900 mb-2">
-                            {result.table_name.replace('_', ' ').toUpperCase()}
-                          </h4>
-                          <p className="text-sm text-slate-700 mb-2">{result.issue_description}</p>
-                          {result.suggested_action !== 'Ninguna acción requerida' && (
-                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                              <p className="text-sm text-blue-800">
-                                <strong>Acción sugerida:</strong> {result.suggested_action}
-                              </p>
-                            </div>
-                          )}
+          ) : (
+            <div className="space-y-4">
+              {recentEvents.map((event) => (
+                <div key={event.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors duration-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      {getActionTypeIcon(event.action_type)}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h5 className="font-medium text-slate-900">
+                            {getActionTypeLabel(event.action_type)} - {getEntityTypeLabel(event.entity_type)}
+                          </h5>
+                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium border ${getSeverityColor(event.severity)}`}>
+                            {event.severity}
+                          </span>
                         </div>
-                        <div className="ml-4">
-                          {result.issue_type === 'healthy' ? (
-                            <CheckCircle className="h-6 w-6 text-green-600" />
-                          ) : (
-                            <AlertTriangle className="h-6 w-6 text-yellow-600" />
+                        <p className="text-sm text-slate-700 mb-2">{event.description}</p>
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <span className="flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {new Date(event.performed_at).toLocaleString('es-ES')}
+                          </span>
+                          <span className="flex items-center">
+                            <Users className="h-3 w-3 mr-1" />
+                            {event.user_name || 'Sistema'}
+                          </span>
+                          {event.amount && (
+                            <span className="flex items-center">
+                              <DollarSign className="h-3 w-3 mr-1" />
+                              {formatCurrency(event.amount)}
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'logs' && (
-            <div className="space-y-6">
-              {/* Filtros */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Buscar..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
                   </div>
-                  
-                  <input
-                    type="date"
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  
-                  <select
-                    value={tableFilter}
-                    onChange={(e) => setTableFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Todas las entidades</option>
-                    <option value="cash_register">Caja Registradora</option>
-                    <option value="sale">Ventas</option>
-                    <option value="movement">Movimientos</option>
-                    <option value="installment">Abonos</option>
-                    <option value="product">Productos</option>
-                    <option value="customer">Clientes</option>
-                  </select>
-                  
-                  <select
-                    value={actionFilter}
-                    onChange={(e) => setActionFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Todas las acciones</option>
-                    <option value="open">Apertura</option>
-                    <option value="close">Cierre</option>
-                    <option value="sale">Venta</option>
-                    <option value="installment">Abono</option>
-                    <option value="income">Ingreso</option>
-                    <option value="expense">Gasto</option>
-                    <option value="edit">Edición</option>
-                    <option value="delete">Eliminación</option>
-                  </select>
-                  
-                  <select
-                    value={severityFilter}
-                    onChange={(e) => setSeverityFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Todas las severidades</option>
-                    <option value="low">Baja</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">Alta</option>
-                    <option value="critical">Crítica</option>
-                  </select>
-                  
-                  <input
-                    type="text"
-                    placeholder="Usuario..."
-                    value={userFilter}
-                    onChange={(e) => setUserFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
-                      setDateFilter('');
-                      setTableFilter('');
-                      setActionFilter('');
-                      setUserFilter('');
-                      setSeverityFilter('');
-                    }}
-                    className="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-                  >
-                    Limpiar
-                  </button>
                 </div>
-                {(searchTerm || dateFilter || tableFilter || actionFilter || userFilter || severityFilter) && (
-                  <div className="mt-3 text-sm text-slate-600">
-                    Mostrando {filteredLogs.length} de {auditLogs.length} eventos
-                  </div>
-                )}
-              </div>
-
-              {/* Lista de Logs */}
-              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                {filteredLogs.length === 0 ? (
-                  <div className="p-12 text-center">
-                    <FileText className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                    <p className="text-slate-500">
-                      {auditLogs.length === 0 
-                        ? 'No hay eventos de auditoría registrados'
-                        : 'No se encontraron eventos que coincidan con los filtros'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Evento</th>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Entidad</th>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Severidad</th>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Usuario</th>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Monto</th>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Fecha</th>
-                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {filteredLogs.map((log) => (
-                          <tr key={log.id} className="hover:bg-slate-50 transition-colors duration-200">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center">
-                                {getActionTypeIcon(log.action_type)}
-                                <div className="ml-3">
-                                  <p className="font-medium text-slate-900">{getActionTypeLabel(log.action_type)}</p>
-                                  <p className="text-sm text-slate-600">{log.description}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="font-medium text-slate-900">{getEntityTypeLabel(log.entity_type)}</span>
-                              {log.entity_id && (
-                                <p className="text-sm text-slate-600">ID: {log.entity_id.slice(-8)}</p>
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                                (log as any).severity === 'critical' ? 'bg-red-100 text-red-800' :
-                                (log as any).severity === 'high' ? 'bg-orange-100 text-orange-800' :
-                                (log as any).severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
-                                {(log as any).severity || 'normal'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div>
-                                <p className="font-medium text-slate-900">{log.performed_by_name || 'Sistema'}</p>
-                                {log.ip_address && (
-                                  <p className="text-sm text-slate-600">IP: {log.ip_address}</p>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              {log.amount > 0 ? (
-                                <span className="font-medium text-slate-900">
-                                  {formatCurrency(log.amount)}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div>
-                                <p className="text-sm text-slate-900">
-                                  {new Date(log.performed_at).toLocaleDateString('es-ES')}
-                                </p>
-                                <p className="text-xs text-slate-600">
-                                  {new Date(log.performed_at).toLocaleTimeString('es-ES')}
-                                </p>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => setSelectedLog(log)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                                title="Ver detalles"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'patterns' && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-slate-900">Patrones Sospechosos Detectados</h3>
-              
-              {suspiciousPatterns.length === 0 ? (
-                <div className="text-center py-12">
-                  <Shield className="h-12 w-12 text-green-400 mx-auto mb-4" />
-                  <p className="text-green-600 font-medium">No se detectaron patrones sospechosos</p>
-                  <p className="text-sm text-slate-600 mt-1">El sistema está funcionando normalmente</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {suspiciousPatterns.map((pattern, index) => (
-                    <div key={index} className={`border rounded-lg p-6 ${
-                      pattern.severity === 'high' ? 'border-red-200 bg-red-50' :
-                      pattern.severity === 'medium' ? 'border-yellow-200 bg-yellow-50' :
-                      'border-blue-200 bg-blue-50'
-                    }`}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-slate-900 mb-2">{pattern.description}</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                            <div>
-                              <span className="text-slate-600">Entidad afectada:</span>
-                              <span className="ml-2 font-medium">{pattern.affected_table}</span>
-                            </div>
-                            <div>
-                              <span className="text-slate-600">Usuario:</span>
-                              <span className="ml-2 font-medium">{pattern.user_involved}</span>
-                            </div>
-                            <div>
-                              <span className="text-slate-600">Eventos:</span>
-                              <span className="ml-2 font-medium">{pattern.event_count}</span>
-                            </div>
-                            <div>
-                              <span className="text-slate-600">Período:</span>
-                              <span className="ml-2 font-medium">
-                                {new Date(pattern.first_occurrence).toLocaleString('es-ES')} - 
-                                {new Date(pattern.last_occurrence).toLocaleString('es-ES')}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                            <p className="text-sm text-blue-800">
-                              <strong>Recomendación:</strong> {pattern.recommendation}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'reports' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Reportes de Auditoría</h3>
-              </div>
-
-              {/* Reportes Predefinidos */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-slate-900 mb-2">Reporte Diario</h4>
-                  <p className="text-sm text-slate-600 mb-4">Actividad de las últimas 24 horas</p>
-                  <button
-                    onClick={() => generateReport('daily', 
-                      new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                      new Date().toISOString().split('T')[0]
-                    )}
-                    className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                  >
-                    Generar
-                  </button>
-                </div>
-
-                <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-slate-900 mb-2">Reporte Semanal</h4>
-                  <p className="text-sm text-slate-600 mb-4">Actividad de los últimos 7 días</p>
-                  <button
-                    onClick={() => generateReport('weekly',
-                      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                      new Date().toISOString().split('T')[0]
-                    )}
-                    className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                  >
-                    Generar
-                  </button>
-                </div>
-
-                <div className="bg-white border border-slate-200 rounded-lg p-6">
-                  <h4 className="font-semibold text-slate-900 mb-2">Reporte de Seguridad</h4>
-                  <p className="text-sm text-slate-600 mb-4">Eventos críticos y de alta severidad</p>
-                  <button
-                    onClick={() => generateReport('security',
-                      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                      new Date().toISOString().split('T')[0]
-                    )}
-                    className="w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition-colors duration-200"
-                  >
-                    Generar
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal de Detalles del Log */}
-      {selectedLog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-slate-900">
-                  Detalles del Evento de Auditoría
-                </h3>
-                <button
-                  onClick={() => setSelectedLog(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
-                >
-                  <Eye className="h-5 w-5" />
-                </button>
+      {/* Información del Sistema */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
+        <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+          <Database className="h-5 w-5 mr-2 text-blue-600" />
+          Estado del Sistema de Auditoría
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white border border-green-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-green-600">Auditoría Automática</p>
+                <p className="font-bold text-green-900">{isDemoMode ? 'Demo' : 'Activa'}</p>
               </div>
+              <Shield className="h-6 w-6 text-green-600" />
             </div>
-            
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">ID del Evento:</label>
-                    <p className="font-mono text-sm text-slate-900">{selectedLog.id}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Tipo de Acción:</label>
-                    <div className="flex items-center mt-1">
-                      {getActionTypeIcon(selectedLog.action_type)}
-                      <span className="ml-2 font-medium">{getActionTypeLabel(selectedLog.action_type)}</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Entidad:</label>
-                    <p className="font-medium text-slate-900">{getEntityTypeLabel(selectedLog.entity_type)}</p>
-                    {selectedLog.entity_id && (
-                      <p className="text-sm text-slate-600">ID: {selectedLog.entity_id}</p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Usuario:</label>
-                    <p className="font-medium text-slate-900">{selectedLog.performed_by_name || 'Sistema'}</p>
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Descripción:</label>
-                    <p className="text-slate-900">{selectedLog.description}</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">Fecha y Hora:</label>
-                    <p className="font-medium text-slate-900">
-                      {new Date(selectedLog.performed_at).toLocaleString('es-ES')}
-                    </p>
-                  </div>
-                  
-                  {selectedLog.amount > 0 && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700">Monto:</label>
-                      <p className="font-medium text-slate-900">{formatCurrency(selectedLog.amount)}</p>
-                    </div>
-                  )}
-                  
-                  {selectedLog.previous_balance !== null && selectedLog.new_balance !== null && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700">Balance:</label>
-                      <div className="text-sm">
-                        <p>Anterior: {formatCurrency(selectedLog.previous_balance)}</p>
-                        <p>Nuevo: {formatCurrency(selectedLog.new_balance)}</p>
-                        <p className={`font-medium ${
-                          selectedLog.new_balance > selectedLog.previous_balance 
-                            ? 'text-green-600' 
-                            : 'text-red-600'
-                        }`}>
-                          Cambio: {formatCurrency(selectedLog.new_balance - selectedLog.previous_balance)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {selectedLog.ip_address && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700">IP Address:</label>
-                      <p className="font-mono text-sm text-slate-900">{selectedLog.ip_address}</p>
-                    </div>
-                  )}
-                </div>
+          </div>
+
+          <div className="bg-white border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-blue-600">Retención de Datos</p>
+                <p className="font-bold text-blue-900">365 días</p>
               </div>
-              
-              {/* Metadatos */}
-              {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
-                <div className="mt-6 pt-6 border-t border-slate-200">
-                  <h4 className="font-medium text-slate-900 mb-4">Metadatos del Evento</h4>
-                  <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs overflow-auto max-h-40">
-                    {JSON.stringify(selectedLog.metadata, null, 2)}
-                  </pre>
-                </div>
-              )}
+              <Database className="h-6 w-6 text-blue-600" />
             </div>
-            
-            <div className="p-6 border-t border-slate-200">
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="w-full bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cerrar
-              </button>
+          </div>
+
+          <div className="bg-white border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-purple-600">Validación</p>
+                <p className="font-bold text-purple-900">Tiempo Real</p>
+              </div>
+              <Zap className="h-6 w-6 text-purple-600" />
             </div>
           </div>
         </div>
-      )}
+
+        {isDemoMode && (
+          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h4 className="font-medium text-yellow-900 mb-2">Modo Demo Activo</h4>
+            <p className="text-sm text-yellow-800">
+              Estás viendo datos de demostración. Para usar el sistema de auditoría completo, 
+              configura las variables de entorno de Supabase y conecta una base de datos real.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Modales */}
+      <AuditReportGenerator
+        isOpen={showReportGenerator}
+        onClose={() => setShowReportGenerator(false)}
+        onReportGenerated={() => {
+          setShowReportGenerator(false);
+          loadAuditData();
+        }}
+      />
+
+      <AuditAlertManager
+        isOpen={showAlertManager}
+        onClose={() => setShowAlertManager(false)}
+        onUpdate={() => {
+          loadAuditData();
+        }}
+      />
     </div>
   );
 }

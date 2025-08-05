@@ -617,7 +617,7 @@ export const checkDatabaseIntegrity = async () => {
   }
   
   try {
-    const { data, error } = await supabase.rpc('check_database_integrity');
+    const { data, error } = await supabase.rpc('validate_data_integrity');
     
     if (error) throw error;
     return data || [];

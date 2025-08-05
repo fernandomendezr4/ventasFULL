@@ -54,6 +54,24 @@ export default function AuditReportGenerator({
     { id: 'delete', name: 'Eliminación', description: 'Registros eliminados' }
   ];
 
+  const runIntegrityCheckForReport = async () => {
+    // Mock integrity check for demo
+    return {
+      status: 'passed',
+      issues_found: 0,
+      recommendations: ['Sistema funcionando correctamente']
+    };
+  };
+
+  const runSecurityAnalysisForReport = async () => {
+    // Mock security analysis for demo
+    return {
+      risk_score: 15,
+      security_events: 0,
+      recommendations: ['Continuar monitoreo regular']
+    };
+  };
+
   if (!isOpen) return null;
 
   const handleGenerateReport = async () => {
@@ -533,6 +551,34 @@ export default function AuditReportGenerator({
                       Incluir verificación de integridad de datos
                     </label>
                   </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="include_security_analysis"
+                      checked={reportConfig.include_security_analysis}
+                      onChange={(e) => setReportConfig({ ...reportConfig, include_security_analysis: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                    />
+                    <label htmlFor="include_security_analysis" className="ml-2 text-sm text-slate-700">
+                      Incluir análisis de seguridad
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="include_recommendations"
+                      checked={reportConfig.include_recommendations}
+                      onChange={(e) => setReportConfig({ ...reportConfig, include_recommendations: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                    />
+                    <label htmlFor="include_recommendations" className="ml-2 text-sm text-slate-700">
+                      Incluir recomendaciones
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Resumen de Configuración */}

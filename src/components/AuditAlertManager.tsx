@@ -51,6 +51,7 @@ export default function AuditAlertManager({
     cooldown_minutes: 60,
     max_triggers_per_hour: 10
   });
+  const [testingAlert, setTestingAlert] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -223,6 +224,41 @@ export default function AuditAlertManager({
     } catch (error) {
       console.error('Error saving alert:', error);
       alert('Error al guardar alerta: ' + (error as Error).message);
+    }
+  };
+
+  const testAlert = async (alertId: string) => {
+    try {
+      setTestingAlert(alertId);
+      
+      if (isDemoMode) {
+        // Simular prueba de alerta en modo demo
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        alert('Alerta probada exitosamente (modo demo)');
+        return;
+      }
+
+      // Ejecutar prueba real de alerta
+      const { data, error } = await supabase.rpc('test_audit_alert', {
+        alert_id: alertId
+      });
+      
+      if (error) {
+        console.warn('Test function not available, using manual test');
+        alert('Función de prueba no disponible. La alerta se activará según sus condiciones configuradas.');
+        return;
+      }
+
+      if (data) {
+        alert('Alerta probada exitosamente. Revisa el dashboard para ver el resultado.');
+      } else {
+        alert('La alerta no se activó. Verifica las condiciones configuradas.');
+      }
+    } catch (error) {
+      console.error('Error testing alert:', error);
+      alert('Error al probar alerta: ' + (error as Error).message);
+    } finally {
+      setTestingAlert(null);
     }
   };
 
@@ -467,6 +503,18 @@ export default function AuditAlertManager({
                           
                           <div className="flex gap-2">
                             <button
+                              onClick={() => testAlert(alert.id)}
+                              disabled={testingAlert === alert.id}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
+                              title="Probar alerta"
+                            >
+                              {testingAlert === alert.id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                              ) : (
+                                <CheckCircle className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
                               onClick={() => handleEdit(alert)}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
                               title="Editar alerta"
@@ -682,6 +730,29 @@ export default function AuditAlertManager({
                           />
                           <p className="text-xs text-slate-500 mt-1">
                             Número máximo de alertas por hora
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Condiciones Avanzadas (JSON)
+                          </label>
+                          <textarea
+                            value={JSON.stringify(formData.trigger_conditions, null, 2)}
+                            onChange={(e) => {
+                              try {
+                                const conditions = JSON.parse(e.target.value);
+                                setFormData({ ...formData, trigger_conditions: conditions });
+                              } catch (error) {
+                                // Ignorar errores de JSON inválido mientras se escribe
+                              }
+                            }}
+                            rows={4}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                            placeholder='{"max_events_per_hour": 5, "outside_business_hours": true}'
+                          />
+                          <p className="text-xs text-slate-500 mt-1">
+                            Configuración avanzada en formato JSON
                           </p>
                         </div>
                       </div>

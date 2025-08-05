@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, AlertTriangle, FileText, Activity, Users, Database, Calendar, Search, Filter, Download, Eye, Bell, Settings, TrendingUp, BarChart3, CheckCircle, Clock } from 'lucide-react';
+import { Shield, AlertTriangle, FileText, Activity, Users, Database, Calendar, Search, Filter, Download, Eye, Bell, Settings, TrendingUp, BarChart3, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
@@ -61,9 +61,12 @@ export default function AuditDashboard() {
   const [actionFilter, setActionFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('');
   
   // Estados de modales
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [showIntegrityCheck, setShowIntegrityCheck] = useState(false);
+  const [integrityResults, setIntegrityResults] = useState<any[]>([]);
 
   useEffect(() => {
     loadAuditData();
@@ -241,6 +244,9 @@ export default function AuditDashboard() {
       // Detectar patrones sospechosos básicos
       const patterns = detectBasicSuspiciousPatterns(logs || []);
       setSuspiciousPatterns(patterns);
+      
+      // Ejecutar verificación de integridad automática
+      await runIntegrityCheck();
 
     } catch (error) {
       console.error('Error loading audit data:', error);
@@ -249,6 +255,51 @@ export default function AuditDashboard() {
       setSuspiciousPatterns([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runIntegrityCheck = async () => {
+    try {
+      if (isDemoMode) {
+        // Datos demo para verificación de integridad
+        const demoResults = [
+          {
+            table_name: 'sales',
+            issue_type: 'healthy',
+            issue_description: 'Todas las ventas tienen estructura correcta',
+            suggested_action: 'Ninguna acción requerida'
+          },
+          {
+            table_name: 'products',
+            issue_type: 'healthy',
+            issue_description: 'Inventario en buen estado',
+            suggested_action: 'Ninguna acción requerida'
+          },
+          {
+            table_name: 'cash_registers',
+            issue_type: 'healthy',
+            issue_description: 'Todas las cajas tienen movimientos de apertura',
+            suggested_action: 'Ninguna acción requerida'
+          }
+        ];
+        
+        setIntegrityResults(demoResults);
+        return;
+      }
+
+      // Ejecutar verificación real
+      const { data, error } = await supabase.rpc('validate_data_integrity');
+      
+      if (error) {
+        console.error('Error running integrity check:', error);
+        setIntegrityResults([]);
+        return;
+      }
+
+      setIntegrityResults(data || []);
+    } catch (error) {
+      console.error('Error in integrity check:', error);
+      setIntegrityResults([]);
     }
   };
 
@@ -448,17 +499,19 @@ export default function AuditDashboard() {
     const matchesTable = !tableFilter || log.entity_type === tableFilter;
     const matchesAction = !actionFilter || log.action_type === actionFilter;
     const matchesUser = !userFilter || log.performed_by_name?.toLowerCase().includes(userFilter.toLowerCase());
+    const matchesSeverity = !severityFilter || (log as any).severity === severityFilter;
     const matchesSearch = !searchTerm || 
       log.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.entity_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.action_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.performed_by_name?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return matchesDate && matchesTable && matchesAction && matchesUser && matchesSearch;
+    return matchesDate && matchesTable && matchesAction && matchesUser && matchesSeverity && matchesSearch;
   });
 
   const tabs = [
     { id: 'overview', label: 'Resumen', icon: BarChart3 },
+    { id: 'integrity', label: 'Integridad', icon: CheckCircle },
     { id: 'logs', label: 'Logs de Auditoría', icon: FileText },
     { id: 'patterns', label: 'Patrones Sospechosos', icon: AlertTriangle },
     { id: 'reports', label: 'Reportes', icon: Download }
@@ -615,6 +668,15 @@ export default function AuditDashboard() {
               {/* Actividad Reciente */}
               <div className="bg-white border border-slate-200 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Actividad Reciente</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm text-slate-600">Últimos 5 eventos</span>
+                  <button
+                    onClick={() => setShowIntegrityCheck(true)}
+                    className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded hover:bg-blue-200 transition-colors duration-200"
+                  >
+                    Ver Verificación de Integridad
+                  </button>
+                </div>
                 <div className="space-y-3">
                   {auditLogs.slice(0, 5).map((log) => (
                     <div key={log.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
@@ -651,11 +713,72 @@ export default function AuditDashboard() {
             </div>
           )}
 
+          {activeTab === 'integrity' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">Verificación de Integridad de Datos</h3>
+                <button
+                  onClick={runIntegrityCheck}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Ejecutar Verificación
+                </button>
+              </div>
+              
+              {integrityResults.length === 0 ? (
+                <div className="text-center py-12">
+                  <Database className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                  <p className="text-slate-500">No hay resultados de verificación disponibles</p>
+                  <button
+                    onClick={runIntegrityCheck}
+                    className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                  >
+                    Ejecutar Primera Verificación
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {integrityResults.map((result, index) => (
+                    <div key={index} className={`border rounded-lg p-6 ${
+                      result.issue_type === 'healthy' 
+                        ? 'border-green-200 bg-green-50' 
+                        : 'border-yellow-200 bg-yellow-50'
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-slate-900 mb-2">
+                            {result.table_name.replace('_', ' ').toUpperCase()}
+                          </h4>
+                          <p className="text-sm text-slate-700 mb-2">{result.issue_description}</p>
+                          {result.suggested_action !== 'Ninguna acción requerida' && (
+                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                              <p className="text-sm text-blue-800">
+                                <strong>Acción sugerida:</strong> {result.suggested_action}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="ml-4">
+                          {result.issue_type === 'healthy' ? (
+                            <CheckCircle className="h-6 w-6 text-green-600" />
+                          ) : (
+                            <AlertTriangle className="h-6 w-6 text-yellow-600" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'logs' && (
             <div className="space-y-6">
               {/* Filtros */}
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                     <input
@@ -704,6 +827,18 @@ export default function AuditDashboard() {
                     <option value="delete">Eliminación</option>
                   </select>
                   
+                  <select
+                    value={severityFilter}
+                    onChange={(e) => setSeverityFilter(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Todas las severidades</option>
+                    <option value="low">Baja</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">Alta</option>
+                    <option value="critical">Crítica</option>
+                  </select>
+                  
                   <input
                     type="text"
                     placeholder="Usuario..."
@@ -719,13 +854,14 @@ export default function AuditDashboard() {
                       setTableFilter('');
                       setActionFilter('');
                       setUserFilter('');
+                      setSeverityFilter('');
                     }}
                     className="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors duration-200"
                   >
                     Limpiar
                   </button>
                 </div>
-                {(searchTerm || dateFilter || tableFilter || actionFilter || userFilter) && (
+                {(searchTerm || dateFilter || tableFilter || actionFilter || userFilter || severityFilter) && (
                   <div className="mt-3 text-sm text-slate-600">
                     Mostrando {filteredLogs.length} de {auditLogs.length} eventos
                   </div>
@@ -750,6 +886,7 @@ export default function AuditDashboard() {
                         <tr>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Evento</th>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Entidad</th>
+                          <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Severidad</th>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Usuario</th>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Monto</th>
                           <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Fecha</th>
@@ -773,6 +910,16 @@ export default function AuditDashboard() {
                               {log.entity_id && (
                                 <p className="text-sm text-slate-600">ID: {log.entity_id.slice(-8)}</p>
                               )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                (log as any).severity === 'critical' ? 'bg-red-100 text-red-800' :
+                                (log as any).severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                                (log as any).severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-blue-100 text-blue-800'
+                              }`}>
+                                {(log as any).severity || 'normal'}
+                              </span>
                             </td>
                             <td className="px-6 py-4">
                               <div>

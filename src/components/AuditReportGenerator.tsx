@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Download, Calendar, Filter, FileText, X, Settings, CheckCircle } from 'lucide-react';
+import { Download, Calendar, Filter, FileText, X, Settings, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { validateReportConfiguration } from '../lib/auditValidation';
 
 interface AuditReportGeneratorProps {
   isOpen: boolean;
@@ -26,8 +27,12 @@ export default function AuditReportGenerator({
     include_user_details: true,
     include_metadata: true,
     include_ip_addresses: false,
-    format: 'json'
+    format: 'json',
+    include_integrity_check: true,
+    include_security_analysis: true,
+    include_recommendations: true
   });
+  const [configValidation, setConfigValidation] = useState<any>(null);
 
   const availableEntities = [
     { id: 'cash_register', name: 'Cajas Registradoras', description: 'Operaciones de caja' },
@@ -52,13 +57,32 @@ export default function AuditReportGenerator({
   if (!isOpen) return null;
 
   const handleGenerateReport = async () => {
-    if (!reportConfig.report_name.trim()) {
-      alert('Debe ingresar un nombre para el reporte');
+    // Validar configuración antes de generar
+    const validation = validateReportConfiguration(reportConfig);
+    setConfigValidation(validation);
+    
+    if (!validation.isValid) {
+      alert('Errores en la configuración:\n' + validation.errors.join('\n'));
       return;
     }
 
-    if (new Date(reportConfig.date_from) > new Date(reportConfig.date_to)) {
-      alert('La fecha de inicio debe ser anterior a la fecha de fin');
+    if (validation.criticalIssues.length > 0) {
+      const proceed = window.confirm(
+        'Problemas críticos detectados:\n' + 
+        validation.criticalIssues.join('\n') + 
+        '\n\n¿Desea continuar de todos modos?'
+      );
+      if (!proceed) return;
+    }
+
+    if (validation.warnings.length > 0) {
+      const proceed = window.confirm(
+        'Advertencias:\n' + 
+        validation.warnings.join('\n') + 
+        '\n\n¿Desea continuar?'
+      );
+      if (!proceed) return;
+    }
       return;
     }
 
@@ -88,6 +112,16 @@ export default function AuditReportGenerator({
             'sale': 10,
             'movement': 5
           },
+          integrity_check: reportConfig.include_integrity_check ? {
+            status: 'passed',
+            issues_found: 0,
+            recommendations: ['Sistema funcionando correctamente']
+          } : null,
+          security_analysis: reportConfig.include_security_analysis ? {
+            risk_score: 15,
+            security_events: 0,
+            recommendations: ['Continuar monitoreo regular']
+          } : null,
           generated_at: new Date().toISOString(),
           generated_by: user?.name || 'Usuario Demo',
           format: reportConfig.format,
@@ -112,9 +146,50 @@ export default function AuditReportGenerator({
       }
 
       // Intentar usar función RPC
-      // Since generate_audit_report function doesn't exist, use manual generation
-      console.log('generate_audit_report function not found, using manual generation');
-      await generateManualReport();
+      try {
+        const { data: reportId, error } = await supabase.rpc('generate_audit_report', {
+          report_name: reportConfig.report_name,
+          report_type: reportConfig.report_type,
+          date_from: reportConfig.date_from,
+          date_to: reportConfig.date_to,
+          entities_filter: reportConfig.entities_included.length > 0 ? reportConfig.entities_included : null,
+          actions_filter: reportConfig.action_types_included.length > 0 ? reportConfig.action_types_included : null
+        });
+
+        if (error) {
+          console.warn('RPC function not available, using manual generation:', error);
+          await generateManualReport();
+        } else {
+          // Obtener el reporte generado
+          const { data: reportData, error: fetchError } = await supabase
+            .from('audit_reports')
+            .select('*')
+            .eq('id', reportId)
+            .single();
+
+          if (fetchError) {
+            throw fetchError;
+          }
+
+          // Descargar reporte
+          const blob = new Blob([JSON.stringify(reportData, null, 2)], { 
+            type: 'application/json' 
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${reportConfig.report_name.replace(/\s+/g, '_')}_${reportConfig.date_from}_${reportConfig.date_to}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+
+          alert('Reporte generado y descargado exitosamente');
+          onReportGenerated();
+          onClose();
+        }
+      } catch (rpcError) {
+        console.warn('RPC method failed, falling back to manual generation');
+        await generateManualReport();
+      }
     } catch (error) {
       console.error('Error generating report:', error);
       alert('Error al generar reporte: ' + (error as Error).message);
@@ -175,6 +250,8 @@ export default function AuditReportGenerator({
           performed_by: reportConfig.include_user_details ? log.performed_by_user?.name : 'Usuario',
           ip_address: reportConfig.include_ip_addresses ? log.ip_address : undefined
         })),
+        integrity_check: reportConfig.include_integrity_check ? await runIntegrityCheckForReport() : null,
+        security_analysis: reportConfig.include_security_analysis ? await runSecurityAnalysisForReport() : null,
         generated_at: new Date().toISOString(),
         generated_by: user?.name || 'Sistema'
       };
@@ -442,6 +519,22 @@ export default function AuditReportGenerator({
                   <option value="csv">CSV (Hoja de cálculo)</option>
                 </select>
               </div>
+
+              <div className="mt-4 space-y-3">
+                <h5 className="font-medium text-slate-900">Análisis Adicionales</h5>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="include_integrity_check"
+                      checked={reportConfig.include_integrity_check}
+                      onChange={(e) => setReportConfig({ ...reportConfig, include_integrity_check: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                    />
+                    <label htmlFor="include_integrity_check" className="ml-2 text-sm text-slate-700">
+                      Incluir verificación de integridad de datos
+                    </label>
+                  </div>
             </div>
 
             {/* Resumen de Configuración */}

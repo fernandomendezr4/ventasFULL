@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, FileText, Download, Calendar, Filter, Eye, CheckCircle, AlertTriangle, BarChart3 } from 'lucide-react';
+import { Shield, FileText, Download, Calendar, Filter, Eye, CheckCircle, AlertTriangle, BarChart3, Zap, Clock, TrendingUp } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
+import { validateAuditSystemIntegrity, runSecurityValidations } from '../lib/auditValidation';
 
 interface ComplianceReport {
   id: string;
@@ -39,6 +40,9 @@ export default function AuditComplianceReports() {
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<ComplianceReport | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
+  const [systemValidation, setSystemValidation] = useState<any>(null);
+  const [securityValidation, setSecurityValidation] = useState<any>(null);
+  const [runningValidation, setRunningValidation] = useState(false);
   const [generatorConfig, setGeneratorConfig] = useState({
     framework: 'SOX',
     date_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -50,8 +54,26 @@ export default function AuditComplianceReports() {
 
   useEffect(() => {
     loadComplianceData();
+    runSystemValidations();
   }, []);
 
+  const runSystemValidations = async () => {
+    try {
+      setRunningValidation(true);
+      
+      const [systemResult, securityResult] = await Promise.all([
+        validateAuditSystemIntegrity(),
+        runSecurityValidations()
+      ]);
+      
+      setSystemValidation(systemResult);
+      setSecurityValidation(securityResult);
+    } catch (error) {
+      console.error('Error running system validations:', error);
+    } finally {
+      setRunningValidation(false);
+    }
+  };
   const loadComplianceData = async () => {
     try {
       setLoading(true);
@@ -309,15 +331,153 @@ export default function AuditComplianceReports() {
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-purple-600">Frameworks</p>
-              <p className="text-2xl font-bold text-purple-900">3</p>
-              <p className="text-xs text-purple-700">SOX, GDPR, ISO27001</p>
+              <p className="text-sm font-medium text-purple-600">Validaciones</p>
+              <p className="text-2xl font-bold text-purple-900">
+                {systemValidation?.isValid ? 'OK' : 'FALLA'}
+              </p>
+              <p className="text-xs text-purple-700">
+                {runningValidation ? 'Ejecutando...' : 'Sistema validado'}
+              </p>
             </div>
-            <Shield className="h-8 w-8 text-purple-600" />
+            {runningValidation ? (
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            ) : (
+              <Shield className="h-8 w-8 text-purple-600" />
+            )}
           </div>
         </div>
       </div>
 
+      {/* Validaciones del Sistema */}
+      {(systemValidation || securityValidation) && (
+        <div className="bg-white rounded-xl shadow-sm border">
+          <div className="p-6 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-semibold text-slate-900">Validaciones del Sistema</h4>
+              <button
+                onClick={runSystemValidations}
+                disabled={runningValidation}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200 flex items-center"
+              >
+                {runningValidation ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Validando...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Ejecutar Validaciones
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Validación de Integridad del Sistema */}
+              {systemValidation && (
+                <div className={`border rounded-lg p-4 ${
+                  systemValidation.isValid 
+                    ? 'border-green-200 bg-green-50' 
+                    : 'border-red-200 bg-red-50'
+                }`}>
+                  <h5 className="font-semibold text-slate-900 mb-3 flex items-center">
+                    <Database className="h-5 w-5 mr-2" />
+                    Integridad del Sistema
+                  </h5>
+                  <div className="space-y-2">
+                    <div className={`flex items-center ${
+                      systemValidation.isValid ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                      {systemValidation.isValid ? (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                      )}
+                      <span className="font-medium">
+                        {systemValidation.isValid ? 'Sistema íntegro' : 'Problemas detectados'}
+                      </span>
+                    </div>
+                    
+                    {systemValidation.errors.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium text-red-800 mb-1">Errores:</p>
+                        <ul className="text-sm text-red-700 space-y-1">
+                          {systemValidation.errors.map((error: string, index: number) => (
+                            <li key={index}>• {error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {systemValidation.warnings.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium text-yellow-800 mb-1">Advertencias:</p>
+                        <ul className="text-sm text-yellow-700 space-y-1">
+                          {systemValidation.warnings.map((warning: string, index: number) => (
+                            <li key={index}>• {warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Validación de Seguridad */}
+              {securityValidation && (
+                <div className={`border rounded-lg p-4 ${
+                  !securityValidation.hasSecurityIssues 
+                    ? 'border-green-200 bg-green-50' 
+                    : 'border-orange-200 bg-orange-50'
+                }`}>
+                  <h5 className="font-semibold text-slate-900 mb-3 flex items-center">
+                    <Shield className="h-5 w-5 mr-2" />
+                    Validación de Seguridad
+                  </h5>
+                  <div className="space-y-2">
+                    <div className={`flex items-center ${
+                      !securityValidation.hasSecurityIssues ? 'text-green-800' : 'text-orange-800'
+                    }`}>
+                      {!securityValidation.hasSecurityIssues ? (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                      )}
+                      <span className="font-medium">
+                        {!securityValidation.hasSecurityIssues ? 'Sin problemas de seguridad' : 'Problemas de seguridad detectados'}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-slate-600">Accesos no autorizados:</span>
+                        <p className="font-bold text-slate-900">{securityValidation.unauthorizedAccess}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-600">Patrones sospechosos:</span>
+                        <p className="font-bold text-slate-900">{securityValidation.suspiciousPatterns}</p>
+                      </div>
+                    </div>
+                    
+                    {securityValidation.recommendations.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium text-slate-800 mb-1">Recomendaciones:</p>
+                        <ul className="text-sm text-slate-700 space-y-1">
+                          {securityValidation.recommendations.slice(0, 3).map((rec: string, index: number) => (
+                            <li key={index}>• {rec}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Violaciones Recientes */}
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="p-6 border-b border-slate-200">
@@ -606,6 +766,28 @@ export default function AuditComplianceReports() {
                   </div>
                 </div>
               )}
+
+              {/* Información de Validación */}
+              {systemValidation && !systemValidation.isValid && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+                    <div>
+                      <h4 className="font-medium text-red-900">Problemas del Sistema Detectados</h4>
+                      <p className="text-sm text-red-800 mt-1">
+                        Se encontraron {systemValidation.errors.length + systemValidation.criticalIssues.length} problemas 
+                        que pueden afectar la generación de reportes.
+                      </p>
+                      <button
+                        onClick={runSystemValidations}
+                        className="mt-2 text-xs bg-red-200 text-red-800 px-2 py-1 rounded hover:bg-red-300 transition-colors duration-200"
+                      >
+                        Ejecutar Validaciones
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
@@ -704,6 +886,56 @@ export default function AuditComplianceReports() {
                   </div>
                 </div>
 
+                {/* Validaciones del Sistema en el Modal */}
+                {systemValidation && (
+                  <div>
+                    <h4 className="font-medium text-slate-900 mb-3">Estado del Sistema de Auditoría</h4>
+                    <div className={`p-4 rounded-lg border ${
+                      systemValidation.isValid 
+                        ? 'border-green-200 bg-green-50' 
+                        : 'border-red-200 bg-red-50'
+                    }`}>
+                      <div className="flex items-center mb-2">
+                        {systemValidation.isValid ? (
+                          <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                        ) : (
+                          <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+                        )}
+                        <span className={`font-medium ${
+                          systemValidation.isValid ? 'text-green-900' : 'text-red-900'
+                        }`}>
+                          {systemValidation.isValid ? 'Sistema íntegro' : 'Problemas detectados'}
+                        </span>
+                      </div>
+                      
+                      {!systemValidation.isValid && (
+                        <div className="text-sm">
+                          {systemValidation.criticalIssues.length > 0 && (
+                            <div className="mb-2">
+                              <p className="font-medium text-red-800">Problemas críticos:</p>
+                              <ul className="text-red-700 ml-4">
+                                {systemValidation.criticalIssues.map((issue: string, index: number) => (
+                                  <li key={index}>• {issue}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {systemValidation.errors.length > 0 && (
+                            <div>
+                              <p className="font-medium text-red-800">Errores:</p>
+                              <ul className="text-red-700 ml-4">
+                                {systemValidation.errors.map((error: string, index: number) => (
+                                  <li key={index}>• {error}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Recomendaciones */}
                 {selectedReport.recommendations && selectedReport.recommendations.length > 0 && (
                   <div>

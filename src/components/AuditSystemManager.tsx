@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Shield, BarChart3, Bell, FileText, Settings, AlertTriangle, Database, Activity, CheckCircle } from 'lucide-react';
+import { Shield, BarChart3, Bell, FileText, Settings, AlertTriangle, Database, Activity, CheckCircle, Zap, Clock, TrendingUp } from 'lucide-react';
 import AuditDashboard from './AuditDashboard';
 import AuditReportGenerator from './AuditReportGenerator';
 import AuditAlertManager from './AuditAlertManager';
 import AuditComplianceReports from './AuditComplianceReports';
+import AuditSystemHealth from './AuditSystemHealth';
+import AuditDataRetention from './AuditDataRetention';
 import { useAuth } from '../contexts/AuthContext';
 import { isDemoMode } from '../lib/supabase';
 
@@ -12,6 +14,7 @@ export default function AuditSystemManager() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showReportGenerator, setShowReportGenerator] = useState(false);
   const [showAlertManager, setShowAlertManager] = useState(false);
+  const [systemStats, setSystemStats] = useState<any>(null);
 
   // Verificar permisos de auditoría
   if (!user || !['admin', 'manager'].includes(user.role)) {
@@ -41,10 +44,22 @@ export default function AuditSystemManager() {
       description: 'Vista general de la actividad de auditoría' 
     },
     { 
+      id: 'health', 
+      label: 'Salud del Sistema', 
+      icon: Activity, 
+      description: 'Monitoreo de salud y rendimiento del sistema' 
+    },
+    { 
       id: 'compliance', 
       label: 'Cumplimiento', 
       icon: Shield, 
       description: 'Reportes de cumplimiento normativo' 
+    },
+    { 
+      id: 'retention', 
+      label: 'Retención de Datos', 
+      icon: Database, 
+      description: 'Gestión de retención y archivado de datos' 
     },
     { 
       id: 'reports', 
@@ -58,8 +73,12 @@ export default function AuditSystemManager() {
     switch (activeTab) {
       case 'dashboard':
         return <AuditDashboard />;
+      case 'health':
+        return <AuditSystemHealth onStatsUpdate={setSystemStats} />;
       case 'compliance':
         return <AuditComplianceReports />;
+      case 'retention':
+        return <AuditDataRetention />;
       case 'reports':
         return (
           <div className="space-y-6">
@@ -112,12 +131,22 @@ export default function AuditSystemManager() {
                 <FileText className="h-4 w-4 mr-2" />
                 <span>Reportes en tiempo real</span>
               </div>
+              <div className="flex items-center">
+                <Zap className="h-4 w-4 mr-2" />
+                <span>Validación automática</span>
+              </div>
             </div>
           </div>
           <div className="text-right">
             <p className="text-blue-100 text-sm">Usuario:</p>
             <p className="font-semibold">{user.name}</p>
             <p className="text-blue-200 text-sm">Rol: {user.role}</p>
+            {systemStats && (
+              <div className="mt-2 text-xs text-blue-200">
+                <p>Eventos hoy: {systemStats.today_events || 0}</p>
+                <p>Alertas activas: {systemStats.active_alerts || 0}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -178,7 +207,7 @@ export default function AuditSystemManager() {
           <Database className="h-5 w-5 mr-2 text-blue-600" />
           Estado del Sistema de Auditoría
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white border border-green-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -208,11 +237,21 @@ export default function AuditSystemManager() {
               <Settings className="h-6 w-6 text-purple-600" />
             </div>
           </div>
+
+          <div className="bg-white border border-orange-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-orange-600">Validación</p>
+                <p className="font-bold text-orange-900">Tiempo Real</p>
+              </div>
+              <Zap className="h-6 w-6 text-orange-600" />
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h4 className="font-medium text-blue-900 mb-2">Características del Sistema</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-blue-800">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-blue-800">
             <div className="flex items-center">
               <CheckCircle className="h-3 w-3 mr-2" />
               <span>Auditoría en tiempo real de todas las operaciones</span>
@@ -236,6 +275,18 @@ export default function AuditSystemManager() {
             <div className="flex items-center">
               <CheckCircle className="h-3 w-3 mr-2" />
               <span>Integración completa con cajas registradoras</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Validación automática de integridad</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Sistema de alertas inteligentes</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Limpieza automática de datos antiguos</span>
             </div>
           </div>
         </div>

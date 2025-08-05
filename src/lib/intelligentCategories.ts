@@ -648,10 +648,10 @@ export const optimizeCategoryStructure = async (): Promise<{
         name,
         products:products(count)
       `)
-      .eq('products.count', 0);
+      ;
 
     if (!emptyError && emptyCategories && emptyCategories.length > 0) {
-      emptyCategories.forEach(category => {
+      emptyCategories.filter(category => category.products.length === 0).forEach(category => {
         suggestions.push({
           type: 'create',
           current_categories: [category.name],

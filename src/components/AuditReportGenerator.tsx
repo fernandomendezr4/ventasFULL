@@ -83,8 +83,6 @@ export default function AuditReportGenerator({
       );
       if (!proceed) return;
     }
-      return;
-    }
 
     try {
       setLoading(true);

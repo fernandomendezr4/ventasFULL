@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Package, Search, Filter, Eye, Hash, Upload, Download, AlertTriangle, CheckCircle, Smartphone, Tag, Truck, DollarSign, BarChart3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Search, Filter, Eye, Hash, Upload, Download, AlertTriangle, CheckCircle, Smartphone, Tag, Truck, DollarSign, BarChart3, Archive, RefreshCw, Clock } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { ProductWithCategory, Category, Supplier } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
@@ -21,13 +21,17 @@ import { validateProductDuplicates, validateBusinessLogic } from '../lib/product
 export default function ProductManager() {
   const { user } = useAuth();
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
+  const [outOfStockProducts, setOutOfStockProducts] = useState<ProductWithCategory[]>([]);
+  const [soldOutImeiProducts, setSoldOutImeiProducts] = useState<ProductWithCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingOutOfStock, setLoadingOutOfStock] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showImeiManager, setShowImeiManager] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showOutOfStockSection, setShowOutOfStockSection] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductWithCategory | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithCategory | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,6 +60,7 @@ export default function ProductManager() {
     loadProducts();
     loadCategories();
     loadSuppliers();
+    loadOutOfStockProducts();
   }, []);
 
   const loadProducts = async () => {
@@ -163,6 +168,7 @@ export default function ProductManager() {
           category:categories(*),
           supplier:suppliers(*)
         `)
+        .gt('stock', 0) // Solo productos con stock
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -172,6 +178,153 @@ export default function ProductManager() {
       setProducts([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOutOfStockProducts = async () => {
+    try {
+      setLoadingOutOfStock(true);
+      
+      if (isDemoMode) {
+        // Demo mode: productos sin stock
+        const demoOutOfStock = [
+          {
+            id: 'demo-product-out-1',
+            name: 'MacBook Pro M3',
+            description: 'Laptop Apple MacBook Pro con chip M3',
+            sale_price: 8500000,
+            purchase_price: 7500000,
+            stock: 0,
+            barcode: '111222333444',
+            category_id: 'demo-category-3',
+            supplier_id: 'demo-supplier-1',
+            created_at: new Date(Date.now() - 345600000).toISOString(),
+            has_imei_serial: true,
+            imei_serial_type: 'serial' as const,
+            requires_imei_serial: true,
+            bulk_import_batch: '',
+            import_notes: '',
+            imported_at: null,
+            imported_by: null,
+            category: { id: 'demo-category-3', name: 'Laptops', description: 'Computadoras portátiles', created_at: new Date().toISOString() },
+            supplier: { id: 'demo-supplier-1', name: 'Apple Store', contact_person: 'Contacto Apple', email: 'apple@store.com', phone: '3001234567', address: 'Dirección Apple', created_at: new Date().toISOString() }
+          },
+          {
+            id: 'demo-product-out-2',
+            name: 'iPad Air',
+            description: 'Tablet Apple iPad Air 256GB',
+            sale_price: 2800000,
+            purchase_price: 2400000,
+            stock: 0,
+            barcode: '555666777888',
+            category_id: 'demo-category-4',
+            supplier_id: 'demo-supplier-1',
+            created_at: new Date(Date.now() - 432000000).toISOString(),
+            has_imei_serial: false,
+            imei_serial_type: 'serial' as const,
+            requires_imei_serial: false,
+            bulk_import_batch: '',
+            import_notes: '',
+            imported_at: null,
+            imported_by: null,
+            category: { id: 'demo-category-4', name: 'Tablets', description: 'Tabletas electrónicas', created_at: new Date().toISOString() },
+            supplier: { id: 'demo-supplier-1', name: 'Apple Store', contact_person: 'Contacto Apple', email: 'apple@store.com', phone: '3001234567', address: 'Dirección Apple', created_at: new Date().toISOString() }
+          }
+        ];
+        
+        // Productos con IMEI vendidos completamente
+        const demoSoldOutImei = [
+          {
+            id: 'demo-product-sold-1',
+            name: 'iPhone 14',
+            description: 'Smartphone Apple iPhone 14 128GB - Todas las unidades vendidas',
+            sale_price: 3800000,
+            purchase_price: 3300000,
+            stock: 5, // Tiene stock pero sin IMEI disponibles
+            barcode: '999888777666',
+            category_id: 'demo-category-1',
+            supplier_id: 'demo-supplier-1',
+            created_at: new Date(Date.now() - 518400000).toISOString(),
+            has_imei_serial: true,
+            imei_serial_type: 'imei' as const,
+            requires_imei_serial: true,
+            bulk_import_batch: '',
+            import_notes: '',
+            imported_at: null,
+            imported_by: null,
+            category: { id: 'demo-category-1', name: 'Smartphones', description: 'Teléfonos inteligentes', created_at: new Date().toISOString() },
+            supplier: { id: 'demo-supplier-1', name: 'Apple Store', contact_person: 'Contacto Apple', email: 'apple@store.com', phone: '3001234567', address: 'Dirección Apple', created_at: new Date().toISOString() },
+            available_imei_count: 0,
+            sold_imei_count: 5
+          }
+        ];
+        
+        setOutOfStockProducts(demoOutOfStock);
+        setSoldOutImeiProducts(demoSoldOutImei);
+        setLoadingOutOfStock(false);
+        return;
+      }
+      
+      // Cargar productos sin stock
+      const { data: outOfStockData, error: outOfStockError } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(*),
+          supplier:suppliers(*)
+        `)
+        .eq('stock', 0)
+        .order('created_at', { ascending: false });
+
+      if (outOfStockError) {
+        console.error('Error loading out of stock products:', outOfStockError);
+        setOutOfStockProducts([]);
+      } else {
+        setOutOfStockProducts(outOfStockData || []);
+      }
+
+      // Cargar productos con IMEI/Serial que tienen stock pero sin unidades disponibles
+      const { data: imeiProductsData, error: imeiError } = await supabase
+        .from('products_with_imei_serials')
+        .select('*')
+        .eq('requires_imei_serial', true)
+        .gt('stock', 0)
+        .eq('available_units', 0);
+
+      if (imeiError) {
+        console.error('Error loading sold out IMEI products:', imeiError);
+        setSoldOutImeiProducts([]);
+      } else {
+        // Convertir al formato esperado
+        const formattedImeiProducts = (imeiProductsData || []).map(product => ({
+          ...product,
+          category: product.category_id ? { 
+            id: product.category_id, 
+            name: 'Categoría', 
+            description: '', 
+            created_at: product.created_at 
+          } : null,
+          supplier: product.supplier_id ? { 
+            id: product.supplier_id, 
+            name: 'Proveedor', 
+            contact_person: '', 
+            email: '', 
+            phone: '', 
+            address: '', 
+            created_at: product.created_at 
+          } : null,
+          available_imei_count: product.available_units || 0,
+          sold_imei_count: product.sold_units || 0
+        }));
+        
+        setSoldOutImeiProducts(formattedImeiProducts as ProductWithCategory[]);
+      }
+    } catch (error) {
+      console.error('Error loading out of stock products:', error);
+      setOutOfStockProducts([]);
+      setSoldOutImeiProducts([]);
+    } finally {
+      setLoadingOutOfStock(false);
     }
   };
 
@@ -355,6 +508,7 @@ export default function ProductManager() {
       setEditingProduct(null);
       resetForm();
       loadProducts();
+      loadOutOfStockProducts(); // Recargar también productos sin stock
       
     } catch (error) {
       console.error('Error saving product:', error);
@@ -473,6 +627,7 @@ export default function ProductManager() {
         
         alert('Producto eliminado exitosamente');
         loadProducts();
+        loadOutOfStockProducts(); // Recargar también productos sin stock
       } catch (error) {
         console.error('Error deleting product:', error);
         
@@ -571,6 +726,22 @@ export default function ProductManager() {
         <h2 className="text-3xl font-bold text-slate-900">Productos</h2>
         <div className="flex gap-2">
           <button
+            onClick={() => setShowOutOfStockSection(!showOutOfStockSection)}
+            className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center ${
+              showOutOfStockSection
+                ? 'bg-red-600 text-white hover:bg-red-700'
+                : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            {showOutOfStockSection ? 'Ocultar' : 'Ver'} Sin Stock
+            {(outOfStockProducts.length + soldOutImeiProducts.length) > 0 && (
+              <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-1">
+                {outOfStockProducts.length + soldOutImeiProducts.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setShowBulkImport(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center"
           >
@@ -653,6 +824,315 @@ export default function ProductManager() {
           </div>
         )}
       </div>
+
+      {/* Sección de Productos Sin Stock */}
+      {showOutOfStockSection && (
+        <div className="space-y-6">
+          {/* Header de la sección */}
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-semibold text-red-900 flex items-center">
+                  <Archive className="h-6 w-6 mr-3" />
+                  Productos Sin Stock Disponible
+                </h3>
+                <p className="text-red-700 mt-1">
+                  Productos que no están disponibles para venta
+                </p>
+              </div>
+              <button
+                onClick={loadOutOfStockProducts}
+                disabled={loadingOutOfStock}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors duration-200 flex items-center"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingOutOfStock ? 'animate-spin' : ''}`} />
+                Actualizar
+              </button>
+            </div>
+          </div>
+
+          {/* Estadísticas */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-600">Sin Stock</p>
+                  <p className="text-2xl font-bold text-red-900">{outOfStockProducts.length}</p>
+                  <p className="text-xs text-red-700 mt-1">Stock = 0</p>
+                </div>
+                <Package className="h-8 w-8 text-red-600" />
+              </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-orange-600">IMEI/Serial Agotados</p>
+                  <p className="text-2xl font-bold text-orange-900">{soldOutImeiProducts.length}</p>
+                  <p className="text-xs text-orange-700 mt-1">Sin unidades disponibles</p>
+                </div>
+                <Smartphone className="h-8 w-8 text-orange-600" />
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-yellow-600">Total No Disponibles</p>
+                  <p className="text-2xl font-bold text-yellow-900">
+                    {outOfStockProducts.length + soldOutImeiProducts.length}
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">Requieren atención</p>
+                </div>
+                <AlertTriangle className="h-8 w-8 text-yellow-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Productos Sin Stock (Stock = 0) */}
+          <div className="bg-white rounded-xl shadow-sm border border-red-200">
+            <div className="p-6 border-b border-red-200 bg-red-50">
+              <h4 className="text-lg font-semibold text-red-900 flex items-center">
+                <Package className="h-5 w-5 mr-2" />
+                Productos Sin Stock ({outOfStockProducts.length})
+              </h4>
+              <p className="text-sm text-red-700 mt-1">
+                Productos con stock en cero que necesitan reabastecimiento
+              </p>
+            </div>
+            <div className="p-6">
+              {loadingOutOfStock ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+                  <p className="text-slate-600">Cargando productos sin stock...</p>
+                </div>
+              ) : outOfStockProducts.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+                  <p className="text-green-600 font-medium">¡Excelente! No hay productos sin stock</p>
+                  <p className="text-sm text-slate-600 mt-1">Todos los productos tienen inventario disponible</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {outOfStockProducts.map((product) => (
+                    <div key={product.id} className="border border-red-200 rounded-lg p-4 bg-red-50 hover:bg-red-100 transition-colors duration-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h5 className="font-semibold text-slate-900 flex items-center">
+                            <Package className="h-4 w-4 mr-2 text-red-600" />
+                            {product.name}
+                          </h5>
+                          <p className="text-sm text-slate-600 mt-1 line-clamp-2">{product.description}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              setShowDetailsModal(true);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                            title="Ver detalles"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEdit(product)}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors duration-200"
+                            title="Editar para reabastecer"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Precio:</span>
+                          <span className="font-bold text-slate-900">{formatCurrency(product.sale_price)}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Estado:</span>
+                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                            SIN STOCK
+                          </span>
+                        </div>
+                        
+                        {product.category && (
+                          <div className="flex items-center">
+                            <Tag className="h-3 w-3 mr-1 text-slate-500" />
+                            <span className="text-xs text-slate-600">{product.category.name}</span>
+                          </div>
+                        )}
+                        
+                        {product.supplier && (
+                          <div className="flex items-center">
+                            <Truck className="h-3 w-3 mr-1 text-slate-500" />
+                            <span className="text-xs text-slate-600">{product.supplier.name}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="mt-3 pt-3 border-t border-red-200">
+                        <p className="text-xs text-slate-500 flex items-center">
+                          <Clock className="h-3 w-3 mr-1" />
+                          Sin stock desde: {new Date(product.created_at).toLocaleDateString('es-ES')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Productos con IMEI/Serial Vendidos Completamente */}
+          <div className="bg-white rounded-xl shadow-sm border border-orange-200">
+            <div className="p-6 border-b border-orange-200 bg-orange-50">
+              <h4 className="text-lg font-semibold text-orange-900 flex items-center">
+                <Smartphone className="h-5 w-5 mr-2" />
+                Productos con IMEI/Serial Agotados ({soldOutImeiProducts.length})
+              </h4>
+              <p className="text-sm text-orange-700 mt-1">
+                Productos que tienen stock físico pero sin IMEI/Serial disponibles para venta
+              </p>
+            </div>
+            <div className="p-6">
+              {loadingOutOfStock ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                  <p className="text-slate-600">Cargando productos con IMEI/Serial agotados...</p>
+                </div>
+              ) : soldOutImeiProducts.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+                  <p className="text-green-600 font-medium">Todos los productos con IMEI/Serial tienen unidades disponibles</p>
+                  <p className="text-sm text-slate-600 mt-1">No hay productos con IMEI/Serial agotados</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {soldOutImeiProducts.map((product) => (
+                    <div key={product.id} className="border border-orange-200 rounded-lg p-4 bg-orange-50 hover:bg-orange-100 transition-colors duration-200">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h5 className="font-semibold text-slate-900 flex items-center">
+                            <Smartphone className="h-4 w-4 mr-2 text-orange-600" />
+                            {product.name}
+                          </h5>
+                          <p className="text-sm text-slate-600 mt-1 line-clamp-2">{product.description}</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              setShowDetailsModal(true);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                            title="Ver detalles"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              setShowImeiManager(true);
+                            }}
+                            className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors duration-200"
+                            title="Gestionar IMEI/Serial"
+                          >
+                            <Hash className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Precio:</span>
+                          <span className="font-bold text-slate-900">{formatCurrency(product.sale_price)}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Stock Físico:</span>
+                          <span className="font-medium text-slate-900">{product.stock}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">
+                            {product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'} Disponibles:
+                          </span>
+                          <span className="font-bold text-red-600">0</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">
+                            {product.imei_serial_type === 'imei' ? 'IMEI' : 'Serial'} Vendidos:
+                          </span>
+                          <span className="font-medium text-orange-600">
+                            {(product as any).sold_imei_count || 'N/A'}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-600">Estado:</span>
+                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                            <Hash className="h-3 w-3 inline mr-1" />
+                            {product.imei_serial_type === 'imei' ? 'IMEI' : 'SERIAL'} AGOTADO
+                          </span>
+                        </div>
+                        
+                        {product.category && (
+                          <div className="flex items-center">
+                            <Tag className="h-3 w-3 mr-1 text-slate-500" />
+                            <span className="text-xs text-slate-600">{product.category.name}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="mt-3 pt-3 border-t border-orange-200">
+                        <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                          <p className="text-xs text-blue-800">
+                            <strong>Acción requerida:</strong> Agregar nuevos {product.imei_serial_type === 'imei' ? 'códigos IMEI' : 'números de serie'} para habilitar la venta
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recomendaciones */}
+          {(outOfStockProducts.length > 0 || soldOutImeiProducts.length > 0) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+              <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+                <BarChart3 className="h-5 w-5 mr-2" />
+                Recomendaciones de Gestión
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
+                <div>
+                  <h5 className="font-medium mb-2">Para Productos Sin Stock:</h5>
+                  <ul className="space-y-1">
+                    <li>• Contactar proveedores para reabastecimiento</li>
+                    <li>• Revisar historial de ventas para planificar compras</li>
+                    <li>• Considerar productos sustitutos</li>
+                    <li>• Notificar a clientes cuando llegue nuevo stock</li>
+                  </ul>
+                </div>
+                <div>
+                  <h5 className="font-medium mb-2">Para Productos con IMEI/Serial Agotados:</h5>
+                  <ul className="space-y-1">
+                    <li>• Agregar nuevos códigos IMEI/Serial en gestión</li>
+                    <li>• Verificar que el stock físico coincida</li>
+                    <li>• Revisar productos devueltos para reutilizar</li>
+                    <li>• Coordinar con almacén para registrar nuevas unidades</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Product Form */}
       {showForm && (
@@ -1085,6 +1565,7 @@ export default function ProductManager() {
         onClose={() => {
           setShowImeiManager(false);
           setSelectedProduct(null);
+          loadOutOfStockProducts(); // Recargar al cerrar por si se agregaron IMEI/Serial
         }}
         onUpdate={loadProducts}
         product={selectedProduct}
@@ -1093,7 +1574,10 @@ export default function ProductManager() {
       <BulkProductImport
         isOpen={showBulkImport}
         onClose={() => setShowBulkImport(false)}
-        onSuccess={loadProducts}
+        onSuccess={() => {
+          loadProducts();
+          loadOutOfStockProducts();
+        }}
         categories={categories}
         suppliers={suppliers}
       />

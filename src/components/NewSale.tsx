@@ -55,6 +55,16 @@ export default function NewSale() {
 
   const paymentMethods = getPaymentMethods().filter(method => method.enabled);
 
+  const getStockStatusColor = (stock: number) => {
+    if (stock === 0) {
+      return 'bg-red-100 text-red-800';
+    } else if (stock <= 5) {
+      return 'bg-yellow-100 text-yellow-800';
+    } else {
+      return 'bg-green-100 text-green-800';
+    }
+  };
+
   useEffect(() => {
     loadData();
     checkCashRegister();

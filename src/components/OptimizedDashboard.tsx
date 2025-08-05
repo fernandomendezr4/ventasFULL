@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TrendingUp, Package, AlertTriangle, Users, DollarSign, BarChart3 } from 'lucide-react';
 import { formatCurrency } from '../lib/currency';
 import { useOptimizedDashboard, useSalesStatistics, useLowStockProducts } from '../hooks/useOptimizedQueries';
 
-export default function OptimizedDashboard() {
+interface OptimizedDashboardProps {
+  onTabChange?: (tab: string) => void;
+}
+
+export default function OptimizedDashboard({ onTabChange }: OptimizedDashboardProps) {
   const { dailyStats, inventorySummary, customerSummary, loading: dashboardLoading } = useOptimizedDashboard();
   const { data: salesStats, loading: salesLoading } = useSalesStatistics();
   const { data: lowStockProducts, loading: stockLoading } = useLowStockProducts(10);
@@ -29,7 +33,7 @@ export default function OptimizedDashboard() {
 
   const statCards = [
     {
-      title: 'Ventas Hoy',
+      title: 'Ventas de Hoy',
       value: formatCurrency(todayStats.total_revenue || 0),
       change: todayStats.total_revenue && yesterdayStats.total_revenue 
         ? ((todayStats.total_revenue - yesterdayStats.total_revenue) / yesterdayStats.total_revenue * 100).toFixed(1)
@@ -51,7 +55,7 @@ export default function OptimizedDashboard() {
       border: 'border-blue-200',
     },
     {
-      title: 'Productos Bajo Stock',
+      title: 'Productos con Stock Bajo',
       value: lowStockProducts.length,
       change: inventorySummary.filter(p => p.stock_status === 'out_of_stock').length + ' sin stock',
       icon: Package,
@@ -79,7 +83,7 @@ export default function OptimizedDashboard() {
         <div className="flex items-center">
           <TrendingUp className="h-5 w-5 text-blue-600 mr-3" />
           <div>
-            <h3 className="text-blue-900 font-medium">Dashboard Optimizado</h3>
+            <h3 className="text-blue-900 font-medium">Tablero Optimizado</h3>
             <p className="text-blue-700 text-sm mt-1">
               Datos pre-calculados para máximo rendimiento. Última actualización: {new Date().toLocaleTimeString('es-ES')}
             </p>
@@ -199,7 +203,7 @@ export default function OptimizedDashboard() {
                         {product.current_stock === 0 ? 'Sin stock' : 'Bajo stock'}
                       </p>
                       <p className="text-xs text-slate-500">
-                        Sugerido: {product.suggested_reorder_quantity}
+                        Cantidad sugerida: {product.suggested_reorder_quantity}
                       </p>
                     </div>
                   </div>
@@ -217,7 +221,7 @@ export default function OptimizedDashboard() {
           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
             <h4 className="font-medium text-green-900 mb-2">Consultas Optimizadas</h4>
             <p className="text-sm text-green-800">
-              Dashboard carga 80% más rápido usando vistas materializadas pre-calculadas
+              El tablero carga 80% más rápido usando vistas materializadas pre-calculadas
             </p>
           </div>
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">

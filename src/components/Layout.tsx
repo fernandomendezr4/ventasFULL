@@ -47,13 +47,13 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
   };
 
   const mainTabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home, category: 'main', permission: 'view_dashboard' },
+    { id: 'dashboard', label: 'Tablero', icon: Home, category: 'main', permission: 'view_dashboard' },
   ];
 
   const salesTabs = [
     { id: 'cash-register', label: 'Caja', icon: Calculator, category: 'sales', permission: 'manage_cash_register' },
     { id: 'new-sale', label: 'Nueva Venta', icon: Plus, category: 'sales', permission: 'create_sales', requiresCashRegister: true },
-    { id: 'sales', label: 'Historial', icon: BarChart3, category: 'sales', permission: 'view_sales' },
+    { id: 'sales', label: 'Historial de Ventas', icon: BarChart3, category: 'sales', permission: 'view_sales' },
     { id: 'installments', label: 'Abonos', icon: CreditCard, category: 'sales', permission: 'manage_installments' },
   ];
 
@@ -183,7 +183,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                  inventoryTabs.find(tab => tab.id === activeTab)?.label ||
                  contactsTabs.find(tab => tab.id === activeTab)?.label ||
                  adminTabs.find(tab => tab.id === activeTab)?.label ||
-                 'Dashboard'}
+                 'Tablero'}
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 {new Date().toLocaleDateString('es-ES', { 

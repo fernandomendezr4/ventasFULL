@@ -255,7 +255,7 @@ export default function SalesManager() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-slate-900">Ventas</h2>
+        <h2 className="text-3xl font-bold text-slate-900">Historial de Ventas</h2>
       </div>
 
       {/* Search and Filters */}

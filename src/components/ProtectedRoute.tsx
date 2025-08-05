@@ -101,7 +101,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">Tiempo de Carga Agotado</h2>
           <p className="text-slate-600 mb-6">
-            La aplicación está tardando más de lo esperado en cargar. Esto puede deberse a problemas de conexión.
+           La aplicación está tardando más de lo esperado en cargar. Esto puede deberse a problemas de conexión.
           </p>
           
           <div className="space-y-3">
@@ -163,7 +163,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
                 onClick={() => signOut()}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
               >
-                Ir al Login Ahora
+                Ir al Inicio de Sesión Ahora
               </button>
             </div>
           </div>
@@ -183,7 +183,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">Acceso Restringido</h2>
           <p className="text-slate-600 mb-4">
-            No tienes permisos para acceder a esta sección.
+           No tienes permisos para acceder a esta sección.
           </p>
           <button
             onClick={() => window.history.back()}

@@ -121,7 +121,7 @@ export default function UserProfile({ onClose }: UserProfileProps) {
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Cerrar Sesión
-                </button>
+                <span>Miembro desde {new Date(user?.created_at || '').toLocaleDateString('es-ES')}</span>
               </div>
             </div>
           )}

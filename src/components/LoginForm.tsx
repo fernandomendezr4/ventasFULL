@@ -192,14 +192,14 @@ export default function LoginForm() {
               <div>
                 <h4 className="text-yellow-900 font-semibold text-sm">Modo Demo Activo</h4>
                 <p className="text-yellow-800 text-sm mt-1 leading-relaxed">
-                  Puedes usar cualquier email y contraseña para acceder. 
+                  Puedes usar cualquier correo y contraseña para acceder. 
                   Para usar la base de datos real, configura las variables de entorno de Supabase.
                 </p>
                 <button
                   onClick={handleDemoLogin}
                   className="mt-2 text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full hover:bg-yellow-300 transition-colors duration-200 font-medium"
                 >
-                  Usar credenciales demo
+                  Usar credenciales de demostración
                 </button>
               </div>
             </div>
@@ -233,7 +233,7 @@ export default function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white hover:border-slate-400 text-slate-900 placeholder-slate-500"
-                placeholder={isDemoMode ? "cualquier@email.com" : "tu@email.com"}
+                placeholder={isDemoMode ? "cualquier@correo.com" : "tu@correo.com"}
                 autoComplete="email"
                 disabled={loading}
               />
@@ -295,10 +295,10 @@ export default function LoginForm() {
         {/* Demo Credentials */}
         {isDemoMode && (
           <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-            <h4 className="text-slate-900 font-medium text-sm mb-2">Credenciales Demo</h4>
+            <h4 className="text-slate-900 font-medium text-sm mb-2">Credenciales de Demostración</h4>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">Email:</span>
+                <span className="text-slate-600">Correo:</span>
                 <code className="bg-slate-200 px-2 py-1 rounded text-xs">demo@ventasfull.com</code>
               </div>
               <div className="flex justify-between items-center">

@@ -332,7 +332,7 @@ export default function UserManager() {
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar por nombre o email..."
+             placeholder="Buscar por nombre o correo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -370,18 +370,18 @@ export default function UserManager() {
             >
               <option value="name-asc">Nombre A-Z</option>
               <option value="name-desc">Nombre Z-A</option>
-              <option value="email-asc">Email A-Z</option>
-              <option value="email-desc">Email Z-A</option>
+             <option value="email-asc">Correo A-Z</option>
+             <option value="email-desc">Correo Z-A</option>
               <option value="role-asc">Rol A-Z</option>
               <option value="role-desc">Rol Z-A</option>
-              <option value="created_at-desc">Más recientes</option>
-              <option value="created_at-asc">Más antiguos</option>
+             <option value="created_at-desc">Más recientes</option>
+             <option value="created_at-asc">Más antiguos</option>
             </select>
           </div>
         </div>
         {(searchTerm || roleFilter !== 'all' || statusFilter !== 'all') && (
           <div className="mt-3 text-sm text-slate-600">
-            Mostrando {filteredUsers.length} de {users.length} usuarios
+           Mostrando {filteredUsers.length} de {users.length} usuarios
           </div>
         )}
       </div>
@@ -390,13 +390,13 @@ export default function UserManager() {
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            {editingUser ? 'Editar Usuario' : 'Agregar Usuario'}
+           {editingUser ? 'Editar Usuario' : 'Agregar Usuario'}
           </h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nombre Completo *
+                 Nombre Completo *
                 </label>
                 <input
                   type="text"
@@ -404,12 +404,12 @@ export default function UserManager() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Nombre completo del usuario"
+                 placeholder="Nombre completo del usuario"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email *
+                 Correo Electrónico *
                 </label>
                 <input
                   type="email"
@@ -417,7 +417,7 @@ export default function UserManager() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="email@empresa.com"
+                 placeholder="correo@empresa.com"
                 />
               </div>
               <div>
@@ -444,7 +444,7 @@ export default function UserManager() {
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
                 />
                 <label htmlFor="is_active" className="ml-2 text-sm text-slate-700">
-                  Usuario activo
+                 Usuario activo
                 </label>
               </div>
             </div>
@@ -456,7 +456,7 @@ export default function UserManager() {
                   <div>
                     <h4 className="font-medium text-yellow-900">Modo Demo</h4>
                     <p className="text-sm text-yellow-800">
-                      Los cambios no se guardarán en modo demo.
+                     Los cambios no se guardarán en modo demo.
                     </p>
                   </div>
                 </div>
@@ -468,7 +468,7 @@ export default function UserManager() {
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200"
               >
-                {editingUser ? 'Actualizar' : 'Crear'}
+               {editingUser ? 'Actualizar' : 'Crear'}
               </button>
               <button
                 type="button"
@@ -513,10 +513,10 @@ export default function UserManager() {
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Usuario</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Rol</th>
+               ? 'No hay usuarios registrados' 
+               : 'No se encontraron usuarios que coincidan con los filtros'}
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Estado</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Fecha de Registro</th>
+                 <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Fecha de Registro</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Acciones</th>
                 </tr>
               </thead>
@@ -581,21 +581,21 @@ export default function UserManager() {
                         <button
                           onClick={() => handleEdit(user)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                          title="Editar usuario"
+                         title="Editar usuario"
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleSetPassword(user)}
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-200"
-                          title="Establecer contraseña"
+                         title="Establecer contraseña"
                         >
                           <Key className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleManageSessions(user)}
                           className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
-                          title="Gestionar sesiones"
+                         title="Gestionar sesiones"
                         >
                           <Monitor className="h-4 w-4" />
                         </button>
@@ -603,7 +603,7 @@ export default function UserManager() {
                           <button
                             onClick={() => handleDelete(user.id)}
                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                            title="Eliminar usuario"
+                           title="Eliminar usuario"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -625,7 +625,7 @@ export default function UserManager() {
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">
-                  Establecer Contraseña
+                 Establecer Contraseña
                 </h3>
                 <button
                   onClick={() => {
@@ -644,7 +644,7 @@ export default function UserManager() {
                 </button>
               </div>
               <p className="text-sm text-slate-600 mt-1">
-                Usuario: {selectedUser.name} ({selectedUser.email})
+               Usuario: {selectedUser.name} ({selectedUser.email})
               </p>
             </div>
             
@@ -652,7 +652,7 @@ export default function UserManager() {
               <form onSubmit={handlePasswordSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Nueva Contraseña *
+                   Nueva Contraseña *
                   </label>
                   <div className="relative">
                     <input
@@ -660,7 +660,7 @@ export default function UserManager() {
                       value={passwordData.password}
                       onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
                       className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Ingresa la nueva contraseña"
+                     placeholder="Ingresa la nueva contraseña"
                       required
                     />
                     <button
@@ -681,7 +681,7 @@ export default function UserManager() {
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Confirmar Contraseña *
+                   Confirmar Contraseña *
                   </label>
                   <div className="relative">
                     <input
@@ -689,7 +689,7 @@ export default function UserManager() {
                       value={passwordData.confirmPassword}
                       onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                       className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Confirma la contraseña"
+                     placeholder="Confirma la contraseña"
                       required
                     />
                     <button
@@ -711,12 +711,12 @@ export default function UserManager() {
                       {passwordData.password === passwordData.confirmPassword ? (
                         <>
                           <UserCheck className="h-3 w-3 mr-1" />
-                          Las contraseñas coinciden
+                         Las contraseñas coinciden
                         </>
                       ) : (
                         <>
                           <UserX className="h-3 w-3 mr-1" />
-                          Las contraseñas no coinciden
+                         Las contraseñas no coinciden
                         </>
                       )}
                     </div>
@@ -731,7 +731,7 @@ export default function UserManager() {
                         <h4 className="font-medium text-yellow-900">Modo Demo</h4>
                         <p className="text-sm text-yellow-800">
                           La contraseña no se guardará en modo demo.
-                        </p>
+                       La contraseña no se guardará en modo demo.
                       </div>
                     </div>
                   </div>
@@ -749,7 +749,7 @@ export default function UserManager() {
                     className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
                   >
                     <Save className="h-4 w-4 mr-2" />
-                    Establecer Contraseña
+                   Establecer Contraseña
                   </button>
                   <button
                     type="button"

@@ -121,7 +121,7 @@ export default function UserProfile() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6" style={{ display: 'none' }}>
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-slate-900">Mi Perfil</h2>

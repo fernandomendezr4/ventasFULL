@@ -153,6 +153,94 @@ export default function UserProfile() {
           )}
         </div>
 
+        <div className="space-y-6">
+          <div className="flex items-center space-x-4">
+            <div className="bg-blue-100 p-3 rounded-full">
+              <User className="h-8 w-8 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                {profile.name}
+              </h3>
+              <p className="text-slate-500">{profile.email}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <User className="h-4 w-4 inline mr-2" />
+                  Nombre
+                </label>
+                {editing ? (
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                ) : (
+                  <p className="text-slate-900 font-medium">{profile.name}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Mail className="h-4 w-4 inline mr-2" />
+                  Email
+                </label>
+                {editing ? (
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                ) : (
+                  <p className="text-slate-900 font-medium">{profile.email}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Shield className="h-4 w-4 inline mr-2" />
+                  Rol
+                </label>
+                <p className="text-slate-900 font-medium">{getRoleName(profile.role_id)}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <Calendar className="h-4 w-4 inline mr-2" />
+                  Miembro desde
+                </label>
+                <p className="text-slate-900 font-medium">
+                  {new Date(profile.created_at).toLocaleDateString('es-ES', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-500">Estado de la cuenta</span>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                profile.is_active 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {profile.is_active ? 'Activa' : 'Inactiva'}
+              </span>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
     </div>

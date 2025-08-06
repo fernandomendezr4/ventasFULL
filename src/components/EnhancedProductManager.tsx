@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import FormattedNumberInput from './FormattedNumberInput';
 import ImeiSerialManager from './ImeiSerialManager';
 import BulkProductImport from './BulkProductImport';
-import ProductDetailsModal from './ProductDetailsModal';
+import { ProductDetailsModal } from './ProductDetailsModal';
 import SmartInventoryInsights from './SmartInventoryInsights';
 import InventoryAnalyticsDashboard from './InventoryAnalyticsDashboard';
 import { suggestCategory, autoClassifyProduct, type CategorySuggestion } from '../lib/intelligentCategories';

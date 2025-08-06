@@ -161,8 +161,9 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
             <div className="mt-3">
               <button
                 onClick={() => signOut()}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm flex items-center"
               >
+                <LogOut className="h-4 w-4 mr-2" />
                 Ir al Inicio de Sesión Ahora
               </button>
             </div>

@@ -225,19 +225,29 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                 })}
               </p>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-4">
               <div className="text-right">
                 <p className="text-sm font-medium text-slate-900 dark:text-white">{user?.name}</p>
                 <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(user?.role || '')}`}>
                   {getRoleLabel(user?.role || '')}
                 </span>
               </div>
-              <button
-                onClick={() => setShowProfile(true)}
-                className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-800 transition-all duration-200 ease-smooth hover:scale-110 active:scale-95"
-              >
-                <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowProfile(true)}
+                  className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center hover:bg-blue-200 dark:hover:bg-blue-800 transition-all duration-200 ease-smooth hover:scale-110 active:scale-95"
+                  title="Ver perfil"
+                >
+                  <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </button>
+                <button
+                  onClick={signOutWithConfirmation}
+                  className="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center hover:bg-red-200 dark:hover:bg-red-800 transition-all duration-200 ease-smooth hover:scale-110 active:scale-95"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="h-4 w-4 text-red-600 dark:text-red-400" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import LoginForm from './LoginForm';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, LogOut } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;

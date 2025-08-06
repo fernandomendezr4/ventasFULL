@@ -9,7 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import ViewTransition from './components/ViewTransition';
 import Dashboard from './components/Dashboard';
-import ProductManager from './components/ProductManager';
+import EnhancedProductManager from './components/EnhancedProductManager';
 import CategoryManager from './components/CategoryManager';
 import SalesManager from './components/SalesManager';
 import NewSale from './components/NewSale';
@@ -107,7 +107,7 @@ function AppContent() {
       case 'products':
         return (
           <ViewTransition transitionKey="products" type="slide-left">
-            <ProductManager />
+            <EnhancedProductManager />
           </ViewTransition>
         );
       case 'categories':

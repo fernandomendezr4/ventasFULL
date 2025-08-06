@@ -82,7 +82,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
         
         const category = categoryMap.get(categoryName);
         category.product_count++;
-        category.total_value += p.sale_price * p.stock;
+        category.total_value += product.sale_price * product.stock;
         
         if (product.purchase_price) {
           const margin = ((product.sale_price - product.purchase_price) / product.purchase_price) * 100;
@@ -287,7 +287,9 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-2xl font-bold text-green-900">{metrics.stock_distribution.in_stock}</p>
-              <p className="text-sm text-green-700">Stock Normal (>10)</p>
+              <p className="text-sm text-green-700">
+                Stock Normal ({'>'}10)
+              </p>
             </div>
             <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-2xl font-bold text-yellow-900">{metrics.stock_distribution.low_stock}</p>
@@ -299,7 +301,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
             </div>
             <div className="text-center p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-2xl font-bold text-blue-900">{metrics.stock_distribution.overstock}</p>
-              <p className="text-sm text-blue-700">Sobrestock (>50)</p>
+              <p className="text-sm text-blue-700">Sobrestock ({'>'}50)</p>
             </div>
           </div>
         </div>
@@ -366,7 +368,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
             <div className="text-center p-4 bg-red-50 border border-red-200 rounded-lg">
               <TrendingDown className="h-8 w-8 text-red-600 mx-auto mb-2" />
               <p className="text-xl font-bold text-red-900">{metrics.profitability_analysis.low_margin_products}</p>
-              <p className="text-sm text-red-700">Bajo Margen (<15%)</p>
+              <p className="text-sm text-red-700">Bajo Margen ({'<'}15%)</p>
             </div>
             <div className="text-center p-4 bg-slate-50 border border-slate-200 rounded-lg">
               <AlertTriangle className="h-8 w-8 text-slate-600 mx-auto mb-2" />
@@ -381,7 +383,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
       <div className="bg-white rounded-xl shadow-sm border">
         <div className="p-6 border-b border-slate-200">
           <h4 className="font-semibold text-slate-900 flex items-center">
-            <Brain className="h-5 w-5 mr-2 text-purple-600" />
+            <Zap className="h-5 w-5 mr-2 text-purple-600" />
             Sugerencias Inteligentes de Reorden
           </h4>
         </div>
@@ -441,7 +443,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
       {/* Insights Adicionales */}
       <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-6">
         <h4 className="font-bold text-purple-900 mb-4 flex items-center">
-          <Lightbulb className="h-5 w-5 mr-2" />
+          <Brain className="h-5 w-5 mr-2" />
           Insights Inteligentes
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

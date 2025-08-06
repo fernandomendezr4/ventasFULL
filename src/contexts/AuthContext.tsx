@@ -22,6 +22,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  signOutWithConfirmation: () => Promise<void>;
   hasPermission: (permissionName: string) => boolean;
   hasAnyPermission: (permissionNames: string[]) => boolean;
   connectionStatus: 'checking' | 'connected' | 'disconnected';
@@ -218,7 +219,296 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      if (!isDemoMode && supabase) {
+        await supabase.auth.signOut();
+      }
+      
+      // Limpiar datos locales
+      localStorage.removeItem('sb-auth-token');
+      localStorage.removeItem('user_session');
+      
+      // Limpiar estado
+      setUser(null);
+      setPermissions([]);
+      setLoading(false);
+      setInitialized(true);
+      
+      console.log('Sesión cerrada exitosamente');
+    } catch (error) {
+      console.error('Error during sign out:', error);
+      // Forzar limpieza local incluso si hay error
+      setUser(null);
+      setPermissions([]);
+      setLoading(false);
+      setInitialized(true);
+    }
+  };
+
+  const signOutWithConfirmation = async () => {
+    const confirmed = window.confirm('¿Estás seguro de que quieres cerrar sesión?');
+    if (confirmed) {
+      await signOut();
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      setLoading(true);
+      
+      if (isDemoMode) {
+        // Demo mode: simulate authentication
+        const demoUsers = [
+          {
+            id: 'demo-user-1',
+            name: 'Administrador Demo',
+            email: 'admin@ventasfull.com',
+            role: 'admin',
+            is_active: true,
+            password: 'admin123'
+          },
+          {
+            id: 'demo-user-2',
+            name: 'Gerente Demo',
+            email: 'gerente@ventasfull.com',
+            role: 'manager',
+            is_active: true,
+            password: 'gerente123'
+          },
+          {
+            id: 'demo-user-3',
+            name: 'Empleado Demo',
+            email: 'empleado@ventasfull.com',
+            role: 'employee',
+            is_active: true,
+            password: 'empleado123'
+          },
+          {
+            id: 'demo-user-4',
+            name: 'Usuario Demo',
+            email: 'demo@ventasfull.com',
+            role: 'admin',
+            is_active: true,
+            password: 'demo123'
+          }
+        ];
+
+        // Permitir cualquier email/contraseña en modo demo, pero dar preferencia a credenciales específicas
+        let demoUser = demoUsers.find(u => 
+          u.email.toLowerCase() === email.toLowerCase() && u.password === password
+        );
+        
+        // Si no coincide exactamente, usar el primer usuario admin como fallback
+        if (!demoUser && email.trim() && password.trim()) {
+          demoUser = demoUsers[0]; // Admin demo por defecto
+        }
+
+        if (demoUser) {
+          const userData = {
+            id: demoUser.id,
+            name: demoUser.name,
+            email: demoUser.email,
+            role: demoUser.role,
+            is_active: demoUser.is_active,
+            created_at: new Date().toISOString()
+          };
+          
+          setUser(userData);
+          loadDefaultPermissions(demoUser.role);
+          
+          // Guardar sesión demo en localStorage
+          localStorage.setItem('user_session', JSON.stringify({
+            user: userData,
+            timestamp: Date.now(),
+            demo_mode: true
+          }));
+          
+          return { error: null };
+        } else {
+          return {
+            error: { message: 'Credenciales inválidas. En modo demo puedes usar cualquier email y contraseña.' }
+          };
+        }
+      }
+
+      // Verificar conexión antes de intentar autenticación
+      const connectionOk = await testConnection();
+      if (!connectionOk) {
+        return { 
+          error: { 
+            message: 'Sin conexión a la base de datos. Verifica tu configuración de Supabase o usa el modo demo.' 
+          } 
+        };
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ 
+        email: email.trim(), 
+        password 
+      });
+      
+      if (authError) {
+        return { error: authError };
+      }
+
+      if (authData.user) {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email.trim())
+          .maybeSingle();
+
+        if (userError) {
+          return { error: { message: 'Error al obtener datos del usuario' } };
+        }
+
+        if (userData && userData.is_active) {
+          setUser(userData);
+          loadDefaultPermissions(userData.role);
+          
+          // Guardar información de sesión
+          localStorage.setItem('user_session', JSON.stringify({
+            user: userData,
+            timestamp: Date.now(),
+            demo_mode: false
+          }));
+          
+          return { error: null };
+        } else {
+          await supabase.auth.signOut();
+          return { 
+            error: { 
+              message: userData ? 'Tu cuenta está desactivada. Contacta al administrador.' : 'Usuario no válido o no encontrado.' 
+            } 
+          };
+        }
+      }
+      
+      return { error: { message: 'Error en la autenticación' } };
+    } catch (error) {
+      console.error('Error in signIn:', error);
+      return { 
+        error: { 
+          message: 'Error interno del sistema. Verifica tu conexión e intenta nuevamente.' 
+        } 
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verificar sesión guardada al inicializar
+  useEffect(() => {
+    let mounted = true;
+    
+    const initializeAuth = async () => {
+      try {
+        await checkConnectionStatus();
+        if (!mounted) return;
+        
+        // Verificar sesión guardada en localStorage
+        const savedSession = localStorage.getItem('user_session');
+        if (savedSession) {
+          try {
+            const sessionData = JSON.parse(savedSession);
+            const sessionAge = Date.now() - sessionData.timestamp;
+            
+            // Sesión válida por 8 horas
+            if (sessionAge < 8 * 60 * 60 * 1000) {
+              if (sessionData.demo_mode || isDemoMode) {
+                setUser(sessionData.user);
+                loadDefaultPermissions(sessionData.user.role);
+                setLoading(false);
+                setInitialized(true);
+                return;
+              }
+            } else {
+              // Sesión expirada
+              localStorage.removeItem('user_session');
+            }
+          } catch (error) {
+            console.error('Error parsing saved session:', error);
+            localStorage.removeItem('user_session');
+          }
+        }
+        
+        if (isDemoMode) {
+          setUser(null);
+          setPermissions([]);
+          setLoading(false);
+          setInitialized(true);
+          return;
+        }
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (!mounted) return;
+            
+            if (event === 'SIGNED_OUT' || !session) {
+              setUser(null);
+              setPermissions([]);
+              localStorage.removeItem('user_session');
+              setLoading(false);
+              setInitialized(true);
+              return;
+            }
+            
+            if (session.user) {
+              const { data: userData } = await supabase
+                .from('users')
+                .select('*')
+                .eq('email', session.user.email)
+                .maybeSingle();
+                
+              if (userData) {
+                if (!userData.is_active) {
+                  await supabase.auth.signOut();
+                  setUser(null);
+                  setPermissions([]);
+                  localStorage.removeItem('user_session');
+                } else {
+                  setUser(userData);
+                  loadDefaultPermissions(userData.role);
+                  
+                  // Actualizar sesión guardada
+                  localStorage.setItem('user_session', JSON.stringify({
+                    user: userData,
+                    timestamp: Date.now(),
+                    demo_mode: false
+                  }));
+                }
+              } else if (session.user.email === 'estivenmendezr@gmail.com') {
+                await createDefaultAdmin(session.user);
+              }
+              setLoading(false);
+              setInitialized(true);
+            }
+          }
+        );
+        
+        const timeoutId = setTimeout(() => {
+          if (mounted && !initialized) {
+            setLoading(false);
+            setInitialized(true);
+          }
+        }, 5000);
+        
+        return () => {
+          mounted = false;
+          clearTimeout(timeoutId);
+          subscription.unsubscribe();
+        };
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setLoading(false);
+          setInitialized(true);
+        }
+      }
+    };
+    
+    initializeAuth();
+    return () => { mounted = false; };
+  }, [initialized, retryCount]);
     setUser(null);
     setPermissions([]);
     setLoading(false);
@@ -236,6 +526,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         signIn,
         signOut,
+        signOutWithConfirmation,
         hasPermission,
         hasAnyPermission,
         connectionStatus,

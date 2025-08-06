@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Settings, Shield } from 'lucide-react';
+import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Settings, Shield, LogOut, Power } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import UserProfile from './UserProfile';
@@ -12,9 +12,10 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
-  const { user, hasPermission, permissions } = useAuth();
+  const { user, hasPermission, permissions, signOutWithConfirmation } = useAuth();
   const { theme } = useTheme();
   const [showProfile, setShowProfile] = React.useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -152,18 +153,48 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
         {/* Footer */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-          <div className="text-center space-y-2">
+          <div className="space-y-3">
+            {/* User Profile Button */}
             <button
               onClick={() => setShowProfile(true)}
-              className="w-full p-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all duration-200 ease-smooth hover:scale-105"
+              className="w-full p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all duration-200 ease-smooth hover:scale-105 border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
             >
               <div className="flex items-center">
-                <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mr-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-full flex items-center justify-center mr-3 shadow-sm">
                   <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user?.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{getRoleLabel(user?.role || '')}</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${getRoleColor(user?.role || '')}`}>
+                      {getRoleLabel(user?.role || '')}
+                    </span>
+                    {isDemoMode && (
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded-full">
+                        DEMO
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </button>
+            
+            {/* Logout Button */}
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              className="w-full p-3 text-left hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 ease-smooth hover:scale-105 border border-transparent hover:border-red-200 dark:hover:border-red-800 group"
+            >
+              <div className="flex items-center">
+                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mr-3 group-hover:bg-red-200 dark:group-hover:bg-red-900 transition-colors duration-200">
+                  <LogOut className="h-4 w-4 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-700 dark:text-red-400 group-hover:text-red-800 dark:group-hover:text-red-300 transition-colors duration-200">
+                    Cerrar Sesión
+                  </p>
+                  <p className="text-xs text-red-500 dark:text-red-500">
+                    Salir del sistema
+                  </p>
                 </div>
               </div>
             </button>
@@ -220,6 +251,71 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       {/* User Profile Modal */}
       {showProfile && (
         <UserProfile onClose={() => setShowProfile(false)} />
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md mx-auto animate-scale-in">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mr-4">
+                  <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Cerrar Sesión
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    ¿Estás seguro de que quieres salir del sistema?
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Usuario actual:</span>
+                  <span className="font-medium text-slate-900 dark:text-white">{user?.name}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-2">
+                  <span className="text-slate-600 dark:text-slate-400">Rol:</span>
+                  <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleColor(user?.role || '')}`}>
+                    {getRoleLabel(user?.role || '')}
+                  </span>
+                </div>
+                {isDemoMode && (
+                  <div className="flex items-center justify-between text-sm mt-2">
+                    <span className="text-slate-600 dark:text-slate-400">Modo:</span>
+                    <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
+                      DEMO
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-300 py-3 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-500 transition-colors duration-200 font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={async () => {
+                    setShowLogoutConfirm(false);
+                    await signOutWithConfirmation();
+                  }}
+                  className="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition-colors duration-200 font-medium flex items-center justify-center"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Cerrar Sesión
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

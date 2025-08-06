@@ -288,7 +288,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
             <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-2xl font-bold text-green-900">{metrics.stock_distribution.in_stock}</p>
               <p className="text-sm text-green-700">
-                Stock Normal ({'>'}10)
+                Stock Normal (&gt;10)
               </p>
             </div>
             <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -301,7 +301,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
             </div>
             <div className="text-center p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-2xl font-bold text-blue-900">{metrics.stock_distribution.overstock}</p>
-              <p className="text-sm text-blue-700">Sobrestock ({'>'}50)</p>
+              <p className="text-sm text-blue-700">Sobrestock (&gt;50)</p>
             </div>
           </div>
         </div>
@@ -358,7 +358,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
             <div className="text-center p-4 bg-green-50 border border-green-200 rounded-lg">
               <TrendingUp className="h-8 w-8 text-green-600 mx-auto mb-2" />
               <p className="text-xl font-bold text-green-900">{metrics.profitability_analysis.high_margin_products}</p>
-              <p className="text-sm text-green-700">Alto Margen (>30%)</p>
+              <p className="text-sm text-green-700">Alto Margen (&gt;30%)</p>
             </div>
             <div className="text-center p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <BarChart3 className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
@@ -368,7 +368,7 @@ export default function InventoryAnalyticsDashboard({ products, onProductAction 
             <div className="text-center p-4 bg-red-50 border border-red-200 rounded-lg">
               <TrendingDown className="h-8 w-8 text-red-600 mx-auto mb-2" />
               <p className="text-xl font-bold text-red-900">{metrics.profitability_analysis.low_margin_products}</p>
-              <p className="text-sm text-red-700">Bajo Margen ({'<'}15%)</p>
+              <p className="text-sm text-red-700">Bajo Margen (&lt;15%)</p>
             </div>
             <div className="text-center p-4 bg-slate-50 border border-slate-200 rounded-lg">
               <AlertTriangle className="h-8 w-8 text-slate-600 mx-auto mb-2" />

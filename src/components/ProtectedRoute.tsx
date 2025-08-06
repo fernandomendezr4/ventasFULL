@@ -22,7 +22,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
         console.warn('Loading timeout reached');
         setTimeoutReached(true);
       }
-    }, 8000); // Aumentado a 8 segundos para mejor estabilidad
+    }, 5000); // Reducido a 5 segundos
 
     return () => clearTimeout(timeoutId);
   }, [loading]);
@@ -74,11 +74,11 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
           }`}>
             {connectionStatus === 'checking' && 'Verificando conexión...'}
             {connectionStatus === 'connected' && 'Conectado a la base de datos'}
-            {connectionStatus === 'disconnected' && 'Modo demo/offline activo'}
+            {connectionStatus === 'disconnected' && 'Modo demo activo - Acceso completo disponible'}
           </div>
           
           <div className="mt-6 text-xs text-slate-400 space-y-1">
-            <p>Si la carga toma mucho tiempo:</p>
+            <p>Si tienes problemas para ingresar:</p>
             <button
               onClick={() => window.location.reload()}
               className="text-blue-600 hover:text-blue-800 underline transition-colors duration-200"

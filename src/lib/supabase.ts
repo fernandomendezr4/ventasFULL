@@ -9,7 +9,12 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'demo-key';
 const isDemoMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (isDemoMode) {
-  console.warn('Ejecutando en modo demo - configura las variables de entorno de Supabase para usar la base de datos real');
+  console.log('🎯 MODO DEMO ACTIVO - Acceso completo sin restricciones');
+  console.log('📧 Credenciales rápidas:');
+  console.log('   Admin: admin@ventasfull.com / admin123');
+  console.log('   Gerente: gerente@ventasfull.com / gerente123');
+  console.log('   Empleado: empleado@ventasfull.com / empleado123');
+  console.log('💡 También puedes usar cualquier email/contraseña');
 }
 
 let supabaseClient: any = null;
@@ -52,7 +57,7 @@ export const testConnection = async () => {
   if (isDemoMode || !supabase) return false;
   
   try {
-    console.log('Testing database connection...');
+    console.log('Verificando conexión a la base de datos...');
     
     // Hacer una consulta simple para verificar conectividad
     const { data, error } = await supabase
@@ -61,14 +66,14 @@ export const testConnection = async () => {
       .limit(1);
     
     if (error) {
-      console.error('Database connection error:', error);
+      console.error('Error de conexión a la base de datos:', error);
       return false;
     }
     
-    console.log('Database connection successful');
+    console.log('✅ Conexión a la base de datos exitosa');
     return true;
   } catch (error) {
-    console.error('Connection test failed:', error);
+    console.error('❌ Prueba de conexión falló:', error);
     return false;
   }
 };

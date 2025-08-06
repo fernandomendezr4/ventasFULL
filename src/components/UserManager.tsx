@@ -41,6 +41,41 @@ export default function UserManager() {
   const loadUsers = async () => {
     try {
       setLoading(true);
+      
+      if (isDemoMode) {
+        // Demo mode: provide sample users data
+        const demoUsers = [
+          {
+            id: 'demo-admin',
+            name: 'Administrador Demo',
+            email: 'admin@ventasfull.com',
+            role: 'admin',
+            is_active: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'demo-manager',
+            name: 'Gerente Demo',
+            email: 'gerente@ventasfull.com',
+            role: 'manager',
+            is_active: true,
+            created_at: new Date(Date.now() - 86400000).toISOString()
+          },
+          {
+            id: 'demo-employee',
+            name: 'Empleado Demo',
+            email: 'empleado@ventasfull.com',
+            role: 'employee',
+            is_active: true,
+            created_at: new Date(Date.now() - 172800000).toISOString()
+          }
+        ];
+        
+        setUsers(demoUsers);
+        setLoading(false);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -50,6 +85,7 @@ export default function UserManager() {
       setUsers(data);
     } catch (error) {
       console.error('Error loading users:', error);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -71,6 +107,33 @@ export default function UserManager() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isDemoMode) {
+      // Demo mode: simulate user creation
+      const newUser = {
+        id: `demo-user-${Date.now()}`,
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        is_active: formData.is_active,
+        created_at: new Date().toISOString()
+      };
+      
+      if (editingUser) {
+        setUsers(users.map(u => 
+          u.id === editingUser.id ? { ...newUser, id: editingUser.id } : u
+        ));
+      } else {
+        setUsers([...users, newUser]);
+      }
+      
+      setShowForm(false);
+      setEditingUser(null);
+      setFormData({ name: '', email: '', role: 'employee', is_active: true });
+      alert(`Usuario ${editingUser ? 'actualizado' : 'creado'} exitosamente en modo demo`);
+      return;
+    }
+    
     try {
       if (editingUser) {
         const { error } = await supabase
@@ -110,6 +173,12 @@ export default function UserManager() {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) {
+      if (isDemoMode) {
+        setUsers(users.filter(u => u.id !== id));
+        alert('Usuario eliminado exitosamente en modo demo');
+        return;
+      }
+      
       try {
         const { error } = await supabase
           .from('users')
@@ -127,6 +196,13 @@ export default function UserManager() {
 
   const toggleUserStatus = async (user: User) => {
     try {
+      if (isDemoMode) {
+        setUsers(users.map(u => 
+          u.id === user.id ? { ...u, is_active: !u.is_active } : u
+        ));
+        return;
+      }
+      
       const { error } = await supabase
         .from('users')
         .update({ is_active: !user.is_active })

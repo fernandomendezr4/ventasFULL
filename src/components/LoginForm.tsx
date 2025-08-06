@@ -41,36 +41,48 @@ export default function LoginForm() {
     setError('');
     setLoading(true);
 
-    // Validaciones básicas
-    if (!email.trim()) {
-      setError('El email es requerido');
-      setLoading(false);
-      return;
-    }
+    // Validaciones básicas solo si no es modo demo
+    if (!isDemoMode) {
+      if (!email.trim()) {
+        setError('El email es requerido');
+        setLoading(false);
+        return;
+      }
 
-    if (!password.trim()) {
-      setError('La contraseña es requerida');
-      setLoading(false);
-      return;
-    }
+      if (!password.trim()) {
+        setError('La contraseña es requerida');
+        setLoading(false);
+        return;
+      }
 
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!isDemoMode && !emailRegex.test(email)) {
-      setError('Por favor ingresa un email válido');
-      setLoading(false);
-      return;
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setError('Por favor ingresa un email válido');
+        setLoading(false);
+        return;
+      }
+    } else {
+      // En modo demo, permitir campos vacíos con valores por defecto
+      if (!email.trim()) {
+        setEmail('admin@ventasfull.com');
+      }
+      if (!password.trim()) {
+        setPassword('admin123');
+      }
     }
 
     try {
-      await signIn(email.trim(), password);
+      await signIn(email.trim() || 'admin@ventasfull.com', password || 'admin123');
     } catch (error) {
       console.error('Login error:', error);
       const errorMessage = (error as any)?.message || 'Error en la autenticación';
       
       // Mensajes de error más específicos y amigables
-      if (errorMessage.includes('Invalid login credentials') || 
-          errorMessage.includes('Invalid email or password')) {
+      if (isDemoMode) {
+        setError('En modo demo, usa las credenciales predefinidas o cualquier email/contraseña.');
+      } else if (errorMessage.includes('Invalid login credentials') || 
+                 errorMessage.includes('Invalid email or password')) {
         setError('Email o contraseña incorrectos. Verifica tus datos e intenta nuevamente.');
       } else if (errorMessage.includes('Email not confirmed')) {
         setError('Debes confirmar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.');

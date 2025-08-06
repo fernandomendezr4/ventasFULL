@@ -63,38 +63,34 @@ export default function LoginForm() {
     }
 
     try {
-      const result = await signIn(email.trim(), password);
-
-      if (result.error) {
-        const errorMessage = result.error.message || 'Error en la autenticación';
-        
-        // Mensajes de error más específicos y amigables
-        if (errorMessage.includes('Invalid login credentials') || 
-            errorMessage.includes('Invalid email or password')) {
-          setError('Email o contraseña incorrectos. Verifica tus datos e intenta nuevamente.');
-        } else if (errorMessage.includes('Email not confirmed')) {
-          setError('Debes confirmar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.');
-        } else if (errorMessage.includes('Too many requests') || 
-                   errorMessage.includes('rate limit')) {
-          setError('Demasiados intentos fallidos. Espera unos minutos antes de intentar de nuevo.');
-        } else if (errorMessage.includes('User not found')) {
-          setError('No existe una cuenta con este email. Verifica el email o contacta al administrador.');
-        } else if (errorMessage.includes('Account is disabled') || 
-                   errorMessage.includes('is_active')) {
-          setError('Tu cuenta está desactivada. Contacta al administrador para reactivarla.');
-        } else if (errorMessage.includes('connection') || 
-                   errorMessage.includes('network') || 
-                   errorMessage.includes('fetch')) {
-          setError('Error de conexión. Verifica tu internet e intenta nuevamente.');
-        } else if (errorMessage.includes('Database connection')) {
-          setError('Error de conexión con la base de datos. Intenta más tarde o contacta soporte.');
-        } else {
-          setError(errorMessage);
-        }
-      }
+      await signIn(email.trim(), password);
     } catch (error) {
       console.error('Login error:', error);
-      setError('Error inesperado. Por favor intenta nuevamente o contacta soporte técnico.');
+      const errorMessage = (error as any)?.message || 'Error en la autenticación';
+      
+      // Mensajes de error más específicos y amigables
+      if (errorMessage.includes('Invalid login credentials') || 
+          errorMessage.includes('Invalid email or password')) {
+        setError('Email o contraseña incorrectos. Verifica tus datos e intenta nuevamente.');
+      } else if (errorMessage.includes('Email not confirmed')) {
+        setError('Debes confirmar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.');
+      } else if (errorMessage.includes('Too many requests') || 
+                 errorMessage.includes('rate limit')) {
+        setError('Demasiados intentos fallidos. Espera unos minutos antes de intentar de nuevo.');
+      } else if (errorMessage.includes('User not found')) {
+        setError('No existe una cuenta con este email. Verifica el email o contacta al administrador.');
+      } else if (errorMessage.includes('Account is disabled') || 
+                 errorMessage.includes('is_active')) {
+        setError('Tu cuenta está desactivada. Contacta al administrador para reactivarla.');
+      } else if (errorMessage.includes('connection') || 
+                 errorMessage.includes('network') || 
+                 errorMessage.includes('fetch')) {
+        setError('Error de conexión. Verifica tu internet e intenta nuevamente.');
+      } else if (errorMessage.includes('Database connection')) {
+        setError('Error de conexión con la base de datos. Intenta más tarde o contacta soporte.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

@@ -23,6 +23,7 @@ export default function NewSale() {
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showImeiSelector, setShowImeiSelector] = useState(false);
   const [selectedCartItem, setSelectedCartItem] = useState<CartItem | null>(null);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [processing, setProcessing] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
   const [currentCashRegister, setCurrentCashRegister] = useState<any>(null);
@@ -54,6 +55,16 @@ export default function NewSale() {
   };
 
   const paymentMethods = getPaymentMethods().filter(method => method.enabled);
+
+  // Filter customers based on search term
+  const filteredCustomers = customers.filter(customer => {
+    if (!customerSearchTerm.trim()) return true;
+    const searchLower = customerSearchTerm.toLowerCase();
+    return (
+      customer.name.toLowerCase().includes(searchLower) ||
+      customer.cedula.includes(customerSearchTerm.trim())
+    );
+  });
 
   const getStockStatusColor = (stock: number) => {
     if (stock === 0) {
@@ -889,12 +900,22 @@ export default function NewSale() {
               </div>
             ) : (
               <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente por nombre o cédula..."
+                    value={customerSearchTerm}
+                    onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
                 <select
                   onChange={(e) => {
                     if (e.target.value === 'new') {
                       setShowCustomerForm(true);
                     } else if (e.target.value) {
-                      const customer = customers.find(c => c.id === e.target.value);
+                      const customer = filteredCustomers.find(c => c.id === e.target.value);
                       setSelectedCustomer(customer || null);
                     }
                   }}
@@ -902,12 +923,22 @@ export default function NewSale() {
                 >
                   <option value="">Venta sin cliente</option>
                   <option value="new">+ Crear nuevo cliente</option>
-                  {customers.map((customer) => (
+                  {filteredCustomers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
-                      {customer.name} {customer.phone && `(${customer.phone})`}
+                      {customer.name} {customer.cedula && `- CC: ${customer.cedula}`} {customer.phone && `(${customer.phone})`}
                     </option>
                   ))}
                 </select>
+                {customerSearchTerm && filteredCustomers.length === 0 && (
+                  <div className="text-sm text-slate-500 mt-1">
+                    No se encontraron clientes que coincidan con "{customerSearchTerm}"
+                  </div>
+                )}
+                {customerSearchTerm && filteredCustomers.length > 0 && filteredCustomers.length < customers.length && (
+                  <div className="text-sm text-slate-500 mt-1">
+                    Mostrando {filteredCustomers.length} de {customers.length} clientes
+                  </div>
+                )}
 
                 {showCustomerForm && (
                   <form onSubmit={handleCreateCustomer} className="space-y-3 p-4 bg-slate-50 rounded-lg">

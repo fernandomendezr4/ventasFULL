@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Trash2, ShoppingCart, User, CreditCard, Calculator, Search, Package, DollarSign, Hash, AlertTriangle, CheckCircle, Banknote, Building2, Smartphone } from 'lucide-react';
+import { Plus, Minus, Trash2, ShoppingCart, User, CreditCard, Calculator, Search, Package, DollarSign, Hash, AlertTriangle, CheckCircle, Banknote, Building2, Smartphone, X } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { ProductWithCategory, Customer, CartItem } from '../lib/types';
 import { formatCurrency } from '../lib/currency';

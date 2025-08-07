@@ -49,7 +49,7 @@ export default function NewSale() {
       { id: 'cash', name: 'Efectivo', icon: 'Banknote', enabled: true },
       { id: 'card', name: 'Tarjeta', icon: 'CreditCard', enabled: true },
       { id: 'transfer', name: 'Transferencia Bancaria', icon: 'Building2', enabled: true },
-      { id: 'nequi', name: 'NEQUI', icon: 'Smartphone', enabled: true }
+      { id: 'other', name: 'NEQUI', icon: 'Smartphone', enabled: true }
     ];
   };
 
@@ -591,7 +591,7 @@ export default function NewSale() {
         return <CreditCard className="h-4 w-4" />;
       case 'transfer':
         return <Building2 className="h-4 w-4" />;
-      case 'nequi':
+      case 'other':
         return <Smartphone className="h-4 w-4" />;
       default:
         return <CreditCard className="h-4 w-4" />;

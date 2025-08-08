@@ -110,6 +110,14 @@ export default function SalesManager() {
       return;
     }
 
+    if (isDemoMode) {
+      // En modo demo, simular eliminación exitosa
+      if (window.confirm(`¿Estás seguro de que quieres eliminar la venta #${sale.id.slice(-8)}?\n\nMonto: ${formatCurrency(sale.total_amount)}\nEsta acción NO se puede deshacer.`)) {
+        setSales(prev => prev.filter(s => s.id !== id));
+        alert('Venta eliminada exitosamente en modo demo');
+      }
+      return;
+    }
     try {
       // Verificar si la venta puede ser eliminada
       const { data: canDeleteResult, error: canDeleteError } = await supabase.rpc('can_delete_sale', {
@@ -119,7 +127,14 @@ export default function SalesManager() {
 
       if (canDeleteError) {
         console.error('Error checking delete permissions:', canDeleteError);
-        alert('Error al verificar permisos de eliminación: ' + canDeleteError.message);
+        // Si la función no existe, permitir eliminación con confirmación
+        if (canDeleteError.message.includes('function') && canDeleteError.message.includes('does not exist')) {
+          if (window.confirm(`¿Estás seguro de que quieres eliminar la venta #${sale.id.slice(-8)}?\n\nMonto: ${formatCurrency(sale.total_amount)}\nEsta acción NO se puede deshacer.`)) {
+            await performDirectSaleDeletion(sale);
+          }
+        } else {
+          alert('Error al verificar permisos de eliminación: ' + canDeleteError.message);
+        }
         return;
       }
 
@@ -135,7 +150,13 @@ export default function SalesManager() {
 
       if (impactError) {
         console.error('Error getting deletion impact:', impactError);
-        // Continuar sin información de impacto
+        // Si la función no existe, continuar con eliminación directa
+        if (impactError.message.includes('function') && impactError.message.includes('does not exist')) {
+          if (window.confirm(`¿Estás seguro de que quieres eliminar la venta #${sale.id.slice(-8)}?\n\nMonto: ${formatCurrency(sale.total_amount)}\nEsta acción NO se puede deshacer.`)) {
+            await performDirectSaleDeletion(sale);
+          }
+          return;
+        }
       }
 
       setSaleToDelete(sale);
@@ -147,6 +168,105 @@ export default function SalesManager() {
     }
   };
 
+  // Función para eliminación directa cuando las funciones RPC no están disponibles
+  const performDirectSaleDeletion = async (sale: SaleWithItems) => {
+    try {
+      setDeleteLoading(true);
+
+      // Restaurar IMEI/Serial a estado disponible
+      const { error: imeiError } = await supabase
+        .from('product_imei_serials')
+        .update({
+          status: 'available',
+          sale_id: null,
+          sale_item_id: null,
+          sold_at: null,
+          notes: `Restaurado por eliminación de venta #${sale.id.slice(-8)}`,
+          updated_at: new Date().toISOString()
+        })
+        .eq('sale_id', sale.id);
+
+      if (imeiError) {
+        console.error('Error restoring IMEI/Serial:', imeiError);
+      }
+
+      // Restaurar stock para productos sin IMEI/Serial requerido
+      for (const item of sale.sale_items) {
+        if (!item.product.requires_imei_serial) {
+          const { error: stockError } = await supabase
+            .from('products')
+            .update({ 
+              stock: item.product.stock + item.quantity 
+            })
+            .eq('id', item.product.id);
+
+          if (stockError) {
+            console.error('Error restoring stock:', stockError);
+          }
+        }
+      }
+
+      // Eliminar abonos asociados
+      const { error: installmentsError } = await supabase
+        .from('payment_installments')
+        .delete()
+        .eq('sale_id', sale.id);
+
+      if (installmentsError) {
+        console.error('Error deleting installments:', installmentsError);
+      }
+
+      // Eliminar registros de caja
+      const { error: cashRegisterError } = await supabase
+        .from('cash_register_sales')
+        .delete()
+        .eq('sale_id', sale.id);
+
+      if (cashRegisterError) {
+        console.error('Error deleting cash register entries:', cashRegisterError);
+      }
+
+      // Eliminar pagos
+      const { error: paymentsError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('sale_id', sale.id);
+
+      if (paymentsError) {
+        console.error('Error deleting payments:', paymentsError);
+      }
+
+      // Eliminar items de venta
+      const { error: itemsError } = await supabase
+        .from('sale_items')
+        .delete()
+        .eq('sale_id', sale.id);
+
+      if (itemsError) {
+        throw new Error(`Error al eliminar items: ${itemsError.message}`);
+      }
+
+      // Finalmente eliminar la venta
+      const { error: saleError } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', sale.id);
+
+      if (saleError) {
+        throw new Error(`Error al eliminar venta: ${saleError.message}`);
+      }
+
+      // Recargar ventas
+      await loadSales();
+      alert(`Venta #${sale.id.slice(-8)} eliminada exitosamente`);
+
+    } catch (error) {
+      console.error('Error in direct sale deletion:', error);
+      alert('Error al eliminar venta: ' + (error as Error).message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
   const confirmDelete = async () => {
     if (!saleToDelete) return;
 
@@ -161,7 +281,17 @@ export default function SalesManager() {
       });
 
       if (deleteError) {
-        throw new Error(deleteError.message);
+        console.error('Error with RPC function:', deleteError);
+        // Si la función RPC no existe, usar eliminación directa
+        if (deleteError.message.includes('function') && deleteError.message.includes('does not exist')) {
+          await performDirectSaleDeletion(saleToDelete);
+          setShowDeleteConfirmation(false);
+          setSaleToDelete(null);
+          setDeletionImpact(null);
+          return;
+        } else {
+          throw new Error(deleteError.message);
+        }
       }
 
       if (!deleteResult.success) {

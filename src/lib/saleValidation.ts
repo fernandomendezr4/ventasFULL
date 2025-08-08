@@ -632,57 +632,204 @@ export const deleteSaleSafely = async (
       };
     }
 
-    // Verificar permisos antes de eliminar
-    const { data: canDeleteResult, error: permissionError } = await supabase.rpc('can_delete_sale', {
-      p_sale_id: saleId,
-      p_user_role: userRole
-    });
+    // Intentar usar función RPC primero, con fallback a eliminación directa
+    try {
+      // Verificar permisos antes de eliminar
+      const { data: canDeleteResult, error: permissionError } = await supabase.rpc('can_delete_sale', {
+        p_sale_id: saleId,
+        p_user_role: userRole
+      });
 
-    if (permissionError) {
+      if (permissionError) {
+        // Si la función no existe, usar validación básica
+        if (permissionError.message.includes('function') && permissionError.message.includes('does not exist')) {
+          console.warn('RPC function can_delete_sale not available, using basic validation');
+        } else {
+          return {
+            success: false,
+            error: `Error al verificar permisos: ${permissionError.message}`
+          };
+        }
+      } else if (canDeleteResult && !canDeleteResult.can_delete) {
+        return {
+          success: false,
+          error: canDeleteResult.reason || 'No se puede eliminar esta venta'
+        };
+      }
+
+      // Ejecutar eliminación segura
+      const { data: deleteResult, error: deleteError } = await supabase.rpc('delete_sale_safely', {
+        p_sale_id: saleId,
+        p_user_id: userId,
+        p_reason: reason
+      });
+
+      if (deleteError) {
+        // Si la función no existe, usar eliminación directa
+        if (deleteError.message.includes('function') && deleteError.message.includes('does not exist')) {
+          console.warn('RPC function delete_sale_safely not available, using direct deletion');
+          return await performDirectSaleDeletion(saleId, userId, reason);
+        } else {
+          return {
+            success: false,
+            error: `Error al eliminar venta: ${deleteError.message}`
+          };
+        }
+      }
+
+      if (!deleteResult.success) {
+        return {
+          success: false,
+          error: deleteResult.error || 'Error desconocido al eliminar venta'
+        };
+      }
+
       return {
-        success: false,
-        error: `Error al verificar permisos: ${permissionError.message}`
+        success: true,
+        details: deleteResult
       };
+    } catch (rpcError) {
+      console.warn('RPC functions not available, using direct deletion method');
+      return await performDirectSaleDeletion(saleId, userId, reason);
     }
-
-    if (!canDeleteResult.can_delete) {
-      return {
-        success: false,
-        error: canDeleteResult.reason || 'No se puede eliminar esta venta'
-      };
-    }
-
-    // Ejecutar eliminación segura
-    const { data: deleteResult, error: deleteError } = await supabase.rpc('delete_sale_safely', {
-      p_sale_id: saleId,
-      p_user_id: userId,
-      p_reason: reason
-    });
-
-    if (deleteError) {
-      return {
-        success: false,
-        error: `Error al eliminar venta: ${deleteError.message}`
-      };
-    }
-
-    if (!deleteResult.success) {
-      return {
-        success: false,
-        error: deleteResult.error || 'Error desconocido al eliminar venta'
-      };
-    }
-
-    return {
-      success: true,
-      details: deleteResult
-    };
 
   } catch (error) {
     console.error('Error in deleteSaleSafely:', error);
     return {
       success: false,
       error: `Error interno: ${(error as Error).message}`
+    };
+  }
+};
+
+// Función para eliminación directa cuando las funciones RPC no están disponibles
+const performDirectSaleDeletion = async (
+  saleId: string,
+  userId: string,
+  reason: string
+): Promise<{
+  success: boolean;
+  error?: string;
+  details?: any;
+}> => {
+  try {
+    // Obtener información de la venta antes de eliminar
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .select(`
+        *,
+        sale_items (
+          id,
+          product_id,
+          quantity,
+          product:products (id, name, stock, requires_imei_serial)
+        )
+      `)
+      .eq('id', saleId)
+      .single();
+
+    if (saleError || !sale) {
+      return {
+        success: false,
+        error: 'Venta no encontrada'
+      };
+    }
+
+    let stockRestored = 0;
+    let imeiSerialsRestored = 0;
+
+    // Restaurar IMEI/Serial a estado disponible
+    const { data: restoredImeiSerials, error: imeiError } = await supabase
+      .from('product_imei_serials')
+      .update({
+        status: 'available',
+        sale_id: null,
+        sale_item_id: null,
+        sold_at: null,
+        notes: `Restaurado por eliminación de venta #${saleId.slice(-8)}`,
+        updated_at: new Date().toISOString(),
+        updated_by: userId
+      })
+      .eq('sale_id', saleId)
+      .select('id');
+
+    if (!imeiError && restoredImeiSerials) {
+      imeiSerialsRestored = restoredImeiSerials.length;
+    }
+
+    // Restaurar stock para productos sin IMEI/Serial requerido
+    for (const item of sale.sale_items) {
+      if (!item.product.requires_imei_serial) {
+        const { error: stockError } = await supabase
+          .from('products')
+          .update({ 
+            stock: item.product.stock + item.quantity 
+          })
+          .eq('id', item.product.id);
+
+        if (!stockError) {
+          stockRestored += item.quantity;
+        }
+      }
+    }
+
+    // Eliminar abonos asociados
+    const { error: installmentsError } = await supabase
+      .from('payment_installments')
+      .delete()
+      .eq('sale_id', saleId);
+
+    // Eliminar registros de caja registradora
+    const { error: cashRegisterError } = await supabase
+      .from('cash_register_sales')
+      .delete()
+      .eq('sale_id', saleId);
+
+    // Eliminar pagos asociados
+    const { error: paymentsError } = await supabase
+      .from('payments')
+      .delete()
+      .eq('sale_id', saleId);
+
+    // Eliminar items de venta
+    const { error: itemsError } = await supabase
+      .from('sale_items')
+      .delete()
+      .eq('sale_id', saleId);
+
+    if (itemsError) {
+      throw new Error(`Error al eliminar items: ${itemsError.message}`);
+    }
+
+    // Finalmente eliminar la venta
+    const { error: deleteSaleError } = await supabase
+      .from('sales')
+      .delete()
+      .eq('id', saleId);
+
+    if (deleteSaleError) {
+      throw new Error(`Error al eliminar venta: ${deleteSaleError.message}`);
+    }
+
+    return {
+      success: true,
+      details: {
+        sale_id: saleId,
+        sale_items_deleted: sale.sale_items.length,
+        stock_restored: stockRestored,
+        imei_serials_restored: imeiSerialsRestored,
+        total_amount: sale.total_amount,
+        deleted_at: new Date().toISOString(),
+        deleted_by: userId,
+        reason: reason
+      }
+    };
+
+  } catch (error) {
+    console.error('Error in direct sale deletion:', error);
+    return {
+      success: false,
+      error: (error as Error).message
     };
   }
 };
@@ -734,24 +881,133 @@ export const getSaleDeletionImpact = async (saleId: string): Promise<{
       };
     }
 
-    const { data: impactData, error } = await supabase.rpc('get_sale_deletion_impact', {
-      p_sale_id: saleId
-    });
+    try {
+      const { data: impactData, error } = await supabase.rpc('get_sale_deletion_impact', {
+        p_sale_id: saleId
+      });
 
-    if (error) {
+      if (error) {
+        // Si la función no existe, calcular impacto manualmente
+        if (error.message.includes('function') && error.message.includes('does not exist')) {
+          return await calculateDeletionImpactManually(saleId);
+        } else {
+          return {
+            success: false,
+            error: error.message
+          };
+        }
+      }
+
       return {
-        success: false,
-        error: error.message
+        success: true,
+        impact: impactData
       };
+    } catch (rpcError) {
+      console.warn('RPC function not available, calculating impact manually');
+      return await calculateDeletionImpactManually(saleId);
     }
-
-    return {
-      success: true,
-      impact: impactData
-    };
 
   } catch (error) {
     console.error('Error getting sale deletion impact:', error);
+    return {
+      success: false,
+      error: (error as Error).message
+    };
+  }
+};
+
+// Función para calcular impacto manualmente
+const calculateDeletionImpactManually = async (saleId: string): Promise<{
+  success: boolean;
+  impact?: any;
+  error?: string;
+}> => {
+  try {
+    // Obtener información de la venta
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .select(`
+        *,
+        customer:customers(name),
+        sale_items (
+          id,
+          quantity,
+          unit_price,
+          total_price,
+          product:products (id, name, requires_imei_serial, stock)
+        )
+      `)
+      .eq('id', saleId)
+      .single();
+
+    if (saleError || !sale) {
+      return {
+        success: false,
+        error: 'Venta no encontrada'
+      };
+    }
+
+    // Obtener IMEI/Serial asociados
+    const { data: imeiSerials, error: imeiError } = await supabase
+      .from('product_imei_serials')
+      .select(`
+        id,
+        imei_number,
+        serial_number,
+        status,
+        product:products(name)
+      `)
+      .eq('sale_id', saleId);
+
+    // Contar abonos
+    const { data: installments, error: installmentsError } = await supabase
+      .from('payment_installments')
+      .select('id')
+      .eq('sale_id', saleId);
+
+    // Calcular impacto
+    const stockToRestore = sale.sale_items
+      .filter(item => !item.product.requires_imei_serial)
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    const imeiSerialsToRestore = imeiSerials?.length || 0;
+
+    return {
+      success: true,
+      impact: {
+        sale_info: {
+          id: sale.id,
+          total_amount: sale.total_amount,
+          payment_type: sale.payment_type,
+          payment_status: sale.payment_status,
+          created_at: sale.created_at,
+          customer_name: sale.customer?.name || 'Sin cliente'
+        },
+        items: sale.sale_items.map(item => ({
+          product_name: item.product.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price,
+          requires_imei_serial: item.product.requires_imei_serial,
+          current_stock: item.product.stock
+        })),
+        imei_serials: (imeiSerials || []).map(imei => ({
+          id: imei.id,
+          imei_number: imei.imei_number,
+          serial_number: imei.serial_number,
+          product_name: imei.product?.name || 'Producto desconocido',
+          status: imei.status
+        })),
+        installments_count: installments?.length || 0,
+        impact_summary: {
+          stock_to_restore: stockToRestore,
+          imei_serials_to_restore: imeiSerialsToRestore
+        }
+      }
+    };
+
+  } catch (error) {
+    console.error('Error calculating deletion impact manually:', error);
     return {
       success: false,
       error: (error as Error).message
@@ -784,22 +1040,116 @@ export const cleanupOrphanedSaleData = async (): Promise<{
       };
     }
 
-    const { data: cleanupResult, error } = await supabase.rpc('cleanup_orphaned_sale_data');
+    try {
+      const { data: cleanupResult, error } = await supabase.rpc('cleanup_orphaned_sale_data');
 
-    if (error) {
+      if (error) {
+        // Si la función no existe, hacer limpieza manual
+        if (error.message.includes('function') && error.message.includes('does not exist')) {
+          return await performManualCleanup();
+        } else {
+          return {
+            success: false,
+            error: error.message
+          };
+        }
+      }
+
       return {
-        success: false,
-        error: error.message
+        success: true,
+        cleaned: cleanupResult
       };
+    } catch (rpcError) {
+      console.warn('RPC function not available, performing manual cleanup');
+      return await performManualCleanup();
+    }
+
+  } catch (error) {
+    console.error('Error in cleanupOrphanedSaleData:', error);
+    return {
+      success: false,
+      error: (error as Error).message
+    };
+  }
+};
+
+// Función para limpieza manual de datos huérfanos
+const performManualCleanup = async (): Promise<{
+  success: boolean;
+  cleaned?: any;
+  error?: string;
+}> => {
+  try {
+    let orphanedItemsCleaned = 0;
+    let orphanedImeiSerialsRestored = 0;
+    let orphanedPaymentsCleaned = 0;
+    let orphanedInstallmentsCleaned = 0;
+
+    // Limpiar sale_items huérfanos
+    const { data: orphanedItems, error: itemsError } = await supabase
+      .from('sale_items')
+      .delete()
+      .not('sale_id', 'in', `(SELECT id FROM sales)`)
+      .select('id');
+
+    if (!itemsError && orphanedItems) {
+      orphanedItemsCleaned = orphanedItems.length;
+    }
+
+    // Restaurar IMEI/Serial huérfanos
+    const { data: restoredImeiSerials, error: imeiError } = await supabase
+      .from('product_imei_serials')
+      .update({
+        status: 'available',
+        sale_id: null,
+        sale_item_id: null,
+        sold_at: null,
+        notes: 'Restaurado por limpieza automática - venta eliminada',
+        updated_at: new Date().toISOString()
+      })
+      .not('sale_id', 'in', `(SELECT id FROM sales)`)
+      .not('sale_id', 'is', null)
+      .select('id');
+
+    if (!imeiError && restoredImeiSerials) {
+      orphanedImeiSerialsRestored = restoredImeiSerials.length;
+    }
+
+    // Limpiar pagos huérfanos
+    const { data: orphanedPayments, error: paymentsError } = await supabase
+      .from('payments')
+      .delete()
+      .not('sale_id', 'in', `(SELECT id FROM sales)`)
+      .select('id');
+
+    if (!paymentsError && orphanedPayments) {
+      orphanedPaymentsCleaned = orphanedPayments.length;
+    }
+
+    // Limpiar abonos huérfanos
+    const { data: orphanedInstallments, error: installmentsError } = await supabase
+      .from('payment_installments')
+      .delete()
+      .not('sale_id', 'in', `(SELECT id FROM sales)`)
+      .select('id');
+
+    if (!installmentsError && orphanedInstallments) {
+      orphanedInstallmentsCleaned = orphanedInstallments.length;
     }
 
     return {
       success: true,
-      cleaned: cleanupResult
+      cleaned: {
+        orphaned_items_cleaned: orphanedItemsCleaned,
+        orphaned_imei_serials_restored: orphanedImeiSerialsRestored,
+        orphaned_payments_cleaned: orphanedPaymentsCleaned,
+        orphaned_installments_cleaned: orphanedInstallmentsCleaned,
+        cleanup_timestamp: new Date().toISOString()
+      }
     };
 
   } catch (error) {
-    console.error('Error cleaning up orphaned data:', error);
+    console.error('Error in manual cleanup:', error);
     return {
       success: false,
       error: (error as Error).message

@@ -5,6 +5,7 @@ import { SaleWithItems } from '../lib/types';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';
 import PrintService from './PrintService';
+import ConfirmationModal from './ConfirmationModal';
 
 export default function SalesManager() {
   const { user } = useAuth();
@@ -26,6 +27,11 @@ export default function SalesManager() {
     notes: ''
   });
 
+  // Estado para confirmación de eliminación
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<SaleWithItems | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deletionImpact, setDeletionImpact] = useState<any>(null);
   // Load payment methods from localStorage
   const getPaymentMethods = () => {
     try {
@@ -98,22 +104,96 @@ export default function SalesManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar esta venta?')) {
-      try {
-        const { error } = await supabase
-          .from('sales')
-          .delete()
-          .eq('id', id);
+    const sale = sales.find(s => s.id === id);
+    if (!sale) {
+      alert('Venta no encontrada');
+      return;
+    }
 
-        if (error) throw error;
-        loadSales();
-      } catch (error) {
-        console.error('Error deleting sale:', error);
-        alert('Error al eliminar venta: ' + (error as Error).message);
+    try {
+      // Verificar si la venta puede ser eliminada
+      const { data: canDeleteResult, error: canDeleteError } = await supabase.rpc('can_delete_sale', {
+        p_sale_id: id,
+        p_user_role: user?.role || 'employee'
+      });
+
+      if (canDeleteError) {
+        console.error('Error checking delete permissions:', canDeleteError);
+        alert('Error al verificar permisos de eliminación: ' + canDeleteError.message);
+        return;
       }
+
+      if (!canDeleteResult.can_delete) {
+        alert(`No se puede eliminar esta venta: ${canDeleteResult.reason}`);
+        return;
+      }
+
+      // Obtener impacto de la eliminación
+      const { data: impactData, error: impactError } = await supabase.rpc('get_sale_deletion_impact', {
+        p_sale_id: id
+      });
+
+      if (impactError) {
+        console.error('Error getting deletion impact:', impactError);
+        // Continuar sin información de impacto
+      }
+
+      setSaleToDelete(sale);
+      setDeletionImpact(impactData);
+      setShowDeleteConfirmation(true);
+    } catch (error) {
+      console.error('Error preparing sale deletion:', error);
+      alert('Error al preparar eliminación: ' + (error as Error).message);
     }
   };
 
+  const confirmDelete = async () => {
+    if (!saleToDelete) return;
+
+    try {
+      setDeleteLoading(true);
+
+      // Usar la función segura de eliminación
+      const { data: deleteResult, error: deleteError } = await supabase.rpc('delete_sale_safely', {
+        p_sale_id: saleToDelete.id,
+        p_user_id: user?.id,
+        p_reason: 'Eliminación manual desde historial de ventas'
+      });
+
+      if (deleteError) {
+        throw new Error(deleteError.message);
+      }
+
+      if (!deleteResult.success) {
+        throw new Error(deleteResult.error || 'Error desconocido al eliminar venta');
+      }
+
+      // Mostrar resumen de la eliminación
+      const summary = [
+        `Venta #${saleToDelete.id.slice(-8)} eliminada exitosamente`,
+        `Items eliminados: ${deleteResult.sale_items_deleted}`,
+        deleteResult.stock_restored > 0 ? `Stock restaurado: ${deleteResult.stock_restored} unidades` : null,
+        deleteResult.imei_serials_restored > 0 ? `IMEI/Serial restaurados: ${deleteResult.imei_serials_restored}` : null,
+        `Monto: ${formatCurrency(deleteResult.total_amount)}`
+      ].filter(Boolean).join('\n');
+
+      alert(summary);
+
+      // Recargar ventas
+      await loadSales();
+      
+      // Cerrar modal
+      setShowDeleteConfirmation(false);
+      setSaleToDelete(null);
+      setDeletionImpact(null);
+
+    } catch (error) {
+      console.error('Error deleting sale:', error);
+      alert('Error al eliminar venta: ' + (error as Error).message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
   const handleEditSale = (sale: SaleWithItems) => {
     setEditingSale(sale);
     setEditFormData({
@@ -554,6 +634,7 @@ export default function SalesManager() {
                     <button
                       onClick={() => handleDelete(sale.id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                      title="Eliminar venta"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -802,6 +883,46 @@ export default function SalesManager() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Sale Deletion */}
+      <ConfirmationModal
+        isOpen={showDeleteConfirmation}
+        onClose={() => {
+          setShowDeleteConfirmation(false);
+          setSaleToDelete(null);
+          setDeletionImpact(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Eliminar Venta"
+        message={
+          saleToDelete && deletionImpact ? 
+            `¿Estás seguro de que quieres eliminar la venta #${saleToDelete.id.slice(-8)}?\n\n` +
+            `Monto: ${formatCurrency(saleToDelete.total_amount)}\n` +
+            `Fecha: ${new Date(saleToDelete.created_at).toLocaleDateString('es-ES')}\n` +
+            `Cliente: ${saleToDelete.customer?.name || 'Sin cliente'}\n\n` +
+            `IMPACTO DE LA ELIMINACIÓN:\n` +
+            `• Items a eliminar: ${deletionImpact.items?.length || 0}\n` +
+            (deletionImpact.impact_summary?.stock_to_restore > 0 ? 
+              `• Stock a restaurar: ${deletionImpact.impact_summary.stock_to_restore} unidades\n` : '') +
+            (deletionImpact.impact_summary?.imei_serials_to_restore > 0 ? 
+              `• IMEI/Serial a restaurar: ${deletionImpact.impact_summary.imei_serials_to_restore}\n` : '') +
+            (deletionImpact.installments_count > 0 ? 
+              `• Abonos a eliminar: ${deletionImpact.installments_count}\n` : '') +
+            `\nEsta acción NO se puede deshacer.`
+            : 
+            saleToDelete ?
+              `¿Estás seguro de que quieres eliminar la venta #${saleToDelete.id.slice(-8)}?\n\n` +
+              `Monto: ${formatCurrency(saleToDelete.total_amount)}\n` +
+              `Esta acción restaurará el stock y liberará los IMEI/Serial asociados.\n\n` +
+              `Esta acción NO se puede deshacer.`
+              :
+              'Error al cargar información de la venta'
+        }
+        confirmText="Eliminar Venta"
+        cancelText="Cancelar"
+        type="danger"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

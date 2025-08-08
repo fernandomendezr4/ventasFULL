@@ -2,6 +2,7 @@
 
 import { supabase, isDemoMode } from './supabase';
 import { validateStockAvailability, validateImeiSerialIntegrity, reserveImeiSerials, releaseImeiSerialReservations } from './productValidation';
+import { SaleWithItems } from './types';
 
 export interface SaleTransactionData {
   items: Array<{
@@ -599,3 +600,209 @@ if (typeof window !== 'undefined') {
     cleanupExpiredReservations().catch(console.error);
   }, 5 * 60 * 1000);
 }
+// Función para eliminar venta de forma segura
+export const deleteSaleSafely = async (
+  saleId: string,
+  userId: string,
+  userRole: string,
+  reason: string = 'Eliminación manual'
+): Promise<{
+  success: boolean;
+  error?: string;
+  details?: any;
+}> => {
+  try {
+    if (isDemoMode) {
+      return {
+        success: true,
+        details: {
+          sale_id: saleId,
+          sale_items_deleted: 2,
+          stock_restored: 3,
+          imei_serials_restored: 1,
+          total_amount: 1500000
+        }
+      };
+    }
+
+    if (!supabase) {
+      return {
+        success: false,
+        error: 'Sistema de base de datos no disponible'
+      };
+    }
+
+    // Verificar permisos antes de eliminar
+    const { data: canDeleteResult, error: permissionError } = await supabase.rpc('can_delete_sale', {
+      p_sale_id: saleId,
+      p_user_role: userRole
+    });
+
+    if (permissionError) {
+      return {
+        success: false,
+        error: `Error al verificar permisos: ${permissionError.message}`
+      };
+    }
+
+    if (!canDeleteResult.can_delete) {
+      return {
+        success: false,
+        error: canDeleteResult.reason || 'No se puede eliminar esta venta'
+      };
+    }
+
+    // Ejecutar eliminación segura
+    const { data: deleteResult, error: deleteError } = await supabase.rpc('delete_sale_safely', {
+      p_sale_id: saleId,
+      p_user_id: userId,
+      p_reason: reason
+    });
+
+    if (deleteError) {
+      return {
+        success: false,
+        error: `Error al eliminar venta: ${deleteError.message}`
+      };
+    }
+
+    if (!deleteResult.success) {
+      return {
+        success: false,
+        error: deleteResult.error || 'Error desconocido al eliminar venta'
+      };
+    }
+
+    return {
+      success: true,
+      details: deleteResult
+    };
+
+  } catch (error) {
+    console.error('Error in deleteSaleSafely:', error);
+    return {
+      success: false,
+      error: `Error interno: ${(error as Error).message}`
+    };
+  }
+};
+
+// Función para obtener el impacto de eliminar una venta
+export const getSaleDeletionImpact = async (saleId: string): Promise<{
+  success: boolean;
+  impact?: any;
+  error?: string;
+}> => {
+  try {
+    if (isDemoMode) {
+      return {
+        success: true,
+        impact: {
+          sale_info: {
+            id: saleId,
+            total_amount: 1500000,
+            payment_type: 'cash',
+            payment_status: 'paid'
+          },
+          items: [
+            {
+              product_name: 'Producto Demo',
+              quantity: 1,
+              requires_imei_serial: true,
+              current_stock: 5
+            }
+          ],
+          imei_serials: [
+            {
+              imei_number: '123456789012345',
+              product_name: 'Producto Demo',
+              status: 'sold'
+            }
+          ],
+          impact_summary: {
+            stock_to_restore: 0,
+            imei_serials_to_restore: 1
+          }
+        }
+      };
+    }
+
+    if (!supabase) {
+      return {
+        success: false,
+        error: 'Sistema de base de datos no disponible'
+      };
+    }
+
+    const { data: impactData, error } = await supabase.rpc('get_sale_deletion_impact', {
+      p_sale_id: saleId
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+
+    return {
+      success: true,
+      impact: impactData
+    };
+
+  } catch (error) {
+    console.error('Error getting sale deletion impact:', error);
+    return {
+      success: false,
+      error: (error as Error).message
+    };
+  }
+};
+
+// Función para limpiar datos huérfanos
+export const cleanupOrphanedSaleData = async (): Promise<{
+  success: boolean;
+  cleaned?: any;
+  error?: string;
+}> => {
+  try {
+    if (isDemoMode) {
+      return {
+        success: true,
+        cleaned: {
+          orphaned_items_cleaned: 0,
+          orphaned_imei_serials_restored: 0,
+          orphaned_payments_cleaned: 0
+        }
+      };
+    }
+
+    if (!supabase) {
+      return {
+        success: false,
+        error: 'Sistema de base de datos no disponible'
+      };
+    }
+
+    const { data: cleanupResult, error } = await supabase.rpc('cleanup_orphaned_sale_data');
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+
+    return {
+      success: true,
+      cleaned: cleanupResult
+    };
+
+  } catch (error) {
+    console.error('Error cleaning up orphaned data:', error);
+    return {
+      success: false,
+      error: (error as Error).message
+    };
+  }
+};

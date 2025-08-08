@@ -4,12 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import DatabaseHealthMonitor from './DatabaseHealthMonitor';
 import DatabaseExportManager from './DatabaseExportManager';
+import { cleanupOrphanedSaleData } from '../lib/saleValidation';
 
 export default function Settings() {
   const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('general');
   const [loading, setLoading] = useState(false);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
   
   // General Settings
   const [generalSettings, setGeneralSettings] = useState({
@@ -105,6 +107,37 @@ export default function Settings() {
       localStorage.removeItem('payment_methods');
       loadSettings();
       alert('Configuración restablecida');
+    }
+  };
+
+  const runDataCleanup = async () => {
+    if (!window.confirm('¿Estás seguro de que quieres ejecutar la limpieza de datos? Esto eliminará registros huérfanos y puede tomar unos minutos.')) {
+      return;
+    }
+
+    try {
+      setMaintenanceLoading(true);
+      
+      const result = await cleanupOrphanedSaleData();
+      
+      if (result.success) {
+        const summary = [
+          'Limpieza de datos completada:',
+          `• Items huérfanos eliminados: ${result.cleaned?.orphaned_items_cleaned || 0}`,
+          `• IMEI/Serial restaurados: ${result.cleaned?.orphaned_imei_serials_restored || 0}`,
+          `• Pagos huérfanos eliminados: ${result.cleaned?.orphaned_payments_cleaned || 0}`,
+          `• Abonos huérfanos eliminados: ${result.cleaned?.orphaned_installments_cleaned || 0}`
+        ].join('\n');
+        
+        alert(summary);
+      } else {
+        alert('Error en limpieza de datos: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error running data cleanup:', error);
+      alert('Error al ejecutar limpieza: ' + (error as Error).message);
+    } finally {
+      setMaintenanceLoading(false);
     }
   };
 
@@ -358,6 +391,40 @@ export default function Settings() {
           {activeTab === 'database' && user?.role === 'admin' && (
             <div className="space-y-6">
               <DatabaseHealthMonitor />
+              
+              {/* Data Cleanup Section */}
+              <div className="bg-white rounded-xl shadow-sm border p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Limpieza de Datos</h3>
+                <p className="text-slate-600 mb-4">
+                  Ejecuta limpieza de datos huérfanos y restaura la integridad del sistema.
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <h4 className="font-medium text-yellow-900 mb-2">¿Qué hace la limpieza?</h4>
+                  <ul className="text-sm text-yellow-800 space-y-1">
+                    <li>• Elimina items de venta sin venta asociada</li>
+                    <li>• Restaura IMEI/Serial de ventas eliminadas incorrectamente</li>
+                    <li>• Limpia pagos y abonos huérfanos</li>
+                    <li>• Corrige registros de caja inconsistentes</li>
+                  </ul>
+                </div>
+                <button
+                  onClick={runDataCleanup}
+                  disabled={maintenanceLoading}
+                  className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors duration-200 flex items-center"
+                >
+                  {maintenanceLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Ejecutando Limpieza...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Ejecutar Limpieza de Datos
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 

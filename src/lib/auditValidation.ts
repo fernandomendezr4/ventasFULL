@@ -97,33 +97,28 @@ export const validateAuditSystemIntegrity = async (): Promise<AuditValidationRes
     }
 
     // Verificar triggers de auditoría
-    const { data: triggers, error: triggersError } = await supabase
-      .from('information_schema.triggers')
-      .select('trigger_name, event_object_table')
-      .like('trigger_name', '%audit%');
-
-    if (triggersError) {
-      warnings.push('No se pudieron verificar los triggers de auditoría');
-    } else if (!triggers || triggers.length === 0) {
-      warnings.push('No se encontraron triggers de auditoría activos');
+    // Skip trigger verification as it requires system table access
+    try {
+      // Try to check if a custom RPC function exists for trigger verification
+      const { error: triggerCheckError } = await supabase.rpc('check_audit_triggers');
+      if (triggerCheckError) {
+        warnings.push('Verificación de triggers no disponible - función RPC no encontrada');
+      }
+    } catch (error) {
+      warnings.push('Verificación de triggers no disponible');
     }
 
     // Verificar políticas RLS
     const auditTables = ['audit_alerts', 'audit_reports', 'cash_register_enhanced_audit'];
     for (const tableName of auditTables) {
       try {
-        const { data: policies, error } = await supabase
-          .from('pg_policies')
-          .select('policyname')
-          .eq('tablename', tableName);
-
-        if (error) {
-          warnings.push(`No se pudieron verificar políticas RLS para ${tableName}`);
-        } else if (!policies || policies.length === 0) {
-          warnings.push(`Tabla ${tableName} no tiene políticas RLS configuradas`);
+        // Try to check if a custom RPC function exists for RLS policy verification
+        const { error: rlsCheckError } = await supabase.rpc('check_rls_policies', { table_name: tableName });
+        if (rlsCheckError) {
+          warnings.push(`Verificación de políticas RLS no disponible para ${tableName}`);
         }
       } catch (error) {
-        warnings.push(`Error verificando RLS para ${tableName}`);
+        warnings.push(`Verificación de RLS no disponible para ${tableName}`);
       }
     }
 

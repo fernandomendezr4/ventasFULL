@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, FileText, Download, Calendar, Filter, Eye, CheckCircle, AlertTriangle, BarChart3, Zap, Clock, TrendingUp } from 'lucide-react';
+import { Shield, FileText, Download, Calendar, Filter, Eye, CheckCircle, AlertTriangle, BarChart3, Zap, Clock, TrendingUp, Database, X } from 'lucide-react';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { useAuth } from '../contexts/AuthContext';

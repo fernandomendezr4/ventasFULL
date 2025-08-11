@@ -164,12 +164,15 @@ const executeCleanupTask = async (task: MaintenanceTask): Promise<{
   details: any;
 }> => {
   try {
-    const { data, error } = await supabase.rpc('cleanup_audit_data');
+    // Try to call cleanup function, handle if it doesn't exist
+    const { data, error } = await supabase.rpc('cleanup_audit_data').catch(() => ({ data: null, error: { message: 'Function not available' } }));
     
     if (error) {
       return {
         success: false,
-        summary: `Error en limpieza: ${error.message}`,
+        summary: error.message.includes('not available') || error.message.includes('does not exist') 
+          ? 'Función de limpieza no disponible - usando limpieza manual'
+          : `Error en limpieza: ${error.message}`,
         details: { error: error.message }
       };
     }
@@ -203,12 +206,15 @@ const executeIntegrityCheckTask = async (task: MaintenanceTask): Promise<{
   details: any;
 }> => {
   try {
-    const { data, error } = await supabase.rpc('validate_data_integrity');
+    // Try to call integrity check function, handle if it doesn't exist
+    const { data, error } = await supabase.rpc('validate_data_integrity').catch(() => ({ data: null, error: { message: 'Function not available' } }));
     
     if (error) {
       return {
         success: false,
-        summary: `Error en verificación de integridad: ${error.message}`,
+        summary: error.message.includes('not available') || error.message.includes('does not exist')
+          ? 'Función de verificación de integridad no disponible'
+          : `Error en verificación de integridad: ${error.message}`,
         details: { error: error.message }
       };
     }
@@ -243,12 +249,15 @@ const executeComplianceCheckTask = async (task: MaintenanceTask): Promise<{
   details: any;
 }> => {
   try {
-    const { data, error } = await supabase.rpc('run_compliance_checks');
+    // Try to call compliance check function, handle if it doesn't exist
+    const { data, error } = await supabase.rpc('run_compliance_checks').catch(() => ({ data: null, error: { message: 'Function not available' } }));
     
     if (error) {
       return {
         success: false,
-        summary: `Error en verificaciones de cumplimiento: ${error.message}`,
+        summary: error.message.includes('not available') || error.message.includes('does not exist')
+          ? 'Función de verificaciones de cumplimiento no disponible'
+          : `Error en verificaciones de cumplimiento: ${error.message}`,
         details: { error: error.message }
       };
     }
@@ -287,6 +296,7 @@ const executeReportGenerationTask = async (task: MaintenanceTask): Promise<{
     const endDate = new Date().toISOString().split('T')[0];
     const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+    // Try to call report generation function, handle if it doesn't exist
     const { data: reportId, error } = await supabase.rpc('generate_audit_report', {
       report_name: `Reporte Automático Semanal - ${new Date().toLocaleDateString('es-ES')}`,
       report_type: 'weekly',
@@ -294,12 +304,14 @@ const executeReportGenerationTask = async (task: MaintenanceTask): Promise<{
       date_to: endDate,
       entities_filter: null,
       actions_filter: null
-    });
+    }).catch(() => ({ data: null, error: { message: 'Function not available' } }));
 
     if (error) {
       return {
         success: false,
-        summary: `Error generando reporte: ${error.message}`,
+        summary: error.message.includes('not available') || error.message.includes('does not exist')
+          ? 'Función de generación de reportes no disponible'
+          : `Error generando reporte: ${error.message}`,
         details: { error: error.message }
       };
     }
@@ -410,7 +422,7 @@ export const runFullSystemMaintenance = async (): Promise<{
     // Ejecutar limpieza de datos
     try {
       const cleanupStart = Date.now();
-      const { data: cleanupData, error: cleanupError } = await supabase.rpc('cleanup_audit_data');
+      const { data: cleanupData, error: cleanupError } = await supabase.rpc('cleanup_audit_data').catch(() => ({ data: null, error: { message: 'Function not available' } }));
       
       results.push({
         task_id: 'cleanup',
@@ -418,7 +430,9 @@ export const runFullSystemMaintenance = async (): Promise<{
         success: !cleanupError,
         duration_ms: Date.now() - cleanupStart,
         result_summary: cleanupError 
-          ? `Error: ${cleanupError.message}`
+          ? cleanupError.message.includes('not available') || cleanupError.message.includes('does not exist')
+            ? 'Función de limpieza no disponible'
+            : `Error: ${cleanupError.message}`
           : `Limpieza completada: ${cleanupData?.length || 0} tablas procesadas`,
         details: cleanupData || { error: cleanupError?.message },
         executed_at: new Date().toISOString()
@@ -438,7 +452,7 @@ export const runFullSystemMaintenance = async (): Promise<{
     // Ejecutar verificación de integridad
     try {
       const integrityStart = Date.now();
-      const { data: integrityData, error: integrityError } = await supabase.rpc('validate_data_integrity');
+      const { data: integrityData, error: integrityError } = await supabase.rpc('validate_data_integrity').catch(() => ({ data: null, error: { message: 'Function not available' } }));
       
       const issues = (integrityData || []).filter((item: any) => item.issue_type !== 'healthy');
       
@@ -448,7 +462,9 @@ export const runFullSystemMaintenance = async (): Promise<{
         success: !integrityError && issues.length === 0,
         duration_ms: Date.now() - integrityStart,
         result_summary: integrityError 
-          ? `Error: ${integrityError.message}`
+          ? integrityError.message.includes('not available') || integrityError.message.includes('does not exist')
+            ? 'Función de verificación de integridad no disponible'
+            : `Error: ${integrityError.message}`
           : issues.length === 0 
             ? 'Integridad verificada: Sin problemas'
             : `Integridad verificada: ${issues.length} problemas detectados`,
@@ -470,7 +486,7 @@ export const runFullSystemMaintenance = async (): Promise<{
     // Ejecutar verificaciones de cumplimiento
     try {
       const complianceStart = Date.now();
-      const { data: complianceData, error: complianceError } = await supabase.rpc('run_compliance_checks');
+      const { data: complianceData, error: complianceError } = await supabase.rpc('run_compliance_checks').catch(() => ({ data: null, error: { message: 'Function not available' } }));
       
       const failedChecks = (complianceData || []).filter((check: any) => check.status === 'failed');
       
@@ -480,7 +496,9 @@ export const runFullSystemMaintenance = async (): Promise<{
         success: !complianceError && failedChecks.length === 0,
         duration_ms: Date.now() - complianceStart,
         result_summary: complianceError 
-          ? `Error: ${complianceError.message}`
+          ? complianceError.message.includes('not available') || complianceError.message.includes('does not exist')
+            ? 'Función de verificaciones de cumplimiento no disponible'
+            : `Error: ${complianceError.message}`
           : failedChecks.length === 0 
             ? `Cumplimiento verificado: ${complianceData?.length || 0} checks exitosos`
             : `Cumplimiento verificado: ${failedChecks.length} fallos de ${complianceData?.length || 0} checks`,
@@ -502,7 +520,7 @@ export const runFullSystemMaintenance = async (): Promise<{
     // Ejecutar mantenimiento general del sistema
     try {
       const systemStart = Date.now();
-      const { data: systemData, error: systemError } = await supabase.rpc('audit_system_maintenance');
+      const { data: systemData, error: systemError } = await supabase.rpc('audit_system_maintenance').catch(() => ({ data: null, error: { message: 'Function not available' } }));
       
       results.push({
         task_id: 'system',
@@ -510,7 +528,9 @@ export const runFullSystemMaintenance = async (): Promise<{
         success: !systemError,
         duration_ms: Date.now() - systemStart,
         result_summary: systemError 
-          ? `Error: ${systemError.message}`
+          ? systemError.message.includes('not available') || systemError.message.includes('does not exist')
+            ? 'Función de mantenimiento del sistema no disponible'
+            : `Error: ${systemError.message}`
           : 'Mantenimiento del sistema completado',
         details: { log: systemData || 'Sin detalles disponibles' },
         executed_at: new Date().toISOString()

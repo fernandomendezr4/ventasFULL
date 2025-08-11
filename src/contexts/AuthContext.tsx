@@ -242,7 +242,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('demo_user', JSON.stringify(demoUser));
         setUser(demoUser);
         setPermissions(getDemoPermissions(demoUser.role));
-        setLoading(false);
         return;
       }
 

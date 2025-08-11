@@ -76,15 +76,28 @@ class ErrorBoundary extends React.Component {
 // Configurar manejo global de errores no capturados
 window.addEventListener('error', (event) => {
   console.error('Global error event:', event.error);
+  
+  // Prevenir que errores menores causen problemas
+  const errorMessage = event.error?.message || '';
+  if (errorMessage.includes('ResizeObserver') ||
+      errorMessage.includes('Non-Error promise rejection') ||
+      errorMessage.includes('Script error')) {
+    event.preventDefault();
+  }
 });
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
   
-  // Prevenir que errores de red causen problemas
-  if (event.reason?.message?.includes('fetch') || 
-      event.reason?.message?.includes('network') ||
-      event.reason?.message?.includes('Failed to fetch')) {
+  const reasonMessage = event.reason?.message || '';
+  
+  // Prevenir que errores comunes causen problemas
+  if (reasonMessage.includes('fetch') || 
+      reasonMessage.includes('network') ||
+      reasonMessage.includes('Failed to fetch') ||
+      reasonMessage.includes('NetworkError') ||
+      reasonMessage.includes('AbortError') ||
+      reasonMessage.includes('The operation was aborted')) {
     event.preventDefault();
   }
 });

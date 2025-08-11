@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://demo.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'demo-key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Modo demo si no hay configuración de Supabase
-const isDemoMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const isDemoMode = !supabaseUrl || !supabaseKey || supabaseUrl.includes('demo');
 
 if (isDemoMode) {
   console.log('🎯 MODO DEMO ACTIVO - Acceso completo sin restricciones');
@@ -26,7 +26,6 @@ if (!isDemoMode) {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
-        flowType: 'pkce',
         storageKey: 'sb-auth-token',
         debug: false
       },
@@ -38,11 +37,6 @@ if (!isDemoMode) {
       db: {
         schema: 'public',
       },
-      realtime: {
-        params: {
-          eventsPerSecond: 10
-        }
-      }
     });
   } catch (error) {
     console.error('Error creating Supabase client:', error);

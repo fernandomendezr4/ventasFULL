@@ -60,19 +60,75 @@ export default function SalesManager() {
     try {
       setLoading(true);
       
+      if (isDemoMode) {
+        // Datos demo para ventas
+        const demoSales = [
+          {
+            id: 'demo-sale-1',
+            total_amount: 1500000,
+            subtotal: 1500000,
+            discount_amount: 0,
+            payment_type: 'cash',
+            payment_status: 'paid',
+            total_paid: 1500000,
+            created_at: new Date().toISOString(),
+            customer: { id: 'demo-customer-1', name: 'Juan Pérez', phone: '3001234567', email: 'juan@email.com', cedula: '12345678', address: 'Calle 123', created_at: new Date().toISOString() },
+            user: { id: 'demo-user-1', name: 'Vendedor Demo', email: 'vendedor@demo.com', role: 'employee', is_active: true, created_at: new Date().toISOString() },
+            sale_items: [
+              {
+                id: 'demo-item-1',
+                sale_id: 'demo-sale-1',
+                product_id: 'demo-product-1',
+                quantity: 1,
+                unit_price: 1500000,
+                total_price: 1500000,
+                product: {
+                  id: 'demo-product-1',
+                  name: 'iPhone 15 Pro',
+                  description: 'Smartphone Apple',
+                  sale_price: 1500000,
+                  purchase_price: 1200000,
+                  stock: 5,
+                  barcode: '123456789',
+                  category_id: 'demo-category-1',
+                  supplier_id: 'demo-supplier-1',
+                  has_imei_serial: true,
+                  imei_serial_type: 'imei' as const,
+                  requires_imei_serial: true,
+                  bulk_import_batch: '',
+                  import_notes: '',
+                  imported_at: null,
+                  imported_by: null,
+                  created_at: new Date().toISOString()
+                },
+                product_imei_serials: []
+              }
+            ],
+            payments: [],
+            notes: ''
+          }
+        ];
+        
+        setSales(demoSales as SaleWithItems[]);
+        setLoading(false);
+        return;
+      }
+      
       // Cargar ventas con información básica
       const { data, error } = await supabase
         .from('sales')
         .select(`
           *,
-          customer:customers (id, name, phone, email, cedula),
-          user:users (id, name, email),
+          customer:customers (id, name, phone, email, cedula, address, created_at),
+          user:users (id, name, email, role, is_active, created_at),
           sale_items (
             id,
+            sale_id,
+            product_id,
             quantity,
             unit_price,
             total_price,
-            product:products (id, name, has_imei_serial, imei_serial_type),
+            product:products (id, name, description, sale_price, purchase_price, stock, barcode, category_id, supplier_id, has_imei_serial, imei_serial_type, requires_imei_serial, bulk_import_batch, import_notes, imported_at, imported_by, created_at),
             product_imei_serials (
               id,
               imei_number,

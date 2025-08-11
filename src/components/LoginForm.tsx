@@ -41,39 +41,35 @@ export default function LoginForm() {
     setError('');
     setLoading(true);
 
-    // Validaciones básicas solo si no es modo demo
-    if (!isDemoMode) {
-      if (!email.trim()) {
-        setError('El email es requerido');
-        setLoading(false);
-        return;
-      }
+    // Validaciones básicas
+    if (!email.trim() && !isDemoMode) {
+      setError('El email es requerido');
+      setLoading(false);
+      return;
+    }
 
-      if (!password.trim()) {
-        setError('La contraseña es requerida');
-        setLoading(false);
-        return;
-      }
+    if (!password.trim() && !isDemoMode) {
+      setError('La contraseña es requerida');
+      setLoading(false);
+      return;
+    }
 
-      // Validar formato de email
+    // En modo demo, usar valores por defecto si están vacíos
+    const finalEmail = email.trim() || (isDemoMode ? 'admin@ventasfull.com' : '');
+    const finalPassword = password.trim() || (isDemoMode ? 'admin123' : '');
+
+    // Validar formato de email solo si no es modo demo
+    if (!isDemoMode && finalEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (!emailRegex.test(finalEmail)) {
         setError('Por favor ingresa un email válido');
         setLoading(false);
         return;
       }
-    } else {
-      // En modo demo, permitir campos vacíos con valores por defecto
-      if (!email.trim()) {
-        setEmail('admin@ventasfull.com');
-      }
-      if (!password.trim()) {
-        setPassword('admin123');
-      }
     }
 
     try {
-      await signIn(email.trim() || 'admin@ventasfull.com', password || 'admin123');
+      await signIn(finalEmail, finalPassword);
     } catch (error) {
       console.error('Login error:', error);
       const errorMessage = (error as any)?.message || 'Error en la autenticación';

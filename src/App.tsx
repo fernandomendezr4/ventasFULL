@@ -42,17 +42,40 @@ function AppContent() {
   React.useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       console.error('Global error:', event.error);
-      if (event.error?.message?.includes('ChunkLoadError') || 
-          event.error?.message?.includes('Loading chunk')) {
-        setAppError('Error al cargar recursos. Por favor recarga la página.');
+      
+      // Filtrar errores comunes que no requieren intervención del usuario
+      const errorMessage = event.error?.message || '';
+      
+      if (errorMessage.includes('ChunkLoadError') || 
+          errorMessage.includes('Loading chunk') ||
+          errorMessage.includes('Loading CSS chunk')) {
+        setAppError('Error al cargar recursos de la aplicación. Por favor recarga la página.');
+      } else if (errorMessage.includes('Network Error') ||
+                 errorMessage.includes('Failed to fetch')) {
+        // No mostrar errores de red como errores críticos
+        console.warn('Network error ignored:', errorMessage);
+      } else if (errorMessage.includes('ResizeObserver') ||
+                 errorMessage.includes('Non-Error promise rejection')) {
+        // Ignorar errores menores del navegador
+        console.warn('Minor browser error ignored:', errorMessage);
+      } else {
+        // Solo mostrar errores realmente críticos
+        setAppError('Error inesperado en la aplicación. Por favor recarga la página.');
       }
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled promise rejection:', event.reason);
-      if (event.reason?.message?.includes('fetch') || 
-          event.reason?.message?.includes('network')) {
-        // No mostrar errores de red como errores críticos
+      
+      const reasonMessage = event.reason?.message || '';
+      
+      // Prevenir que errores de red y otros errores menores causen problemas
+      if (reasonMessage.includes('fetch') || 
+          reasonMessage.includes('network') ||
+          reasonMessage.includes('Failed to fetch') ||
+          reasonMessage.includes('NetworkError') ||
+          reasonMessage.includes('AbortError')) {
+        event.preventDefault();
         return;
       }
     };

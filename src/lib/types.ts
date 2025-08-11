@@ -433,7 +433,7 @@ export interface CashRegisterAudit {
 // Enhanced audit types
 export interface CashRegisterEnhancedAudit {
   id: string;
-  cash_register_id: string;
+  cash_register_id: string | null;
   action_type: 'open' | 'close' | 'sale' | 'installment' | 'income' | 'expense' | 'edit' | 'delete';
   entity_type: 'cash_register' | 'sale' | 'installment' | 'movement' | 'product' | 'customer';
   entity_id: string | null;

@@ -163,7 +163,8 @@ export default function AuditReportGenerator({
 
       // Intentar usar función RPC
       try {
-        const { data: reportId, error } = await supabase.rpc('generate_audit_report', {
+        // Check if RPC function exists by attempting to call it
+        const { error: rpcError } = await supabase.rpc('generate_audit_report', {
           report_name: reportConfig.report_name,
           report_type: reportConfig.report_type,
           date_from: reportConfig.date_from,
@@ -172,35 +173,10 @@ export default function AuditReportGenerator({
           actions_filter: reportConfig.action_types_included.length > 0 ? reportConfig.action_types_included : null
         });
 
-        if (error) {
-          console.warn('RPC function not available, using manual generation:', error);
+        // If function doesn't exist (404) or other error, fall back to manual generation
+        if (rpcError) {
+          console.warn('RPC function not available, using manual generation:', rpcError);
           await generateManualReport();
-        } else {
-          // Obtener el reporte generado
-          const { data: reportData, error: fetchError } = await supabase
-            .from('audit_reports')
-            .select('*')
-            .eq('id', reportId)
-            .single();
-
-          if (fetchError) {
-            throw fetchError;
-          }
-
-          // Descargar reporte
-          const blob = new Blob([JSON.stringify(reportData, null, 2)], { 
-            type: 'application/json' 
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${reportConfig.report_name.replace(/\s+/g, '_')}_${reportConfig.date_from}_${reportConfig.date_to}.json`;
-          a.click();
-          URL.revokeObjectURL(url);
-
-          alert('Reporte generado y descargado exitosamente');
-          onReportGenerated();
-          onClose();
         }
       } catch (rpcError) {
         console.warn('RPC method failed, falling back to manual generation');

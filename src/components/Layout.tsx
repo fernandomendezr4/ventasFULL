@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Settings, Shield, LogOut, Power } from 'lucide-react';
+import { ShoppingCart, Package, Tag, BarChart3, Home, Plus, Truck, Users, User, Calculator, CreditCard, Settings, Shield, LogOut, Power, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import UserProfile from './UserProfile';
@@ -55,6 +55,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
     { id: 'cash-register', label: 'Caja', icon: Calculator, category: 'sales', permission: 'manage_cash_register' },
     { id: 'new-sale', label: 'Nueva Venta', icon: Plus, category: 'sales', permission: 'create_sales', requiresCashRegister: true },
     { id: 'sales', label: 'Historial de Ventas', icon: BarChart3, category: 'sales', permission: 'view_sales' },
+    { id: 'delete-sales', label: 'Eliminar Ventas', icon: Trash2, category: 'sales', permission: 'delete_sales', requiresRole: ['admin'] },
     { id: 'installments', label: 'Abonos', icon: CreditCard, category: 'sales', permission: 'manage_installments' },
   ];
 

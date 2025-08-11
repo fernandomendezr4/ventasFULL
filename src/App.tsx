@@ -24,6 +24,7 @@ import LazyLoader from './components/LazyLoader';
 import OfflineIndicator from './components/OfflineIndicator';
 import ConnectionNotifications from './components/ConnectionNotifications';
 import AuditSystemManager from './components/AuditSystemManager';
+import PermanentSaleDeletion from './components/PermanentSaleDeletion';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -191,6 +192,12 @@ function AppContent() {
         return (
           <ViewTransition transitionKey="audit" type="fade">
             <AuditSystemManager />
+          </ViewTransition>
+        );
+      case 'delete-sales':
+        return (
+          <ViewTransition transitionKey="delete-sales" type="fade">
+            <PermanentSaleDeletion />
           </ViewTransition>
         );
       default:

@@ -125,6 +125,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        if (!profileData) {
+          // No se encontró perfil, crear uno básico
+          await createBasicUserProfile(userId);
+          return;
+        }
+
         const authUser: AuthUser = {
           id: profileData.id,
           name: profileData.name,

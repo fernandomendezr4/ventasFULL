@@ -223,7 +223,6 @@ export const safeDelete = async (
   }
 };
 
-export { isDemoMode };
 
 // Connection status management
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'error';

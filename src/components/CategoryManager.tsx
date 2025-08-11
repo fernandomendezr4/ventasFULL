@@ -106,6 +106,12 @@ export default function CategoryManager() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Additional permission check for form submission
+    if (!hasPermission('manage_categories') && user?.role !== 'admin' && user?.role !== 'manager') {
+      alert('No tienes permisos para crear o editar categorías');
+      return;
+    }
+    
     if (isDemoMode) {
       // Demo mode: simulate category creation
       const newCategory = {

@@ -387,7 +387,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       employee: [
         'view_dashboard',
         'view_products',
-        'view_categories',
         'view_customers',
         'create_sales',
         'view_sales',

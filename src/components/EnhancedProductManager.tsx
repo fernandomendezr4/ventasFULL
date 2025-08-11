@@ -803,6 +803,30 @@ export default function EnhancedProductManager() {
                   )}
                 </div>
               </div>
+              
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>Creado: {new Date(product.created_at).toLocaleDateString('es-ES')}</span>
+                  {product.category?.name && (
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                      {product.category.name}
+                    </span>
+                  )}
+                </div>
+                {product.supplier?.name && (
+                  <div className="mt-2 text-xs text-slate-500">
+                    Proveedor: {product.supplier.name}
+                  </div>
+                )}
+                {product.purchase_price && product.purchase_price > 0 && (
+                  <div className="mt-2 flex justify-between text-xs">
+                    <span className="text-slate-500">Costo: {formatCurrency(product.purchase_price)}</span>
+                    <span className="text-green-600 font-medium">
+                      Margen: {(((product.sale_price - product.purchase_price) / product.purchase_price) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           ))
         )}

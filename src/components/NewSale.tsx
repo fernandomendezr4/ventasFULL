@@ -547,7 +547,13 @@ export default function NewSale() {
             }]);
 
           if (cashRegisterError) {
-            console.error('Error registrando en caja:', cashRegisterError);
+            // Handle duplicate key error gracefully (sale already registered in cash register)
+            if (cashRegisterError.code === '23505' && cashRegisterError.message.includes('cash_register_sales_sale_id_key')) {
+              console.warn('Sale already registered in cash register, skipping duplicate registration');
+            } else {
+              console.error('Error registrando en caja:', cashRegisterError);
+              // Don't throw error here to allow sale to complete
+            }
           }
         }
       }

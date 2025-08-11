@@ -537,23 +537,20 @@ export default function NewSale() {
         if (currentCashRegister) {
           const { error: cashRegisterError } = await supabase
             .from('cash_register_sales')
-            .insert([{
+            .upsert([{
               cash_register_id: currentCashRegister.id,
               sale_id: sale.id,
               payment_method: paymentMethod,
               amount_received: parseFloat(amountReceived) || total,
               change_given: calculateChange(),
               payment_notes: paymentMethod === 'other' ? `Método: ${paymentMethod}` : ''
-            }]);
+            }], {
+              onConflict: 'sale_id'
+            });
 
           if (cashRegisterError) {
-            // Handle duplicate key error gracefully (sale already registered in cash register)
-            if (cashRegisterError.code === '23505' && cashRegisterError.message.includes('cash_register_sales_sale_id_key')) {
-              console.warn('Sale already registered in cash register, skipping duplicate registration');
-            } else {
-              console.error('Error registrando en caja:', cashRegisterError);
-              // Don't throw error here to allow sale to complete
-            }
+            console.error('Error registrando en caja:', cashRegisterError);
+            // Don't throw error here to allow sale to complete
           }
         }
       }

@@ -647,6 +647,10 @@ export const checkDatabaseIntegrity = async () => {
       data: null, 
       error: { message: err?.message || 'Function not available' } 
     }));
+    const { data, error } = await (supabase.rpc('validate_data_integrity').catch((err) => ({ 
+      data: null, 
+      error: { message: err?.message || 'Function not available' } 
+    })));
     
     if (error) {
       if (error.message.includes('not available') || 

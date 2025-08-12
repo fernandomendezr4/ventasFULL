@@ -69,6 +69,9 @@ export default function LoginForm() {
     }
 
     try {
+      // Clear any previous errors
+      setError('');
+      
       await signIn(finalEmail, finalPassword);
     } catch (error) {
       console.error('Login error:', error);
@@ -76,17 +79,18 @@ export default function LoginForm() {
       
       // Mensajes de error más específicos y amigables
       if (isDemoMode) {
-        setError('En modo demo, usa las credenciales predefinidas o cualquier email/contraseña.');
+        // In demo mode, any credentials should work, so this shouldn't happen
+        setError('Error inesperado en modo demo. Intenta recargar la página.');
       } else if (errorMessage.includes('Invalid login credentials') || 
                  errorMessage.includes('Invalid email or password')) {
-        setError('Email o contraseña incorrectos. Verifica tus datos e intenta nuevamente.');
+        setError('Email o contraseña incorrectos. Si no tienes cuenta, contacta al administrador para que te cree una.');
       } else if (errorMessage.includes('Email not confirmed')) {
         setError('Debes confirmar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.');
       } else if (errorMessage.includes('Too many requests') || 
                  errorMessage.includes('rate limit')) {
         setError('Demasiados intentos fallidos. Espera unos minutos antes de intentar de nuevo.');
       } else if (errorMessage.includes('User not found')) {
-        setError('No existe una cuenta con este email. Verifica el email o contacta al administrador.');
+        setError('No existe una cuenta con este email. Contacta al administrador para que te cree una cuenta.');
       } else if (errorMessage.includes('Account is disabled') || 
                  errorMessage.includes('is_active')) {
         setError('Tu cuenta está desactivada. Contacta al administrador para reactivarla.');
@@ -96,6 +100,8 @@ export default function LoginForm() {
         setError('Error de conexión. Verifica tu internet e intenta nuevamente.');
       } else if (errorMessage.includes('Database connection')) {
         setError('Error de conexión con la base de datos. Intenta más tarde o contacta soporte.');
+      } else if (errorMessage.includes('Sistema de base de datos no disponible')) {
+        setError('Sistema en modo offline. Algunas funciones pueden estar limitadas.');
       } else {
         setError(errorMessage);
       }

@@ -555,7 +555,7 @@ export default function UserManager() {
               ))}
             </div>
           </div>
-        ) : filteredUsers.length === 0 ? (
+                <X className="h-4 w-4" />
           <div className="text-center py-12">
             <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
             <p className="text-slate-500">
@@ -606,246 +606,6 @@ export default function UserManager() {
                       }`}
                     >
                       {user.is_active ? 'Desactivar' : 'Activar'}
-                    </button>
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                      title="Editar usuario"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleEditPassword(user)}
-                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
-                      title="Cambiar contraseña"
-                    >
-                      <Key className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                      title="Eliminar usuario"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* User Form */}
-      {showForm && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">
-            {editingUser ? 'Editar Usuario' : 'Agregar Usuario'}
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Rol
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="employee">Empleado</option>
-                  <option value="manager">Gerente</option>
-                  <option value="admin">Administrador</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Estado
-                </label>
-                <select
-                  value={formData.is_active.toString()}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.value === 'true' })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="true">Activo</option>
-                  <option value="false">Inactivo</option>
-                </select>
-              </div>
-            </div>
-            
-            {/* Sección de Contraseña (solo para nuevos usuarios) */}
-            {!editingUser && (
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <h4 className="font-medium text-slate-900 mb-3 flex items-center">
-                  <Lock className="h-4 w-4 mr-2 text-purple-600" />
-                  Configuración de Contraseña
-                </h4>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-slate-700">
-                        Contraseña {!isDemoMode && '*'}
-                      </label>
-                      <button
-                        type="button"
-                        onClick={generatePassword}
-                        className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded hover:bg-purple-200 transition-colors duration-200"
-                      >
-                        Generar Segura
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <input
-                        type={formData.showPassword ? 'text' : 'password'}
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder={isDemoMode ? "Opcional en modo demo" : "Mínimo 6 caracteres"}
-                        required={!isDemoMode}
-                        minLength={6}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, showPassword: !formData.showPassword })}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        {formData.showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {formData.password && (
-                      <PasswordStrengthIndicator password={formData.password} />
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Confirmar Contraseña {!isDemoMode && '*'}
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={formData.showConfirmPassword ? 'text' : 'password'}
-                        value={formData.confirmPassword}
-                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        className="w-full px-3 py-2 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Confirma la contraseña"
-                        required={!isDemoMode && !!formData.password}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, showConfirmPassword: !formData.showConfirmPassword })}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        {formData.showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    {formData.password && formData.confirmPassword && (
-                      <div className="mt-1 text-xs">
-                        {formData.password === formData.confirmPassword ? (
-                          <span className="text-green-600 flex items-center">
-                            <Shield className="h-3 w-3 mr-1" />
-                            Las contraseñas coinciden
-                          </span>
-                        ) : (
-                          <span className="text-red-600 flex items-center">
-                            <Shield className="h-3 w-3 mr-1" />
-                            Las contraseñas no coinciden
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {isDemoMode && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                      <div className="flex items-center">
-                        <Shield className="h-4 w-4 text-yellow-600 mr-2" />
-                        <div>
-                          <h5 className="font-medium text-yellow-900 text-sm">Modo Demo</h5>
-                          <p className="text-xs text-yellow-800">
-                            La contraseña se guardará localmente para demostración.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={!editingUser && formData.password && formData.password !== formData.confirmPassword}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-              >
-                {editingUser ? 'Actualizar' : 'Agregar'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Password Change Modal */}
-      {showPasswordForm && selectedUserForPassword && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900 flex items-center">
-                  <Key className="h-5 w-5 mr-2 text-purple-600" />
-                  Cambiar Contraseña
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowPasswordForm(false);
-                    setSelectedUserForPassword(null);
-                    setPasswordData({
-                      password: '',
-                      confirmPassword: '',
-                      showPassword: false,
-                      showConfirmPassword: false
-                    });
-                  }}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors duration-200"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="text-sm text-slate-600 mt-2">
-                Usuario: <span className="font-medium">{selectedUserForPassword.name}</span>
-              </p>
-            </div>
             
             <form onSubmit={handlePasswordSubmit} className="p-6 space-y-4">
               <div>
@@ -985,6 +745,103 @@ export default function UserManager() {
           </div>
         </div>
       )}
+
+      {/* Users List */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-6">
+            <div className="animate-pulse space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center space-x-4">
+                  <div className="h-10 w-10 bg-slate-200 rounded-full"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+                    <div className="h-3 bg-slate-200 rounded w-1/3"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="text-center py-12">
+            <User className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+            <p className="text-slate-500">
+              {users.length === 0 ? 'No hay usuarios registrados' : 'No se encontraron usuarios que coincidan con los filtros'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-200">
+            {filteredUsers.map((user) => (
+              <div key={user.id} className="p-6 hover:bg-slate-50 transition-colors duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">{user.name}</h3>
+                      <div className="flex items-center space-x-4 text-sm text-slate-600">
+                        <span className="flex items-center">
+                          <Mail className="h-3 w-3 mr-1" />
+                          {user.email}
+                        </span>
+                        <span className="flex items-center">
+                          <Shield className="h-3 w-3 mr-1" />
+                          {user.role}
+                        </span>
+                        <span className="flex items-center">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          {new Date(user.created_at).toLocaleDateString('es-ES')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      user.is_active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {user.is_active ? 'Activo' : 'Inactivo'}
+                    </div>
+                    <button
+                      onClick={() => toggleUserStatus(user)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                        user.is_active
+                          ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                          : 'bg-green-100 text-green-700 hover:bg-green-200'
+                      }`}
+                    >
+                      {user.is_active ? 'Desactivar' : 'Activar'}
+                    </button>
+                    <button
+                      onClick={() => handleEdit(user)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
+                      title="Editar usuario"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleEditPassword(user)}
+                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors duration-200"
+                      title="Cambiar contraseña"
+                    >
+                      <Key className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(user.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                      title="Eliminar usuario"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

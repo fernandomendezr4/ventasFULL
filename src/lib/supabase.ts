@@ -53,7 +53,20 @@ export const testConnection = async () => {
   try {
     console.log('Verificando conexión a la base de datos...');
     
-    // Hacer una consulta simple para verificar conectividad
+    // First try to get the current session to check auth state
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.warn('Session check failed:', sessionError);
+      // Clear any invalid session data
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.warn('Could not clear invalid session:', signOutError);
+      }
+    }
+    
+    // Then test database connectivity with a simple query
     const { data, error } = await supabase
       .from('categories')
       .select('id')
@@ -68,6 +81,16 @@ export const testConnection = async () => {
     return true;
   } catch (error) {
     console.error('❌ Prueba de conexión falló:', error);
+    
+    // If connection test fails, try to clear any stale auth state
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (clearError) {
+        console.warn('Could not clear auth state after connection failure:', clearError);
+      }
+    }
+    
     return false;
   }
 };

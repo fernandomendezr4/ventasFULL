@@ -197,6 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
+      setConnectionStatus('checking');
 
       if (isDemoMode) {
         // Modo demo: autenticación simulada
@@ -248,11 +249,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('demo_user', JSON.stringify(demoUser));
         setUser(demoUser);
         setPermissions(getDemoPermissions(demoUser.role));
+        setConnectionStatus('disconnected');
         return;
       }
 
       if (!supabase) {
+        setConnectionStatus('disconnected');
         throw new Error('Sistema de base de datos no disponible');
+      }
+
+      // Clear any existing session before attempting new login
+      try {
+        await supabase.auth.signOut();
+      } catch (clearError) {
+        console.warn('Could not clear existing session:', clearError);
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -261,11 +271,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        setConnectionStatus('connected'); // We can reach Supabase, just auth failed
         throw error;
       }
 
       if (data.user) {
         await loadUserProfile(data.user.id);
+        setConnectionStatus('connected');
       }
     } catch (error) {
       console.error('Error signing in:', error);
@@ -330,15 +342,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!supabase) return;
 
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Error signing out:', error);
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.warn('Error during signout (continuing anyway):', error);
+        }
+      } catch (signOutError) {
+        console.warn('Signout failed (continuing anyway):', signOutError);
       }
       
       setUser(null);
       setPermissions([]);
     } catch (error) {
       console.error('Error in signOut:', error);
+      // Always clear user state even if signout fails
+      setUser(null);
+      setPermissions([]);
     }
   };
 

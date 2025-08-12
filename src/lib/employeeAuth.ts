@@ -911,3 +911,4 @@ export const getUserSecurityStats = async (): Promise<{
       suspiciousSessions: 0
     };
   }
+}

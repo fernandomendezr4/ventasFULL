@@ -597,7 +597,7 @@ export const runDatabaseMaintenance = async () => {
   }
   
   try {
-    const { data, error } = await supabase.rpc('auto_maintenance');
+    const { data, error } = await supabase.rpc('audit_system_maintenance');
     
     if (error) throw error;
     return data;

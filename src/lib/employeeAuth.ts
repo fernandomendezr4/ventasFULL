@@ -56,7 +56,7 @@ export const authenticateEmployee = async (email: string, password: string): Pro
       .select('*')
       .eq('email', email.toLowerCase().trim())
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     if (userError || !userData) {
       return {
@@ -70,7 +70,7 @@ export const authenticateEmployee = async (email: string, password: string): Pro
       .from('employee_passwords')
       .select('password_hash')
       .eq('user_id', userData.id)
-      .single();
+      .maybeSingle();
 
     if (passwordError || !passwordData) {
       return {

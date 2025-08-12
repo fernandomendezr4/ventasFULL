@@ -230,7 +230,7 @@ export default function DatabaseHealthMonitor() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h5 className="font-medium text-slate-900 capitalize">
-                      {issue.table_name.replace('_', ' ')}
+                      {(issue.table_name || 'Sistema').replace(/_/g, ' ')}
                     </h5>
                     <p className="text-sm text-slate-600 mt-1">
                       {issue.issue_description}

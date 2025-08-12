@@ -597,9 +597,14 @@ export const runDatabaseMaintenance = async () => {
   }
   
   try {
-    const { data, error } = await supabase.rpc('audit_system_maintenance').catch(() => ({ 
+    // Check if supabase client is available
+    if (!supabase) {
+      return 'Mantenimiento básico completado - cliente Supabase no disponible';
+    }
+
+    const { data, error } = await supabase.rpc('audit_system_maintenance').catch((err) => ({ 
       data: null, 
-      error: { message: 'Function not available' } 
+      error: { message: err?.message || 'Function not available' } 
     }));
     
     if (error) {
@@ -624,16 +629,23 @@ export const runDatabaseMaintenance = async () => {
 export const checkDatabaseIntegrity = async () => {
   if (isDemoMode) {
     return [
-      { check: 'Integridad de datos', status: 'OK', details: 'Modo demo - sin problemas' },
-      { check: 'Índices', status: 'OK', details: 'Todos los índices funcionando' },
-      { check: 'Restricciones', status: 'OK', details: 'Sin violaciones detectadas' }
+      { table_name: 'integridad_datos', issue_type: 'healthy', issue_description: 'Modo demo - sin problemas', suggested_action: 'Ninguna acción requerida' },
+      { table_name: 'indices_sistema', issue_type: 'healthy', issue_description: 'Todos los índices funcionando', suggested_action: 'Ninguna acción requerida' },
+      { table_name: 'restricciones', issue_type: 'healthy', issue_description: 'Sin violaciones detectadas', suggested_action: 'Ninguna acción requerida' }
     ];
   }
   
   try {
-    const { data, error } = await supabase.rpc('validate_data_integrity').catch(() => ({ 
+    // Check if supabase client is available
+    if (!supabase) {
+      return [
+        { table_name: 'sistema_conexion', issue_type: 'error', issue_description: 'Cliente Supabase no disponible', suggested_action: 'Verificar configuración de conexión' }
+      ];
+    }
+
+    const { data, error } = await supabase.rpc('validate_data_integrity').catch((err) => ({ 
       data: null, 
-      error: { message: 'Function not available' } 
+      error: { message: err?.message || 'Function not available' } 
     }));
     
     if (error) {
@@ -641,18 +653,18 @@ export const checkDatabaseIntegrity = async () => {
           error.message.includes('does not exist') ||
           error.message.includes('42P01')) {
         return [
-          { check: 'Verificación de integridad', status: 'SKIP', details: 'Función no disponible' }
+          { table_name: 'verificacion_integridad', issue_type: 'warning', issue_description: 'Función no disponible', suggested_action: 'Verificar configuración de base de datos' }
         ];
       }
       throw error;
     }
     return data || [
-      { check: 'Verificación básica', status: 'OK', details: 'Sin errores detectados' }
+      { table_name: 'verificacion_basica', issue_type: 'healthy', issue_description: 'Sin errores detectados', suggested_action: 'Ninguna acción requerida' }
     ];
   } catch (error) {
     console.error('Error checking integrity:', error);
     return [
-      { check: 'Verificación de integridad', status: 'ERROR', details: (error as Error).message }
+      { table_name: 'verificacion_integridad', issue_type: 'error', issue_description: (error as Error).message, suggested_action: 'Revisar logs del sistema' }
     ];
   }
 };
@@ -663,9 +675,15 @@ export const refreshViews = async () => {
   }
   
   try {
-    const { data, error } = await supabase.rpc('refresh_materialized_views').catch(() => ({ 
+    // Check if supabase client is available
+    if (!supabase) {
+      queryCache.clear();
+      return 'Cache limpiado - cliente Supabase no disponible';
+    }
+
+    const { data, error } = await supabase.rpc('refresh_materialized_views').catch((err) => ({ 
       data: null, 
-      error: { message: 'Function not available' } 
+      error: { message: err?.message || 'Function not available' } 
     }));
     
     if (error) {

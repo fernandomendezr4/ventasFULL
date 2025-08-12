@@ -88,6 +88,8 @@ export const authenticateEmployee = async (email: string, password: string): Pro
         email,
         role,
         is_active
+      `)
+      .eq('email', email.toLowerCase().trim())
       .maybeSingle();
 
     if (userError || !userData) {

@@ -435,6 +435,7 @@ export const validateSessionSecurity = async (sessionToken: string): Promise<{
           last_login_at,
           failed_login_attempts
         )
+      )
       `)
       .eq('session_token', sessionToken)
       .gte('expires_at', new Date().toISOString())
@@ -910,3 +911,5 @@ export const getUserSecurityStats = async (): Promise<{
     };
   }
 };
+  }
+}

@@ -33,7 +33,7 @@ export default function UserManager() {
     password: ''
   });
 
-  const { showNotification } = useNotification();
+  const { showSuccess, showError } = useNotification();
   const { showConfirmation } = useConfirmation();
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function UserManager() {
       setUsers(data || []);
     } catch (error) {
       console.error('Error loading users:', error);
-      showNotification('Error loading users', 'error');
+      showError('Error loading users', 'Failed to load user data');
     } finally {
       setLoading(false);
     }
@@ -61,7 +61,7 @@ export default function UserManager() {
     e.preventDefault();
     
     if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) {
-      showNotification('Please fill in all required fields', 'error');
+      showError('Validation Error', 'Please fill in all required fields');
       return;
     }
 
@@ -86,13 +86,13 @@ export default function UserManager() {
 
       if (userError) throw userError;
 
-      showNotification('User created successfully', 'success');
+      showSuccess('User Created', 'User created successfully');
       setNewUser({ name: '', email: '', role: 'employee', password: '' });
       setShowAddForm(false);
       loadUsers();
     } catch (error: any) {
       console.error('Error creating user:', error);
-      showNotification(error.message || 'Error creating user', 'error');
+      showError('Creation Failed', error.message || 'Error creating user');
     }
   };
 
@@ -110,12 +110,12 @@ export default function UserManager() {
 
       if (error) throw error;
 
-      showNotification('User updated successfully', 'success');
+      showSuccess('User Updated', 'User updated successfully');
       setEditingUser(null);
       loadUsers();
     } catch (error: any) {
       console.error('Error updating user:', error);
-      showNotification(error.message || 'Error updating user', 'error');
+      showError('Update Failed', error.message || 'Error updating user');
     }
   };
 
@@ -135,11 +135,11 @@ export default function UserManager() {
 
       if (error) throw error;
 
-      showNotification('User deleted successfully', 'success');
+      showSuccess('User Deleted', 'User deleted successfully');
       loadUsers();
     } catch (error: any) {
       console.error('Error deleting user:', error);
-      showNotification(error.message || 'Error deleting user', 'error');
+      showError('Deletion Failed', error.message || 'Error deleting user');
     }
   };
 
@@ -152,14 +152,14 @@ export default function UserManager() {
 
       if (error) throw error;
 
-      showNotification(
-        `User ${!user.is_active ? 'activated' : 'deactivated'} successfully`,
-        'success'
+      showSuccess(
+        'Status Updated',
+        `User ${!user.is_active ? 'activated' : 'deactivated'} successfully`
       );
       loadUsers();
     } catch (error: any) {
       console.error('Error updating user status:', error);
-      showNotification(error.message || 'Error updating user status', 'error');
+      showError('Status Update Failed', error.message || 'Error updating user status');
     }
   };
 

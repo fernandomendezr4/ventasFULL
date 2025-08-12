@@ -292,6 +292,97 @@ export const updateEmployeePassword = async (userId: string, newPassword: string
   }
 };
 
+// Alias for updateEmployeePassword to match import expectations
+export const setEmployeePassword = updateEmployeePassword;
+
+export const validatePasswordStrength = (password: string): { isValid: boolean; score: number; feedback: string[] } => {
+  const feedback: string[] = [];
+  let score = 0;
+
+  // Check length
+  if (password.length >= 8) {
+    score += 1;
+  } else {
+    feedback.push('La contraseña debe tener al menos 8 caracteres');
+  }
+
+  // Check for uppercase
+  if (/[A-Z]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('Incluye al menos una letra mayúscula');
+  }
+
+  // Check for lowercase
+  if (/[a-z]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('Incluye al menos una letra minúscula');
+  }
+
+  // Check for numbers
+  if (/\d/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('Incluye al menos un número');
+  }
+
+  // Check for special characters
+  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('Incluye al menos un carácter especial');
+  }
+
+  return {
+    isValid: score >= 4,
+    score,
+    feedback
+  };
+};
+
+export const generateSecurePassword = (length: number = 12): string => {
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const symbols = '!@#$%^&*(),.?":{}|<>';
+  
+  const allChars = uppercase + lowercase + numbers + symbols;
+  let password = '';
+  
+  // Ensure at least one character from each category
+  password += uppercase[Math.floor(Math.random() * uppercase.length)];
+  password += lowercase[Math.floor(Math.random() * lowercase.length)];
+  password += numbers[Math.floor(Math.random() * numbers.length)];
+  password += symbols[Math.floor(Math.random() * symbols.length)];
+  
+  // Fill the rest randomly
+  for (let i = 4; i < length; i++) {
+    password += allChars[Math.floor(Math.random() * allChars.length)];
+  }
+  
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+};
+
+export const revokeAllUserSessions = async (userId: string): Promise<boolean> => {
+  try {
+    if (isDemoMode || !supabase) {
+      return false;
+    }
+
+    const { error } = await supabase
+      .from('employee_sessions')
+      .delete()
+      .eq('user_id', userId);
+
+    return !error;
+  } catch (error) {
+    console.error('Error revoking user sessions:', error);
+    return false;
+  }
+};
+
 export const validateSession = async (sessionToken: string): Promise<AuthUser | null> => {
   try {
     if (isDemoMode || !supabase) {

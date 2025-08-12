@@ -1,17 +1,28 @@
 import React from 'react';
 import { Shield, Check, X, AlertTriangle } from 'lucide-react';
-import { validatePasswordStrength } from '../lib/employeeAuth';
+import { validatePasswordStrength, checkPasswordChangeRequired } from '../lib/employeeAuth';
 
 interface PasswordStrengthIndicatorProps {
   password: string;
   className?: string;
+  showRequirements?: boolean;
+  userId?: string;
 }
 
 export default function PasswordStrengthIndicator({ 
   password, 
-  className = '' 
+  className = '',
+  showRequirements = true,
+  userId
 }: PasswordStrengthIndicatorProps) {
   const { isValid, score, feedback } = validatePasswordStrength(password);
+  const [passwordChangeInfo, setPasswordChangeInfo] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    if (userId) {
+      checkPasswordChangeRequired(userId).then(setPasswordChangeInfo);
+    }
+  }, [userId]);
 
   if (!password) return null;
 
@@ -41,6 +52,22 @@ export default function PasswordStrengthIndicator({
 
   return (
     <div className={`space-y-2 ${className}`}>
+      {/* Password Change Requirement Notice */}
+      {passwordChangeInfo && passwordChangeInfo.mustChange && (
+        <div className="bg-orange-50 border border-orange-200 rounded p-2">
+          <div className="flex items-center">
+            <AlertTriangle className="h-4 w-4 text-orange-600 mr-2" />
+            <div className="text-xs text-orange-800">
+              <p className="font-medium">Cambio de contraseña requerido</p>
+              <p>Razón: {passwordChangeInfo.reason}</p>
+              {passwordChangeInfo.expiresAt && (
+                <p>Expira: {new Date(passwordChangeInfo.expiresAt).toLocaleDateString('es-ES')}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Strength Bar */}
       <div className="flex items-center gap-2">
         <Shield className="h-4 w-4 text-slate-500" />
@@ -61,7 +88,7 @@ export default function PasswordStrengthIndicator({
       </div>
 
       {/* Validation Feedback */}
-      {feedback.length > 0 && (
+      {showRequirements && feedback.length > 0 && (
         <div className="space-y-1">
           {feedback.map((message, index) => (
             <div key={index} className="flex items-center text-xs">
@@ -81,18 +108,32 @@ export default function PasswordStrengthIndicator({
       )}
 
       {/* Security Tips */}
-      {score < 4 && (
+      {showRequirements && score < 4 && (
         <div className="bg-blue-50 border border-blue-200 rounded p-2">
           <div className="flex items-start">
             <AlertTriangle className="h-4 w-4 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-blue-800">
               <p className="font-medium mb-1">Consejos para una contraseña más segura:</p>
               <ul className="space-y-0.5">
-                <li>• Usa al menos 8 caracteres</li>
+                <li>• Usa al menos 8 caracteres (recomendado: 12+)</li>
                 <li>• Combina mayúsculas, minúsculas, números y símbolos</li>
                 <li>• Evita palabras comunes o información personal</li>
-                <li>• Considera usar una frase de contraseña</li>
+                <li>• Usa frases de contraseña o generador automático</li>
+                <li>• No reutilices contraseñas de otros sistemas</li>
               </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Expiration Warning */}
+      {passwordChangeInfo && passwordChangeInfo.expiresAt && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
+          <div className="flex items-center">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 mr-2" />
+            <div className="text-xs text-yellow-800">
+              <p className="font-medium">Contraseña expira pronto</p>
+              <p>Fecha de expiración: {new Date(passwordChangeInfo.expiresAt).toLocaleDateString('es-ES')}</p>
             </div>
           </div>
         </div>

@@ -8,6 +8,10 @@ interface AuthUser {
   email: string;
   role: string;
   is_active: boolean;
+  last_login_at?: string;
+  failed_login_attempts?: number;
+  locked_until?: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {
@@ -21,6 +25,7 @@ interface AuthContextType {
   signOutWithConfirmation: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
   retryConnection: () => Promise<void>;
+  requiresPasswordChange: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
 
   useEffect(() => {
     initializeAuth();
@@ -153,8 +159,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(authResult.user);
         setPermissions(getPermissionsForRole(authResult.user.role));
         setConnectionStatus('connected');
+        setRequiresPasswordChange(authResult.requiresPasswordChange || false);
+        
+        // Show password change notice if required
+        if (authResult.requiresPasswordChange) {
+          setTimeout(() => {
+            alert('Tu contraseña ha expirado o requiere cambio. Contacta al administrador para renovarla.');
+          }, 1000);
+        }
       } else {
         setConnectionStatus('connected'); // We can reach the database, just auth failed
+        
+        // Handle specific error cases
+        if (authResult.lockedUntil) {
+          const unlockTime = new Date(authResult.lockedUntil).toLocaleString('es-ES');
+          throw new Error(`Usuario bloqueado hasta ${unlockTime} por múltiples intentos fallidos`);
+        }
+        
         throw new Error(authResult.error || 'Credenciales inválidas');
       }
     } catch (error) {
@@ -206,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('demo_user');
         setUser(null);
         setPermissions([]);
+        setRequiresPasswordChange(false);
         return;
       }
 
@@ -213,18 +235,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         // Usar el sistema de logout de empleados
-        await logoutEmployee();
+        await logoutEmployee('user_logout');
       } catch (logoutError) {
         console.warn('Error during employee logout (continuing anyway):', logoutError);
       }
       
       setUser(null);
       setPermissions([]);
+      setRequiresPasswordChange(false);
     } catch (error) {
       console.error('Error in signOut:', error);
       // Always clear user state even if signout fails
       setUser(null);
       setPermissions([]);
+      setRequiresPasswordChange(false);
     }
   };
 
@@ -314,7 +338,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     signOutWithConfirmation,
     hasPermission,
-    retryConnection
+    retryConnection,
+    requiresPasswordChange
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

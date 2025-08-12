@@ -9,12 +9,18 @@ import {
   setEmployeePassword, 
   validatePasswordStrength, 
   generateSecurePassword,
-  revokeAllUserSessions 
+  revokeAllUserSessions,
+  forcePasswordChange,
+  getUserSecurityStats,
+  detectSuspiciousActivity
 } from '../lib/employeeAuth';
 
 interface UserWithProfile extends UserType {
   last_login?: string;
   session_count?: number;
+  failed_login_attempts?: number;
+  locked_until?: string;
+  must_change_password?: boolean;
 }
 
 export default function UserManager() {
@@ -23,32 +29,51 @@ export default function UserManager() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showSessionManager, setShowSessionManager] = useState(false);
+  const [showSecurityDashboard, setShowSecurityDashboard] = useState(false);
   const [editingUser, setEditingUser] = useState<UserWithProfile | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserWithProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showPassword, setShowPassword] = useState(false);
+  const [securityStats, setSecurityStats] = useState<any>(null);
+  const [suspiciousActivity, setSuspiciousActivity] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     role: 'employee' as 'admin' | 'manager' | 'employee',
     password: '',
-    is_active: true
+    is_active: true,
+    force_password_change: false
   });
   const [passwordError, setPasswordError] = useState('');
   const [emailError, setEmailError] = useState('');
 
   useEffect(() => {
     loadUsers();
+    loadSecurityData();
   }, []);
+
+  const loadSecurityData = async () => {
+    try {
+      const [stats, suspicious] = await Promise.all([
+        getUserSecurityStats(),
+        detectSuspiciousActivity()
+      ]);
+      
+      setSecurityStats(stats);
+      setSuspiciousActivity(suspicious);
+    } catch (error) {
+      console.error('Error loading security data:', error);
+    }
+  };
 
   const loadUsers = async () => {
     try {
       setLoading(true);
       
       if (isDemoMode) {
-        // Datos demo para usuarios
+        // Datos demo para usuarios con campos de seguridad
         const demoUsers = [
           {
             id: 'demo-user-1',
@@ -58,7 +83,10 @@ export default function UserManager() {
             is_active: true,
             created_at: new Date().toISOString(),
             last_login: new Date(Date.now() - 3600000).toISOString(),
-            session_count: 1
+            session_count: 1,
+            failed_login_attempts: 0,
+            locked_until: null,
+            must_change_password: false
           },
           {
             id: 'demo-user-2',
@@ -68,7 +96,10 @@ export default function UserManager() {
             is_active: true,
             created_at: new Date(Date.now() - 86400000).toISOString(),
             last_login: new Date(Date.now() - 7200000).toISOString(),
-            session_count: 0
+            session_count: 0,
+            failed_login_attempts: 0,
+            locked_until: null,
+            must_change_password: false
           },
           {
             id: 'demo-user-3',
@@ -78,7 +109,10 @@ export default function UserManager() {
             is_active: true,
             created_at: new Date(Date.now() - 172800000).toISOString(),
             last_login: new Date(Date.now() - 14400000).toISOString(),
-            session_count: 0
+            session_count: 0,
+            failed_login_attempts: 2,
+            locked_until: null,
+            must_change_password: true
           },
           {
             id: 'demo-user-4',
@@ -88,7 +122,10 @@ export default function UserManager() {
             is_active: false,
             created_at: new Date(Date.now() - 259200000).toISOString(),
             last_login: null,
-            session_count: 0
+            session_count: 0,
+            failed_login_attempts: 5,
+            locked_until: new Date(Date.now() + 1800000).toISOString(),
+            must_change_password: false
           }
         ];
         
@@ -99,11 +136,21 @@ export default function UserManager() {
       
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          *,
+          employee_passwords(must_change, expires_at)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setUsers(data || []);
+      
+      // Format data with security information
+      const formattedUsers = (data || []).map(user => ({
+        ...user,
+        must_change_password: user.employee_passwords?.[0]?.must_change || false
+      }));
+      
+      setUsers(formattedUsers);
     } catch (error) {
       console.error('Error loading users:', error);
       setUsers([]);
@@ -288,11 +335,21 @@ export default function UserManager() {
         if (error) throw error;
 
         // Establecer contraseña para el nuevo usuario
-        const passwordResult = await setEmployeePassword(newUser.id, formData.password);
+        const passwordResult = await setEmployeePassword(
+          newUser.id, 
+          formData.password,
+          currentUser?.id,
+          'new_user_creation'
+        );
         if (!passwordResult.success) {
           // Si falla la contraseña, eliminar el usuario creado
           await supabase.from('users').delete().eq('id', newUser.id);
-          throw new Error('Error al establecer contraseña: ' + passwordResult.error);
+          throw new Error('Error al establecer contraseña: ' + (passwordResult.error || 'Error desconocido'));
+        }
+
+        // Force password change if requested
+        if (formData.force_password_change) {
+          await forcePasswordChange(newUser.id, 'admin_required_change');
         }
 
         alert('Usuario creado exitosamente');
@@ -302,6 +359,7 @@ export default function UserManager() {
       setEditingUser(null);
       resetForm();
       loadUsers();
+      loadSecurityData(); // Reload security stats
     } catch (error) {
       console.error('Error saving user:', error);
       alert('Error al guardar usuario: ' + (error as Error).message);
@@ -315,7 +373,8 @@ export default function UserManager() {
       email: user.email,
       role: user.role as 'admin' | 'manager' | 'employee',
       password: '', // No mostrar contraseña actual
-      is_active: user.is_active
+      is_active: user.is_active,
+      force_password_change: false
     });
     setShowForm(true);
   };
@@ -391,6 +450,55 @@ export default function UserManager() {
     }
   };
 
+  const handleForcePasswordChange = async (userId: string, userName: string) => {
+    if (window.confirm(`¿Forzar cambio de contraseña para ${userName}? El usuario deberá cambiar su contraseña en el próximo login.`)) {
+      try {
+        const success = await forcePasswordChange(userId, 'admin_forced_change');
+        if (success) {
+          alert('Cambio de contraseña forzado exitosamente. El usuario deberá cambiar su contraseña en el próximo login.');
+          loadUsers();
+        } else {
+          alert('Error al forzar cambio de contraseña');
+        }
+      } catch (error) {
+        console.error('Error forcing password change:', error);
+        alert('Error al forzar cambio de contraseña: ' + (error as Error).message);
+      }
+    }
+  };
+
+  const handleUnlockUser = async (userId: string, userName: string) => {
+    if (window.confirm(`¿Desbloquear usuario ${userName}?`)) {
+      try {
+        if (isDemoMode) {
+          setUsers(users.map(u => 
+            u.id === userId ? { ...u, locked_until: null, failed_login_attempts: 0 } : u
+          ));
+          alert('Usuario desbloqueado exitosamente en modo demo');
+          return;
+        }
+
+        const { error } = await supabase
+          .from('users')
+          .update({ 
+            locked_until: null, 
+            failed_login_attempts: 0,
+            updated_at: new Date().toISOString(),
+            updated_by: currentUser?.id
+          })
+          .eq('id', userId);
+
+        if (error) throw error;
+        
+        alert('Usuario desbloqueado exitosamente');
+        loadUsers();
+      } catch (error) {
+        console.error('Error unlocking user:', error);
+        alert('Error al desbloquear usuario: ' + (error as Error).message);
+      }
+    }
+  };
+
   const generatePassword = () => {
     const newPassword = generateSecurePassword(12);
     setFormData({ ...formData, password: newPassword });
@@ -403,7 +511,8 @@ export default function UserManager() {
       email: '',
       role: 'employee',
       password: '',
-      is_active: true
+      is_active: true,
+      force_password_change: false
     });
     setPasswordError('');
     setEmailError('');
@@ -443,7 +552,9 @@ export default function UserManager() {
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || 
       (statusFilter === 'active' && user.is_active) ||
-      (statusFilter === 'inactive' && !user.is_active);
+      (statusFilter === 'inactive' && !user.is_active) ||
+      (statusFilter === 'locked' && user.locked_until && new Date(user.locked_until) > new Date()) ||
+      (statusFilter === 'password_expired' && user.must_change_password);
     
     return matchesSearch && matchesRole && matchesStatus;
   });
@@ -477,18 +588,106 @@ export default function UserManager() {
             Administra usuarios del sistema y sus permisos
           </p>
         </div>
-        <button
-          onClick={() => {
-            setShowForm(true);
-            setEditingUser(null);
-            resetForm();
-          }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Agregar Usuario
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowSecurityDashboard(!showSecurityDashboard)}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors duration-200 flex items-center"
+          >
+            <Shield className="h-4 w-4 mr-2" />
+            {showSecurityDashboard ? 'Ocultar' : 'Ver'} Seguridad
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setEditingUser(null);
+              resetForm();
+            }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Agregar Usuario
+          </button>
+        </div>
       </div>
+
+      {/* Security Dashboard */}
+      {showSecurityDashboard && (
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center">
+            <Shield className="h-5 w-5 mr-2 text-red-600" />
+            Dashboard de Seguridad
+          </h3>
+          
+          {securityStats && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-600">Usuarios Activos</p>
+                    <p className="text-2xl font-bold text-green-900">{securityStats.activeUsers}</p>
+                    <p className="text-xs text-green-700">de {securityStats.totalUsers} total</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+              </div>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-red-600">Usuarios Bloqueados</p>
+                    <p className="text-2xl font-bold text-red-900">{securityStats.lockedUsers}</p>
+                    <p className="text-xs text-red-700">Temporalmente</p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-red-600" />
+                </div>
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-orange-600">Sesiones Activas</p>
+                    <p className="text-2xl font-bold text-orange-900">{securityStats.activeSessions}</p>
+                    <p className="text-xs text-orange-700">En el sistema</p>
+                  </div>
+                  <Monitor className="h-8 w-8 text-orange-600" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Suspicious Activity Alert */}
+          {suspiciousActivity && suspiciousActivity.suspiciousUsers.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center">
+                <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+                <div>
+                  <h4 className="font-medium text-red-900">Actividad Sospechosa Detectada</h4>
+                  <p className="text-sm text-red-800">
+                    {suspiciousActivity.suspiciousUsers.length} usuario(s) con actividad sospechosa en las últimas 24 horas
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {suspiciousActivity.suspiciousUsers.map((user: any) => (
+                      <div key={user.userId} className="text-xs text-red-700">
+                        • {user.userName}: {user.issues.join(', ')} (Riesgo: {user.riskLevel})
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={loadSecurityData}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center text-sm"
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Actualizar Seguridad
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="bg-white rounded-xl shadow-sm p-6">
@@ -522,6 +721,8 @@ export default function UserManager() {
               <option value="all">Todos los estados</option>
               <option value="active">Activos</option>
               <option value="inactive">Inactivos</option>
+              <option value="locked">Bloqueados</option>
+              <option value="password_expired">Contraseña Expirada</option>
             </select>
           </div>
         </div>
@@ -624,8 +825,8 @@ export default function UserManager() {
                     className={`w-full px-3 py-2 pr-20 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       passwordError ? 'border-red-300' : 'border-slate-300'
                     }`}
-                    placeholder={editingUser ? "Dejar vacío para mantener actual" : "Mínimo 6 caracteres"}
-                    minLength={editingUser ? 0 : 6}
+                    placeholder={editingUser ? "Dejar vacío para mantener actual" : "Mínimo 8 caracteres, mayúsculas, minúsculas, números"}
+                    minLength={editingUser ? 0 : 8}
                   />
                   <div className="absolute inset-y-0 right-0 flex items-center gap-1 pr-3">
                     <button
@@ -660,17 +861,34 @@ export default function UserManager() {
               </div>
             </div>
 
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="is_active"
-                checked={formData.is_active}
-                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
-              />
-              <label htmlFor="is_active" className="ml-2 text-sm text-slate-700">
-                Usuario activo (puede iniciar sesión)
-              </label>
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                />
+                <label htmlFor="is_active" className="ml-2 text-sm text-slate-700">
+                  Usuario activo (puede iniciar sesión)
+                </label>
+              </div>
+
+              {!editingUser && (
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="force_password_change"
+                    checked={formData.force_password_change}
+                    onChange={(e) => setFormData({ ...formData, force_password_change: e.target.checked })}
+                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-slate-300 rounded"
+                  />
+                  <label htmlFor="force_password_change" className="ml-2 text-sm text-slate-700">
+                    Forzar cambio de contraseña en primer login
+                  </label>
+                </div>
+              )}
             </div>
 
             {isDemoMode && (
@@ -741,6 +959,7 @@ export default function UserManager() {
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Usuario</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Rol</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Estado</th>
+                  <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Seguridad</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Último Acceso</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Creado</th>
                   <th className="px-6 py-3 text-left text-sm font-medium text-slate-700">Acciones</th>
@@ -752,10 +971,12 @@ export default function UserManager() {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${
-                          user.is_active ? 'bg-blue-100' : 'bg-slate-100'
+                          user.locked_until && new Date(user.locked_until) > new Date() ? 'bg-red-100' :
+                          !user.is_active ? 'bg-slate-100' : 'bg-blue-100'
                         }`}>
                           <User className={`h-5 w-5 ${
-                            user.is_active ? 'text-blue-600' : 'text-slate-400'
+                            user.locked_until && new Date(user.locked_until) > new Date() ? 'text-red-600' :
+                            !user.is_active ? 'text-slate-400' : 'text-blue-600'
                           }`} />
                         </div>
                         <div>
@@ -764,6 +985,11 @@ export default function UserManager() {
                           {user.id === currentUser?.id && (
                             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
                               Tú
+                            </span>
+                          )}
+                          {user.must_change_password && (
+                            <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full ml-1">
+                              Cambio Requerido
                             </span>
                           )}
                         </div>
@@ -775,27 +1001,58 @@ export default function UserManager() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => toggleUserStatus(user)}
-                        disabled={user.id === currentUser?.id}
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
-                          user.is_active
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
-                        } ${user.id === currentUser?.id ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                      >
-                        {user.is_active ? (
-                          <>
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Activo
-                          </>
-                        ) : (
-                          <>
-                            <X className="h-3 w-3 mr-1" />
-                            Inactivo
-                          </>
+                      <div className="space-y-1">
+                        <button
+                          onClick={() => toggleUserStatus(user)}
+                          disabled={user.id === currentUser?.id}
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200 ${
+                            user.is_active
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-red-100 text-red-800 hover:bg-red-200'
+                          } ${user.id === currentUser?.id ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                        >
+                          {user.is_active ? (
+                            <>
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Activo
+                            </>
+                          ) : (
+                            <>
+                              <X className="h-3 w-3 mr-1" />
+                              Inactivo
+                            </>
+                          )}
+                        </button>
+                        
+                        {user.locked_until && new Date(user.locked_until) > new Date() && (
+                          <button
+                            onClick={() => handleUnlockUser(user.id, user.name)}
+                            className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors duration-200"
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Bloqueado
+                          </button>
                         )}
-                      </button>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        {user.failed_login_attempts && user.failed_login_attempts > 0 && (
+                          <div className="text-xs text-red-600">
+                            {user.failed_login_attempts} intentos fallidos
+                          </div>
+                        )}
+                        {user.must_change_password && (
+                          <div className="text-xs text-orange-600">
+                            Debe cambiar contraseña
+                          </div>
+                        )}
+                        {(!user.failed_login_attempts || user.failed_login_attempts === 0) && !user.must_change_password && (
+                          <div className="text-xs text-green-600">
+                            Sin problemas
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm">
@@ -827,7 +1084,7 @@ export default function UserManager() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex gap-2">
+                      <div className="flex gap-1 flex-wrap">
                         <button
                           onClick={() => {
                             setSelectedUser(user);
@@ -838,6 +1095,27 @@ export default function UserManager() {
                         >
                           <Monitor className="h-4 w-4" />
                         </button>
+                        
+                        {user.must_change_password && (
+                          <button
+                            onClick={() => handleForcePasswordChange(user.id, user.name)}
+                            className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors duration-200"
+                            title="Forzar cambio de contraseña"
+                          >
+                            <Key className="h-4 w-4" />
+                          </button>
+                        )}
+                        
+                        {user.locked_until && new Date(user.locked_until) > new Date() && (
+                          <button
+                            onClick={() => handleUnlockUser(user.id, user.name)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                            title="Desbloquear usuario"
+                          >
+                            <Shield className="h-4 w-4" />
+                          </button>
+                        )}
+                        
                         <button
                           onClick={() => handleEdit(user)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
@@ -845,6 +1123,7 @@ export default function UserManager() {
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
+                        
                         <button
                           onClick={() => handleDelete(user.id)}
                           disabled={user.id === currentUser?.id}
@@ -905,15 +1184,20 @@ export default function UserManager() {
             </div>
           </div>
 
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-orange-600">Sesiones Activas</p>
-                <p className="text-2xl font-bold text-orange-900">
-                  {users.reduce((sum, u) => sum + (u.session_count || 0), 0)}
+                <p className="text-sm font-medium text-red-600">Problemas de Seguridad</p>
+                <p className="text-2xl font-bold text-red-900">
+                  {users.filter(u => 
+                    (u.locked_until && new Date(u.locked_until) > new Date()) ||
+                    u.must_change_password ||
+                    (u.failed_login_attempts && u.failed_login_attempts > 0)
+                  ).length}
                 </p>
+                <p className="text-xs text-red-700">Requieren atención</p>
               </div>
-              <Monitor className="h-8 w-8 text-orange-600" />
+              <AlertTriangle className="h-8 w-8 text-red-600" />
             </div>
           </div>
         </div>
@@ -934,7 +1218,7 @@ export default function UserManager() {
 
       {/* Information Section */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Información sobre Roles</h3>
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">Información sobre Roles y Seguridad</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white border border-red-200 rounded-lg p-4">
             <h4 className="font-medium text-red-900 mb-2 flex items-center">
@@ -947,6 +1231,7 @@ export default function UserManager() {
               <li>• Configuración del sistema</li>
               <li>• Auditoría y reportes</li>
               <li>• Eliminación de datos</li>
+              <li>• Gestión de seguridad</li>
             </ul>
           </div>
           
@@ -961,6 +1246,7 @@ export default function UserManager() {
               <li>• Gestión de ventas</li>
               <li>• Configuración básica</li>
               <li>• Supervisión de empleados</li>
+              <li>• Creación de empleados</li>
             </ul>
           </div>
           
@@ -976,6 +1262,37 @@ export default function UserManager() {
               <li>• Gestión de clientes</li>
               <li>• Abonos y pagos</li>
             </ul>
+          </div>
+        </div>
+
+        {/* Security Features */}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-medium text-blue-900 mb-2">Características de Seguridad</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-blue-800">
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Bloqueo automático por intentos fallidos</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Validación de fortaleza de contraseñas</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Expiración automática de contraseñas</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Detección de sesiones sospechosas</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Auditoría completa de cambios</span>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="h-3 w-3 mr-2" />
+              <span>Limpieza automática de sesiones</span>
+            </div>
           </div>
         </div>
 

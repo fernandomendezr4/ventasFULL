@@ -423,3 +423,46 @@ export const validateSession = async (sessionToken: string): Promise<AuthUser | 
     return null;
   }
 };
+
+export const getUserActiveSessions = async (userId: string) => {
+  try {
+    if (isDemoMode || !supabase) {
+      return [];
+    }
+
+    const { data: sessions, error } = await supabase
+      .from('employee_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error getting user active sessions:', error);
+      return [];
+    }
+
+    return sessions || [];
+  } catch (error) {
+    console.error('Error in getUserActiveSessions:', error);
+    return [];
+  }
+};
+
+export const cleanupExpiredSessions = async (): Promise<boolean> => {
+  try {
+    if (isDemoMode || !supabase) {
+      return false;
+    }
+
+    const { error } = await supabase
+      .from('employee_sessions')
+      .delete()
+      .lt('expires_at', new Date().toISOString());
+
+    return !error;
+  } catch (error) {
+    console.error('Error cleaning up expired sessions:', error);
+    return false;
+  }
+};

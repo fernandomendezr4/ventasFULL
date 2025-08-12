@@ -6,10 +6,6 @@ export interface AuthUser {
   email: string;
   role: string;
   is_active: boolean;
-  last_login_at?: string;
-  failed_login_attempts?: number;
-  locked_until?: string;
-  must_change_password?: boolean;
 }
 
 export interface AuthResult {
@@ -18,7 +14,6 @@ export interface AuthResult {
   sessionToken?: string;
   error?: string;
   requiresPasswordChange?: boolean;
-  lockedUntil?: string;
 }
 
 export interface SessionData {
@@ -92,13 +87,7 @@ export const authenticateEmployee = async (email: string, password: string): Pro
         name,
         email,
         role,
-        is_active,
-        last_login_at,
-        failed_login_attempts,
-        locked_until,
-        created_at
-      `)
-      .eq('email', email.toLowerCase().trim())
+        is_active
       .maybeSingle();
 
     if (userError || !userData) {
@@ -119,13 +108,6 @@ export const authenticateEmployee = async (email: string, password: string): Pro
     }
 
     // Check if user is temporarily locked
-    if (userData.locked_until && new Date(userData.locked_until) > new Date()) {
-      return {
-        success: false,
-        error: 'Usuario bloqueado temporalmente por múltiples intentos fallidos',
-        lockedUntil: userData.locked_until
-      };
-    }
 
     // Verificar contraseña
     const { data: passwordData, error: passwordError } = await supabase
@@ -156,7 +138,6 @@ export const authenticateEmployee = async (email: string, password: string): Pro
     const isPasswordValid = await verifyPassword(password, passwordData.password_hash);
     if (!isPasswordValid) {
       // Handle failed login attempt
-      await supabase.rpc('handle_failed_login', { user_email: email.toLowerCase().trim() });
       return {
         success: false,
         error: 'Contraseña incorrecta'
@@ -164,19 +145,6 @@ export const authenticateEmployee = async (email: string, password: string): Pro
     }
 
     // Handle successful login (reset failed attempts, update last login)
-    const clientInfo = getClientInfo();
-    const { data: loginResult, error: loginError } = await supabase.rpc('handle_successful_login', {
-      user_email: email.toLowerCase().trim(),
-      session_ip: clientInfo.ipAddress,
-      session_user_agent: clientInfo.userAgent
-    });
-
-    if (loginError || !loginResult.success) {
-      return {
-        success: false,
-        error: loginResult?.error || 'Error procesando login exitoso'
-      };
-    }
 
     // Crear sesión
     const sessionToken = generateSessionToken();
@@ -211,10 +179,6 @@ export const authenticateEmployee = async (email: string, password: string): Pro
         email: userData.email,
         role: userData.role,
         is_active: userData.is_active,
-        last_login_at: userData.last_login_at,
-        failed_login_attempts: userData.failed_login_attempts,
-        locked_until: userData.locked_until,
-        must_change_password: passwordData.must_change
       },
       sessionToken,
       expiresAt,
@@ -228,7 +192,7 @@ export const authenticateEmployee = async (email: string, password: string): Pro
       success: true,
       user: sessionData.user,
       sessionToken,
-      requiresPasswordChange: passwordData.must_change
+      requiresPasswordChange: false
     };
   } catch (error) {
     console.error('Error in authenticateEmployee:', error);
@@ -489,10 +453,6 @@ export const validateSessionSecurity = async (sessionToken: string): Promise<{
     }
 
     // Check if user is locked
-    if (user.locked_until && new Date(user.locked_until) > new Date()) {
-      securityIssues.push('Usuario bloqueado temporalmente');
-      return { isValid: false, securityIssues };
-    }
 
     // Check if user is still active
     if (!user.is_active) {
@@ -514,9 +474,6 @@ export const validateSessionSecurity = async (sessionToken: string): Promise<{
         email: user.email,
         role: user.role,
         is_active: user.is_active,
-        last_login_at: user.last_login_at,
-        failed_login_attempts: user.failed_login_attempts,
-        locked_until: user.locked_until
       },
       securityIssues: securityIssues.length > 0 ? securityIssues : undefined
     };
@@ -782,11 +739,6 @@ export const getUserSessionDetails = async (userId: string): Promise<{
         .eq('user_id', userId)
         .gte('expires_at', new Date().toISOString()),
       supabase
-        .from('users')
-        .select('last_login_at')
-        .eq('id', userId)
-        .single(),
-      supabase
         .from('employee_sessions')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
@@ -799,7 +751,7 @@ export const getUserSessionDetails = async (userId: string): Promise<{
 
     return {
       activeSessions: activeSessionsResult.count || 0,
-      lastLogin: userInfoResult.data?.last_login_at || null,
+      lastLogin: null,
       suspiciousSessions: suspiciousSessionsResult.count || 0,
       totalSessions: totalSessionsResult.count || 0
     };

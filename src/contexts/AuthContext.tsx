@@ -8,10 +8,6 @@ interface AuthUser {
   email: string;
   role: string;
   is_active: boolean;
-  last_login_at?: string;
-  failed_login_attempts?: number;
-  locked_until?: string;
-  must_change_password?: boolean;
 }
 
 interface AuthContextType {
@@ -171,11 +167,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setConnectionStatus('connected'); // We can reach the database, just auth failed
         
         // Handle specific error cases
-        if (authResult.lockedUntil) {
-          const unlockTime = new Date(authResult.lockedUntil).toLocaleString('es-ES');
-          throw new Error(`Usuario bloqueado hasta ${unlockTime} por múltiples intentos fallidos`);
-        }
-        
         throw new Error(authResult.error || 'Credenciales inválidas');
       }
     } catch (error) {

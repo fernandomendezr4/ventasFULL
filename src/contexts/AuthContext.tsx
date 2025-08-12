@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
 import { supabase, isDemoMode } from '../lib/supabase';
+import { authenticateEmployee, logoutEmployee, getCurrentSession, createEmployeeSession } from '../lib/employeeAuth';
 
 interface AuthUser {
   id: string;
@@ -59,138 +59,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Verificar sesión actual
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('Error getting session:', error);
-        setConnectionStatus('disconnected');
-        setLoading(false);
-        return;
-      }
-
-      if (session?.user) {
-        await loadUserProfile(session.user.id);
-        setConnectionStatus('connected');
-      } else {
-        setConnectionStatus('connected');
-      }
-
-      // Escuchar cambios de autenticación
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
+      // Verificar sesión actual usando el sistema de empleados
+      try {
+        const sessionData = await getCurrentSession();
+        if (sessionData && sessionData.user) {
+          setUser(sessionData.user);
+          setPermissions(getPermissionsForRole(sessionData.user.role));
+          setConnectionStatus('connected');
         } else {
-          setUser(null);
-          setPermissions([]);
+          setConnectionStatus('connected');
         }
-        setLoading(false);
-      });
+      } catch (error) {
+        console.error('Error checking current session:', error);
+        setConnectionStatus('disconnected');
+      }
 
-      return () => subscription.unsubscribe();
+      setLoading(false);
     } catch (error) {
       console.error('Error initializing auth:', error);
       setConnectionStatus('disconnected');
       setLoading(false);
-    }
-  };
-
-  const loadUserProfile = async (userId: string) => {
-    try {
-      if (!supabase) return;
-
-      // Intentar cargar desde la tabla users primero
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (userError) {
-        console.error('Error loading user from users table:', userError);
-        
-        // Fallback: intentar cargar desde profiles
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error('Error loading user profile:', profileError);
-          // Crear usuario básico si no existe
-          await createBasicUserProfile(userId);
-          return;
-        }
-
-        if (!profileData) {
-          // No se encontró perfil, crear uno básico
-          await createBasicUserProfile(userId);
-          return;
-        }
-
-        const authUser: AuthUser = {
-          id: profileData.id,
-          name: profileData.name,
-          email: profileData.email,
-          role: 'employee', // Rol por defecto
-          is_active: profileData.is_active
-        };
-
-        setUser(authUser);
-        setPermissions(getPermissionsForRole('employee'));
-        return;
-      }
-
-      const authUser: AuthUser = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        role: userData.role,
-        is_active: userData.is_active
-      };
-
-      setUser(authUser);
-      setPermissions(getPermissionsForRole(userData.role));
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
-  };
-
-  const createBasicUserProfile = async (userId: string) => {
-    try {
-      if (!supabase) return;
-
-      // Obtener email del usuario de auth
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      
-      if (!authUser) return;
-
-      // Crear perfil básico
-      const basicUser = {
-        id: userId,
-        name: authUser.email?.split('@')[0] || 'Usuario',
-        email: authUser.email || '',
-        role: 'employee',
-        is_active: true
-      };
-
-      // Intentar insertar en users
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert([basicUser]);
-
-      if (insertError) {
-        console.error('Error creating basic user profile:', insertError);
-        return;
-      }
-
-      setUser(basicUser);
-      setPermissions(getPermissionsForRole('employee'));
-    } catch (error) {
-      console.error('Error creating basic user profile:', error);
     }
   };
 
@@ -258,26 +146,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Sistema de base de datos no disponible');
       }
 
-      // Clear any existing session before attempting new login
-      try {
-        await supabase.auth.signOut();
-      } catch (clearError) {
-        console.warn('Could not clear existing session:', clearError);
-      }
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password
-      });
-
-      if (error) {
-        setConnectionStatus('connected'); // We can reach Supabase, just auth failed
-        throw error;
-      }
-
-      if (data.user) {
-        await loadUserProfile(data.user.id);
+      // Usar el sistema de autenticación de empleados personalizado
+      const authResult = await authenticateEmployee(email.trim(), password);
+      
+      if (authResult.success && authResult.user) {
+        setUser(authResult.user);
+        setPermissions(getPermissionsForRole(authResult.user.role));
         setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('connected'); // We can reach the database, just auth failed
+        throw new Error(authResult.error || 'Credenciales inválidas');
       }
     } catch (error) {
       console.error('Error signing in:', error);
@@ -297,33 +175,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Sistema de base de datos no disponible');
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
-        options: {
-          data: {
-            name: name.trim()
-          }
-        }
-      });
+      // Crear usuario usando el sistema personalizado
+      const { error: createError } = await supabase
+        .from('users')
+        .insert([{
+          name: name.trim(),
+          email: email.trim(),
+          role: 'employee',
+          is_active: true
+        }]);
 
-      if (error) throw error;
+      if (createError) {
+        throw createError;
+      }
 
-      // Crear perfil de usuario
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert([{
-            id: data.user.id,
-            name: name.trim(),
-            email: email.trim(),
-            role: 'employee',
-            is_active: true
-          }]);
-
-        if (profileError) {
-          console.error('Error creating user profile:', profileError);
-        }
+      // Crear sesión de empleado
+      const sessionResult = await createEmployeeSession(email.trim(), password);
+      if (!sessionResult.success) {
+        throw new Error(sessionResult.error || 'Error creando sesión');
       }
     } catch (error) {
       console.error('Error signing up:', error);
@@ -343,12 +212,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!supabase) return;
 
       try {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          console.warn('Error during signout (continuing anyway):', error);
-        }
-      } catch (signOutError) {
-        console.warn('Signout failed (continuing anyway):', signOutError);
+        // Usar el sistema de logout de empleados
+        await logoutEmployee();
+      } catch (logoutError) {
+        console.warn('Error during employee logout (continuing anyway):', logoutError);
       }
       
       setUser(null);
@@ -403,9 +270,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'create_sales',
         'view_sales',
         'manage_sales',
+        'delete_sales',
         'manage_cash_register',
         'manage_installments',
         'view_users',
+        'manage_users',
         'manage_settings',
         'view_audit'
       ],
